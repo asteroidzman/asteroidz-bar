@@ -25,6 +25,7 @@ Row {
     property string module: ""
     property string previous: ""
     property string screenName: ""
+    property var bar: null
 
     // `custom/<name>` is a plugin. Phase 5; recognised here so the name does
     // not warn as unknown in the meantime.
@@ -75,6 +76,8 @@ Row {
                 return weatherComponent;
             case "media":
                 return mediaComponent;
+            case "tray":
+                return trayComponent;
             default:
                 return null;
             }
@@ -134,6 +137,11 @@ Row {
     Component {
         id: mediaComponent
         Media {}
+    }
+
+    Component {
+        id: trayComponent
+        Tray { bar: root.bar }
     }
 
     Component.onCompleted: {

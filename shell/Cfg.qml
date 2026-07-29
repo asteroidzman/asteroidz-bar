@@ -37,6 +37,18 @@ Singleton {
         return (v === undefined || v === null || v === "") ? fallback : v;
     }
 
+    // For values where EMPTY IS AN ANSWER.
+    //
+    // `str` treats "" as "not set" and hands back the default, which is right
+    // for a font or a clock format -- and wrong for a module list, where ""
+    // means "draw nothing in this section". A bar configured with
+    // `modules-right ""` was getting the default list instead of an empty
+    // one, which is the opposite of what was asked for.
+    function strOrEmpty(obj, key, fallback) {
+        const v = obj[key];
+        return (v === undefined || v === null) ? fallback : v;
+    }
+
     // Booleans need their own reader, and skipping it costs more than it looks.
     //
     // The compositor sends real JSON booleans, and `num(bar, "show_all_tags",
@@ -178,12 +190,12 @@ Singleton {
     readonly property real fontPixelSize: fontSize * 96.0 / 72.0
 
     // ── module lists ────────────────────────────────────────────────────────
-    readonly property string modulesLeft: str(bar, "modules_left", "tags,layout,title")
-    readonly property string modulesCenter: str(bar, "modules_center", "clock")
-    readonly property string modulesRight: str(bar, "modules_right", "")
-    readonly property string leftMonitor: str(bar, "modules_left_monitor", "")
-    readonly property string centerMonitor: str(bar, "modules_center_monitor", "")
-    readonly property string rightMonitor: str(bar, "modules_right_monitor", "")
+    readonly property string modulesLeft: strOrEmpty(bar, "modules_left", "tags,layout,title")
+    readonly property string modulesCenter: strOrEmpty(bar, "modules_center", "clock")
+    readonly property string modulesRight: strOrEmpty(bar, "modules_right", "")
+    readonly property string leftMonitor: strOrEmpty(bar, "modules_left_monitor", "")
+    readonly property string centerMonitor: strOrEmpty(bar, "modules_center_monitor", "")
+    readonly property string rightMonitor: strOrEmpty(bar, "modules_right_monitor", "")
 
     readonly property string clockFormat: str(bar, "clock_format", "%H:%M:%S")
     readonly property string iconDir: str(bar, "icon_dir", "")
@@ -201,6 +213,15 @@ Singleton {
     readonly property int mediaFps: num(bar, "media_fps", 20)
     readonly property bool mediaViz: num(bar, "media_viz", 1) !== 0
     readonly property int weatherInterval: num(bar, "weather_interval", 15)
+
+    // ── popover ─────────────────────────────────────────────────────────────
+    readonly property int popoverWidth: num(popover, "width", 340)
+    readonly property int popoverRowHeight: num(popover, "row_height", 34)
+    readonly property int popoverSpacing: num(popover, "spacing", 2)
+    readonly property int popoverPadding: num(popover, "padding", 12)
+    readonly property int popoverGap: num(popover, "gap", 6)
+    readonly property color popoverColor: col(popover, "color",
+                                              Qt.rgba(0.039, 0.039, 0.047, 0.95))
     readonly property string weatherLocation: str(bar, "weather_location", "")
 
     function modules(list) {

@@ -27,9 +27,17 @@ export QT_AUTO_SCREEN_SCALE_FACTOR=0
 export QT_ENABLE_HIGHDPI_SCALING=0
 export QT_QPA_PLATFORM=wayland
 
-# qt6ct would apply this desktop's Qt theme -- fonts, palette, a style sheet --
-# on top of a shell whose entire job is to match the COMPOSITOR's theme.
-unset QT_QPA_PLATFORMTHEME
+# QT_QPA_PLATFORMTHEME is deliberately LEFT ALONE.
+#
+# Unsetting it looked right -- this shell takes its fonts and colours from the
+# compositor, not from the desktop's Qt theme -- and it broke the tray. The
+# platform theme is also where Qt gets its ICON theme, so without it every
+# tray item resolved to nothing: `Could not load icon "dialog-information"`,
+# drawn as a magenta placeholder.
+#
+# Nothing leaks in that matters: every label in the shell sets its family, size
+# and weight explicitly from the compositor's theme, and the shell uses no Qt
+# Quick Controls, so there is no palette to override.
 
 SHELL_QML="${ASTEROIDZ_BAR_SHELL:-@SHELLDIR@/shell.qml}"
 

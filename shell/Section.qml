@@ -15,6 +15,7 @@ Panel {
     property string list: ""
     property string monitorFilter: ""
     property string screenName: ""
+    property var bar: null
 
     readonly property var names: Cfg.modules(list)
 
@@ -56,6 +57,7 @@ Panel {
             module: modelData
             previous: index === 0 ? "" : root.names[index - 1]
             screenName: root.screenName
+            bar: root.bar
         }
     }
 }

@@ -23,7 +23,13 @@ PanelWindow {
     // No keyboard until something asks for it. A bar that takes focus while
     // idle steals keys from whatever you were typing into, and the popovers
     // that DO need keys (phase 4) can raise this per-window.
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // No keyboard until something asks for it. A bar that takes focus while
+    // idle steals keys from whatever you were typing into -- so this is raised
+    // only while a popover with a text field is open, and dropped the moment
+    // it closes.
+    WlrLayershell.keyboardFocus: menu.visible && menu.wantsKeyboard
+        ? WlrKeyboardFocus.OnDemand
+        : WlrKeyboardFocus.None
 
     anchors {
         top: !Cfg.bottom
@@ -65,6 +71,67 @@ PanelWindow {
         ]
     }
 
+    // Exactly one popover, session-wide, anchored to whatever raised it.
+    // Two would need z-order arbitration and a grab each for no benefit: a bar
+    // popover is a menu, and menus are modal by convention.
+    Popover {
+        id: menu
+        anchor.window: root
+        visible: false
+
+        onActivated: index => {
+            const row = rows[index];
+            if (row && row.entry) {
+                // A submenu opens in place rather than closing: the panel is
+                // the same panel, showing a different level.
+                if (row.submenu) {
+                    root.showRows(row.entry.children
+                        ? row.entry.children.values.map(root.rowFor) : []);
+                    return;
+                }
+                row.entry.triggered();
+            }
+            visible = false;
+        }
+
+        onEdited: (index, text) => {
+            const copy = rows.slice();
+            copy[index] = Object.assign({}, copy[index], { value: text });
+            rows = copy;
+        }
+    }
+
+    function rowFor(e) {
+        return {
+            text: e.text,
+            icon: e.icon,
+            enabled: e.enabled,
+            separator: e.isSeparator,
+            submenu: e.hasChildren,
+            checked: e.checkState === Qt.Checked,
+            entry: e
+        };
+    }
+
+    function showRows(rows) {
+        menu.rows = rows;
+        menu.visible = rows.length > 0;
+    }
+
+    // Open a menu under `item`, which must be a pill in this bar. Anchored to
+    // the pill rather than to the pointer, so the panel stays put while the
+    // menu is up and lands in the same place every time.
+    function showMenu(item, rows) {
+        if (menu.visible) {
+            menu.visible = false;
+            return;
+        }
+        menu.anchor.item = item;
+        menu.anchor.edges = Edges.Bottom;
+        menu.anchor.gravity = Edges.Bottom;
+        showRows(rows);
+    }
+
     // The strip itself: exactly `height` tall, `margin_y` from the screen
     // edge it is anchored to.
     //
@@ -87,6 +154,7 @@ PanelWindow {
 
         Section {
             id: leftPanel
+            bar: root
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             list: Cfg.modulesLeft
@@ -96,6 +164,7 @@ PanelWindow {
 
         Section {
             id: centerPanel
+            bar: root
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: parent.verticalCenter
             list: Cfg.modulesCenter
@@ -105,6 +174,7 @@ PanelWindow {
 
         Section {
             id: rightPanel
+            bar: root
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             list: Cfg.modulesRight

@@ -63,6 +63,14 @@ BAR_CFG='bar { enable true; height 48; position "top"; margin { x 8; y 9 }
 	modules-right "cpu,memory,network,volume,notify,idle"
 	clock { format "%H:%M" } }'
 
+# The tray is deliberately NOT in this list. quickshell hosts
+# StatusNotifierItem on the SESSION bus, which the headless instance shares
+# with the real desktop -- so the shell would draw the tray of whatever is
+# running outside the test while the native bar, which needs a watcher that
+# is not there, draws nothing. That is a difference in what the two can SEE,
+# not in how they draw. contrib/tray-test.sh exercises the tray on a private
+# bus instead.
+
 # Something to look at: two windows on two tags, so the tag row has an occupied
 # pill, an active one and an empty one, and the title pill has a title.
 hl_dispatch "view,1"

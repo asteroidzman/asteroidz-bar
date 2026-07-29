@@ -55,6 +55,23 @@ Shadows are the shell's own. asteroidz will put a layer shadow behind the whole
 surface, but the surface spans the output — that would be one shadow around all
 three sections including the gaps between them.
 
+## Testing
+
+```sh
+contrib/parity.sh      # native bar vs this one, pixel geometry
+contrib/tray-test.sh   # the tray, on a private D-Bus session
+```
+
+`parity.sh` gates on **geometry** — panel extents and every pill border
+position — not on pixels. Pango and Qt never agree to the last subpixel, so a
+pixel gate strict enough to catch a layout bug would fail forever on
+antialiasing. Pixels are still compared, loosely, to catch a blank section or
+artwork that failed to load.
+
+`tray-test.sh` runs on its own bus deliberately: quickshell hosts
+StatusNotifierItem on whatever bus it finds, so a test against the real one
+would pick up Steam and Discord and pass whether or not the code works.
+
 ## Layout
 
 ```

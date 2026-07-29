@@ -35,6 +35,14 @@ Image {
     readonly property var candidates: {
         if (name === "")
             return [];
+        // Already a URL: quickshell hands back things like
+        // "image://icon/dialog-information" for tray items, whose icon may be
+        // a theme name, an inline pixmap, or a path -- it has already done the
+        // resolving. Treating that as a relative asset (it contains a slash)
+        // sent it through the bar's icon-dir search, where it matched nothing
+        // and the tray drew empty pills.
+        if (name.includes("://"))
+            return [name];
         if (name.startsWith("/"))
             return ["file://" + name];
         if (name.includes("/")) {
@@ -85,8 +93,18 @@ Image {
     // artwork should be. Theme icons are square by specification, so they lose
     // nothing by being asked for as squares, and the aspect rule is left for
     // the artwork where it actually applies.
-    readonly property bool themeIcon: name !== "" && !name.includes("/")
-    sourceSize.width: themeIcon ? size * 2 : 0
+    // Only the bar's OWN vendored artwork is asked for by height alone. That
+    // is the artwork whose aspect ratio the advance rule needs to know, and it
+    // is the only artwork we ship, so we know it renders correctly that way.
+    //
+    // Everything else -- icon-theme names and the URLs quickshell hands back
+    // for tray items -- is asked for as a square, because a height-only
+    // request breaks both providers: theme icons came back as grey blocks and
+    // tray icons as magenta smears. They are square by specification anyway.
+    readonly property bool ownAsset:
+        name !== "" && name.includes("/") && !name.includes("://")
+        && !name.startsWith("/")
+    sourceSize.width: ownAsset ? 0 : size * 2
     sourceSize.height: size * 2
     fillMode: Image.PreserveAspectFit
     smooth: true
