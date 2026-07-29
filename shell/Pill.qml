@@ -36,6 +36,8 @@ Item {
     // (the media spectrum). Counted in the width like anything else in the
     // row, so the label starts after it instead of underneath it.
     property int leadingSpace: 0
+    // Where that room actually is, for a module to parent its artwork into.
+    readonly property alias leadingSlot: leadHost
     property bool interactive: true
     // A chip is a filled tile whose own background is the edge you see, so its
     // padding is not slack and must not be trimmed away by the panel.
@@ -147,16 +149,20 @@ Item {
         // children, so an icon-only pill gets no trailing gap.
         spacing: 6
 
-        // Room at the head of the pill for something a module draws itself.
+        // Room at the head of the pill for something a module draws itself,
+        // and the place to put it: `leadingSlot` is this item, so a module can
+        // parent its own artwork here instead of positioning it by hand.
         //
-        // The media pill's spectrum is positioned absolutely, so it is not in
-        // this Row and the label does not know it is there: while a track was
-        // playing the visualiser was drawn straight over the first few
-        // characters of the title.
+        // Both halves matter. The media pill's spectrum used to be placed at a
+        // fixed x, which drew it over the first characters of the title --
+        // and once the label was told to leave room, the reserved gap moved
+        // with the centred row while the spectrum stayed pinned at the pill's
+        // left edge, so the two no longer lined up at all.
         Item {
+            id: leadHost
             visible: root.leadingSpace > 0
             width: root.leadingSpace
-            height: 1
+            height: root.iconSize
             anchors.verticalCenter: parent.verticalCenter
         }
 

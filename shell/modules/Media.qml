@@ -108,16 +108,17 @@ Row {
         // paused or silent, it falls back to the transport glyph.
         icons: viz.showing ? [] : [root.playing ? "waybar-media-cava/pause.svg"
                                                 : "waybar-media-cava/play.svg"]
-        // The spectrum is positioned by hand rather than being an icon, so the
-        // label has to be told to leave room for it.
-        leadingSpace: viz.showing ? track.iconSize : 0
+        // The spectrum is not an icon, so the pill reserves room for it and
+        // hands back the slot to put it in -- positioning it by hand drew it
+        // over the title, and then, once the label made room, left it stranded
+        // at the pill's left edge while the room itself moved with the centred
+        // row.
+        leadingSpace: viz.showing ? viz.implicitWidth : 0
 
         Spectrum {
             id: viz
-            anchors.verticalCenter: parent.verticalCenter
-            x: track.paddingX + Cfg.borderWidth
-            height: track.iconSize
-            width: track.iconSize
+            parent: track.leadingSlot
+            anchors.fill: parent
             running: Cfg.mediaViz && root.playing
         }
     }

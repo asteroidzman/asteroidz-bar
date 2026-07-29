@@ -76,15 +76,21 @@ PopupWindow {
         ? Qt.rect(0, -shadowRoom, anchor.item.width, anchor.item.height)
         : Qt.rect(0, 0, 1, 1)
 
-    // Grabbed whenever it is up, not only when something wants typing into.
+    // NOT grabbed, because asking does not work here.
     //
-    // The grab is what dismisses a menu: without it a click outside the popup
-    // goes to whatever is under it and the menu just stays, and Escape never
-    // arrives because the popup has no keyboard focus to receive it. Tying it
-    // to `wantsKeyboard` meant only the two forms with text fields could be
-    // dismissed that way -- every ordinary menu had to be closed by clicking
-    // the pill that opened it a second time.
-    grabFocus: visible
+    // A grabbing popup is the usual way a menu dismisses itself, and Qt
+    // refuses to create one:
+    //
+    //   qt.qpa.wayland: Failed to create grabbing popup. Ensure popup has a
+    //   transientParent set and that parent window has received input.
+    //
+    // It then falls back to an ordinary popup, silently, so the menu appears
+    // and simply cannot be dismissed -- no click-outside, and no keyboard
+    // focus for Escape to arrive through. Dismissal is therefore the BAR's
+    // job: it covers the screen while a menu is up and closes it on any click
+    // that is not on a pill, and it owns the keyboard focus that Escape
+    // needs. See Bar.qml.
+    grabFocus: false
 
     // The panel: the part you can see, inset from the window by the shadow.
     Item {
@@ -277,13 +283,11 @@ PopupWindow {
         }
     }
 
-    Item {
-        anchors.fill: parent
-        // Focused whenever the popover is up: Escape has to work on a menu,
-        // not just on a form.
-        focus: root.visible
-
-        Keys.onPressed: event => {
+    // Keys are handled by whoever HAS the keyboard, which is the bar: this
+    // popup never takes focus (see grabFocus above), so a Keys handler here
+    // would never fire. Bar.qml calls this instead.
+    function handleKey(event) {
+        {
             if (event.key === Qt.Key_Escape) {
                 root.visible = false;
                 event.accepted = true;

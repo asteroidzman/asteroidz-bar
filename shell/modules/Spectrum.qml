@@ -78,6 +78,15 @@ Item {
     Component.onCompleted: writeConf()
     onConfTextChanged: writeConf()
 
+    // The box sizes itself from the bars, not the bars from the box.
+    //
+    // It used to be given the icon's square -- 28px -- and six bars were
+    // divided into it, which came out under four pixels each with a pixel
+    // between them: technically a spectrum, visually a texture.
+    readonly property int barWidth: Math.max(4, Math.round(Cfg.height * 0.13))
+    readonly property int barGap: Math.max(1, Math.round(barWidth * 0.45))
+    implicitWidth: Cfg.mediaBars * barWidth + (Cfg.mediaBars - 1) * barGap
+
     // A frame whose bars have all moved less than this is not redrawn. Without
     // it the bar recomposites at the full frame rate on every monitor for
     // motion nobody can see.
@@ -130,8 +139,11 @@ Item {
     property bool shown: showing
 
     Row {
-        anchors.fill: parent
-        spacing: Math.max(1, Math.floor(root.width / (Cfg.mediaBars * 4)))
+        // Centred, not filled: the bars are a fixed width now, so whatever
+        // room is left over belongs on both sides rather than all on one.
+        anchors.centerIn: parent
+        height: parent.height
+        spacing: root.barGap
 
         Repeater {
             model: root.levels
@@ -140,8 +152,7 @@ Item {
                 required property real modelData
                 required property int index
 
-                width: Math.max(1, (root.width
-                        - (Cfg.mediaBars - 1) * parent.spacing) / Cfg.mediaBars)
+                width: root.barWidth
                 // A floor, so a silent-but-present spectrum still reads as a
                 // row of bars rather than as nothing at all.
                 height: Math.max(2, modelData * root.height)

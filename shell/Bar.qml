@@ -55,7 +55,19 @@ PanelWindow {
             ? Cfg.panelShadowSize + Math.ceil(2 * Cfg.panelShadowBlur)
             : 0
 
-    implicitHeight: Cfg.height + 2 * Cfg.marginY + shadowRoom
+    // While a menu is open this surface covers the OUTPUT, and that is how a
+    // menu gets dismissed.
+    //
+    // The usual mechanism is a grabbing popup, and Qt will not create one
+    // here ("parent window has received input" is never satisfied), falling
+    // back to a plain popup that cannot be dismissed by anything. So the bar
+    // does it: full-screen while a menu is up, transparent, with a catcher
+    // under the panels that closes on any click which is not on a pill. The
+    // exclusive zone does not change, so nothing on screen moves.
+    readonly property bool menuOpen: menu.visible
+    readonly property int restingHeight: Cfg.height + 2 * Cfg.marginY + shadowRoom
+
+    implicitHeight: menuOpen && screen ? screen.height : restingHeight
     // Windows are kept clear of the bar AND of the gap it floats in: the
     // margin is part of the bar's footprint, not free space a maximised window
     // may use, or the panel would sit on top of window content. The shadow is
@@ -96,12 +108,41 @@ PanelWindow {
     // transparent gaps between the groups -- including the shadow band below
     // the bar, which is not reserved and therefore has real window content
     // under it.
-    mask: Region {
+    // Null mask == the whole surface, which is what a catcher needs; the
+    // panels-only mask is what an idle bar needs so the transparent gaps
+    // between the groups do not swallow clicks meant for windows.
+    mask: menuOpen ? null : panelsOnly
+
+    Region {
+        id: panelsOnly
         regions: [
             Region { item: leftPanel },
             Region { item: centerPanel },
             Region { item: rightPanel }
         ]
+    }
+
+    // Below the panels, so a click on a pill reaches the pill: a MouseArea
+    // consumes what it accepts, and this one only ever sees what the pills
+    // did not.
+    MouseArea {
+        anchors.fill: parent
+        z: -10
+        enabled: root.menuOpen
+        visible: root.menuOpen
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        onPressed: menu.visible = false
+    }
+
+    // Escape, and everything a form in a popover needs typed into it.
+    //
+    // Here rather than in the popover because THIS is the window with
+    // keyboard focus -- the popup never takes any -- so a Keys handler over
+    // there would never fire.
+    Item {
+        anchors.fill: parent
+        focus: root.menuOpen
+        Keys.onPressed: event => menu.handleKey(event)
     }
 
     // Exactly one popover, session-wide, anchored to whatever raised it.
