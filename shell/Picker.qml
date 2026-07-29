@@ -28,7 +28,9 @@ Item {
 
     property bool open: false
 
-    readonly property int rowHeight: 24
+    // Sized from the font, not a constant: the rows use the bar's font now,
+    // and 24px was chosen when they were drawing it at 80%.
+    readonly property int rowHeight: Math.max(24, Math.round(Cfg.fontPixelSize * 1.5))
     implicitHeight: rowHeight + (open ? listBox.height + 4 : 0)
     // Above the settings below it while open, so the list is not drawn under
     // the next row as the panel reflows.
@@ -46,7 +48,7 @@ Item {
             text: root.current === "" ? "—" : root.current
             color: Cfg.fg
             font.family: Cfg.fontFamily
-            font.pointSize: Cfg.fontSize * 0.8
+            font.pointSize: Cfg.fontSize
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -102,7 +104,7 @@ Item {
                     text: modelData
                     color: modelData === root.current ? Cfg.focusFg : Cfg.fg
                     font.family: Cfg.fontFamily
-                    font.pointSize: Cfg.fontSize * 0.8
+                    font.pointSize: Cfg.fontSize
                     font.hintingPreference: Font.PreferFullHinting
                 }
 

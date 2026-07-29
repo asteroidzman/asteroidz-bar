@@ -102,7 +102,7 @@ Pill {
                             text: modelData
                             color: panel.tab === index ? Cfg.focusFg : Cfg.fg
                             font.family: Cfg.fontFamily
-                            font.pointSize: Cfg.fontSize * 0.8
+                            font.pointSize: Cfg.fontSize
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
@@ -152,7 +152,7 @@ Pill {
                             : "no output"
                         color: Cfg.fg
                         font.family: Cfg.fontFamily
-                        font.pointSize: Cfg.fontSize * 0.9
+                        font.pointSize: Cfg.fontSize
                         font.hintingPreference: Font.PreferFullHinting
                     }
 

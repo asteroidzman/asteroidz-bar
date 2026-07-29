@@ -23,7 +23,7 @@ Rectangle {
         verticalAlignment: TextInput.AlignVCenter
         color: Cfg.fg
         font.family: Cfg.fontFamily
-        font.pointSize: Cfg.fontSize * 0.8
+        font.pointSize: Cfg.fontSize
         font.hintingPreference: Font.PreferFullHinting
         selectByMouse: true
         clip: true
