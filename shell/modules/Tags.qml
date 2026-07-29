@@ -31,10 +31,11 @@ Row {
         // Recoloured at runtime so the exhaust burns in the theme's accent --
         // see Logo.qml, and the note in the SVG itself.
         icons: [Logo.source]
-        // A chip like the tags it leads, but not one that needs the tag
-        // PADDING: a tag is a number that wants room around it, and this is
-        // artwork. At tagPadding it sat in 32px of empty tile.
-        paddingX: Cfg.pillPadding
+        // No horizontal padding at all. A tag's padding is room for a number
+        // to sit in; this pill draws no background of its own, so its padding
+        // is not a margin around anything -- it is just empty bar. The gap to
+        // the first tag comes from the row's spacing either way.
+        paddingX: 0
         // ...and the artwork itself was small in the middle of all that. This
         // fills the chip the way a logo should.
         iconScale: 1.25
