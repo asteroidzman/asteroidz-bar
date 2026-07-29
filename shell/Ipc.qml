@@ -21,11 +21,20 @@ import QtQuick
 Singleton {
     id: root
 
-    // Set at startup by shell.qml from ASTEROIDZ_INSTANCE_SIGNATURE. Empty
-    // means "no compositor found", which is a legitimate state: the bar can be
-    // started from a terminal under another compositor while being worked on,
-    // and should draw with defaults rather than refuse.
-    property string socketPath: ""
+    // Read HERE, not handed in by shell.qml.
+    //
+    // A singleton is created when something first uses it, and the things that
+    // use this one are created while ShellRoot is building its children --
+    // before ShellRoot's own Component.onCompleted runs. Setting the path from
+    // there meant every subscription was opened against an empty path, found
+    // itself disconnected, and gave up permanently: a bar that connected to
+    // nothing and drew its defaults, silently and forever.
+    //
+    // Empty is still a legitimate state -- the shell can be run under another
+    // compositor while being worked on, and should draw defaults rather than
+    // refuse -- but it now means "genuinely not set", not "asked too early".
+    readonly property string socketPath:
+        Quickshell.env("ASTEROIDZ_INSTANCE_SIGNATURE") || ""
 
     readonly property bool connected: socketPath !== ""
 

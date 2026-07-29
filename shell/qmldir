@@ -6,6 +6,9 @@
 # one.
 singleton Ipc 1.0 Ipc.qml
 singleton Cfg 1.0 Cfg.qml
+singleton Compositor 1.0 Compositor.qml
 Bar 1.0 Bar.qml
 Panel 1.0 Panel.qml
 Pill 1.0 Pill.qml
+Icon 1.0 Icon.qml
+Section 1.0 Section.qml

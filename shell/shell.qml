@@ -18,13 +18,9 @@ ShellRoot {
     id: root
 
     Component.onCompleted: {
-        const sig = Quickshell.env("ASTEROIDZ_INSTANCE_SIGNATURE");
-        if (sig) {
-            Ipc.socketPath = sig;
-        } else {
+        if (!Ipc.connected)
             console.warn("asteroidz-bar: ASTEROIDZ_INSTANCE_SIGNATURE not set;"
                          + " running with defaults and no compositor state");
-        }
     }
 
     Variants {

@@ -1,2 +1,5 @@
 Clock 1.0 Clock.qml
 ModuleLoader 1.0 ModuleLoader.qml
+Tags 1.0 Tags.qml
+Layout 1.0 Layout.qml
+Title 1.0 Title.qml

@@ -85,52 +85,31 @@ PanelWindow {
         anchors.leftMargin: Cfg.marginX
         anchors.rightMargin: Cfg.marginX
 
-        Panel {
+        Section {
             id: leftPanel
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            visible: !empty && Cfg.sectionOnScreen(Cfg.leftMonitor, root.screenName)
-
-            Repeater {
-                model: Cfg.modules(Cfg.modulesLeft)
-                delegate: ModuleLoader {
-                    required property string modelData
-                    module: modelData
-                    screenName: root.screenName
-                }
-            }
+            list: Cfg.modulesLeft
+            monitorFilter: Cfg.leftMonitor
+            screenName: root.screenName
         }
 
-        Panel {
+        Section {
             id: centerPanel
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: parent.verticalCenter
-            visible: !empty && Cfg.sectionOnScreen(Cfg.centerMonitor, root.screenName)
-
-            Repeater {
-                model: Cfg.modules(Cfg.modulesCenter)
-                delegate: ModuleLoader {
-                    required property string modelData
-                    module: modelData
-                    screenName: root.screenName
-                }
-            }
+            list: Cfg.modulesCenter
+            monitorFilter: Cfg.centerMonitor
+            screenName: root.screenName
         }
 
-        Panel {
+        Section {
             id: rightPanel
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            visible: !empty && Cfg.sectionOnScreen(Cfg.rightMonitor, root.screenName)
-
-            Repeater {
-                model: Cfg.modules(Cfg.modulesRight)
-                delegate: ModuleLoader {
-                    required property string modelData
-                    module: modelData
-                    screenName: root.screenName
-                }
-            }
+            list: Cfg.modulesRight
+            monitorFilter: Cfg.rightMonitor
+            screenName: root.screenName
         }
     }
 }

@@ -24,12 +24,10 @@ Pill {
     }
 
     text: Qt.formatDateTime(clock.date, strftimeToQt(Cfg.clockFormat))
-    // The probe and the label are measured by two different code paths (a
-    // TextMetrics against a NativeRendering Text), and they disagree by a
-    // fraction of a pixel -- enough for the label to decide it does not fit
-    // and ellipsise a clock that is exactly its own width. Take whichever is
-    // wider: the pin still holds, and it can never crop what it is pinning.
-    fixedWidth: Math.ceil(Math.max(metrics.width, contentWidth)) + 2 * paddingX
+    // Same arithmetic a natural pill uses, or a pinned pill is a different
+    // width than an unpinned one holding the same text.
+    fixedWidth: Math.ceil(metrics.width) + 2 * paddingX
+                + 2 * Cfg.borderWidth + 1
 
     // strftime is the compositor's format language (it hands the string
     // straight to strftime); Qt wants its own. Translating the handful of
@@ -68,7 +66,10 @@ Pill {
     TextMetrics {
         id: metrics
         font.family: Cfg.fontFamily
-        font.pixelSize: Cfg.fontPixelSize
+        font.pointSize: Cfg.fontSize
+        font.hintingPreference: Font.PreferFullHinting
+        font.weight: Cfg.fontWeight
+        font.italic: Cfg.fontItalic
         text: {
             let widest = "";
             let best = 0;

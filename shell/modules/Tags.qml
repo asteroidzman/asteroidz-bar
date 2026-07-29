@@ -1,0 +1,93 @@
+// The tag pills.
+//
+// Not one pill: a row of them, one per visible tag, which is why this is a Row
+// of Pills rather than a Pill. Which tags are visible, how they are labelled
+// and how they are tinted all live in Compositor.visibleTags() so that the
+// rules stay in one place and read the same as bar_module_refresh_tags().
+//
+// The looks come from bar_pill_style(): an active tag takes the theme's focus
+// pair, urgent takes the urgent colour with a foreground chosen to be readable
+// ON it, an occupied tag is a soft black wash and an empty one is a barely
+// there white. Those last two are literals in the compositor too -- they are
+// tints applied over whatever the panel is, not theme colours.
+
+import QtQuick
+import ".."
+
+Row {
+    id: root
+
+    property string screenName: ""
+    spacing: Cfg.spacing
+
+    // A run of chips: the trims are the outermost pill's, and a chip trims
+    // nothing (its background IS the edge you see).
+    readonly property int leadTrim: 0
+    readonly property int trailTrim: 0
+
+    // The asteroidz ship, leading the group.
+    Pill {
+        visible: Cfg.showLogo
+        icons: ["waybar-asteroidz-workspaces/logo.svg"]
+        // A chip like the tags it leads, so it carries the tag padding rather
+        // than being a bare square: an icon-only CHIP is still a filled tile,
+        // and 36px of artwork with no padding is 32px narrower than the pill
+        // beside it.
+        paddingX: Cfg.tagPadding
+        chip: true
+        interactive: false
+    }
+
+    Repeater {
+        model: {
+            void Compositor.generation;
+            return Compositor.visibleTags(root.screenName);
+        }
+
+        delegate: Pill {
+            required property var modelData
+
+            text: modelData.label
+            icons: modelData.icons
+            iconsAfterText: true
+            paddingX: Cfg.tagPadding
+            chip: true
+
+            // Rec.709 luminance against the midpoint, the same rule
+            // bar_readable_fg applies: an urgent colour is chosen to read
+            // against the BAR, so it cannot also be constrained to contrast
+            // with its own label -- the label gives.
+            function readableOn(c) {
+                const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+                return lum < 0.5 ? Cfg.fg : Qt.rgba(0.08, 0.08, 0.08, Cfg.fg.a);
+            }
+
+            fg: modelData.active ? Cfg.focusFg
+              : modelData.urgent ? readableOn(Cfg.urgent)
+              : modelData.occupied ? Cfg.fg
+              : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.35)
+
+            bg: modelData.active ? Cfg.focusBg
+              : modelData.urgent ? Cfg.urgent
+              : modelData.occupied ? Qt.rgba(0, 0, 0, 0.44)
+              : Qt.rgba(1, 1, 1, 0.06)
+
+            // `view` acts on the FOCUSED output, so clicking a tag on any
+            // other one has to move focus there first or the click switches
+            // tags on the wrong screen. The native module does the same thing
+            // by hand (bar.h: "view acts on selmon, so clicking a tag on an
+            // unfocused output has to move focus there first"); from out here
+            // it is one more dispatch.
+            onClicked: button => {
+                if (root.screenName !== "" &&
+                    Compositor.focusedMonitor !== root.screenName)
+                    Ipc.dispatch("dispatch focus_monitor," + root.screenName);
+
+                if (button === Qt.LeftButton)
+                    Ipc.dispatch("dispatch view," + modelData.index);
+                else if (button === Qt.RightButton)
+                    Ipc.dispatch("dispatch toggle_view," + modelData.index);
+            }
+        }
+    }
+}

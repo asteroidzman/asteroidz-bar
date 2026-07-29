@@ -10,8 +10,7 @@
 // The shadow is drawn HERE rather than by the compositor. asteroidz will
 // happily put a layer shadow behind the whole surface, but the surface is the
 // full width of the output -- one shadow around all three sections, including
-// the transparent gaps between them, which is not the look. A per-panel shadow
-// has to come from whoever knows where the panels are.
+// the transparent gaps between them, which is not the look.
 
 import QtQuick
 import QtQuick.Effects
@@ -22,6 +21,13 @@ Item {
 
     default property alias content: layout.data
     property int spacing: Cfg.moduleSpacing
+
+    // Trimmed off the ends before padding, so the gap from the panel edge to
+    // the first thing you can see matches the gap after the last one. Fed by
+    // whoever knows what is actually in the section.
+    property int leadTrim: 0
+    property int trailTrim: 0
+
     // Measured, not counted. `children` includes the Repeater itself and any
     // other non-visual object parented here, so counting them reports a panel
     // full of nothing as occupied -- which is how three module names the shell
@@ -31,7 +37,9 @@ Item {
     readonly property bool empty: layout.implicitWidth <= 0
 
     visible: !empty
-    implicitWidth: slab.implicitWidth
+    implicitWidth: Math.max(2 * Cfg.panelPadding,
+                            layout.implicitWidth - leadTrim - trailTrim
+                            + 2 * Cfg.panelPadding)
     implicitHeight: Cfg.height
 
     Rectangle {
@@ -39,16 +47,17 @@ Item {
         anchors.fill: parent
         radius: Cfg.panelRadius
         color: Cfg.panelEnable ? Cfg.panelColor : "transparent"
+    }
 
-        implicitWidth: layout.implicitWidth + 2 * Cfg.panelPadding
-
-        Row {
-            id: layout
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.left: parent.left
-            anchors.leftMargin: Cfg.panelPadding
-            spacing: root.spacing
-        }
+    Row {
+        id: layout
+        anchors.verticalCenter: parent.verticalCenter
+        // Padding, less whatever the leading pill already contributes. This
+        // goes NEGATIVE when a pinned pill's reserve exceeds the padding,
+        // which is correct: the pill's box hangs outside the slab, its ink
+        // does not.
+        x: Cfg.panelPadding - root.leadTrim
+        spacing: root.spacing
     }
 
     // A shadow the same size and place as the panel would be entirely hidden
