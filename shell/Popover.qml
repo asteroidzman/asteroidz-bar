@@ -10,7 +10,9 @@
 // row is one hit target, so nothing is drawn that cannot be clicked.
 
 import Quickshell
+import Quickshell.Wayland
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import "."
 
 PopupWindow {
@@ -31,28 +33,85 @@ PopupWindow {
     signal edited(int index, string text)
 
     color: "transparent"
-    implicitWidth: (panelLoader.item
-                    ? panelLoader.item.implicitWidth
-                    : Math.max(Cfg.popoverWidth, content.implicitWidth))
-                   + 2 * Cfg.popoverPadding
-    implicitHeight: Math.min(700, (panelLoader.item
-                                   ? panelLoader.item.implicitHeight
-                                   : content.implicitHeight)
-                                  + 2 * Cfg.popoverPadding)
+
+    // The window is bigger than the panel by the shadow's reach on every
+    // side, and the panel is inset by it. A popup can only paint inside
+    // itself, so a shadow drawn at the panel's own edge would be clipped
+    // away entirely -- the same thing that happened to the bar's.
+    readonly property int shadowRoom:
+        Cfg.panelShadow && Cfg.panelEnable
+            ? Cfg.panelShadowSize + Math.ceil(2 * Cfg.panelShadowBlur)
+            : 0
+
+    readonly property int panelWidth:
+        (panelLoader.item
+            ? panelLoader.item.implicitWidth
+            : Math.max(Cfg.popoverWidth, content.implicitWidth))
+        + 2 * Cfg.popoverPadding
+    readonly property int panelHeight:
+        Math.min(700, (panelLoader.item
+                       ? panelLoader.item.implicitHeight
+                       : content.implicitHeight)
+                      + 2 * Cfg.popoverPadding)
+
+    implicitWidth: panelWidth + 2 * shadowRoom
+    implicitHeight: panelHeight + 2 * shadowRoom
+
+    // ...and the growth is taken back out of the anchor, or the panel would
+    // hang one reach lower and one to the right of the pill that opened it.
+    anchor.margins.top: -shadowRoom
+    anchor.margins.left: -shadowRoom
 
     // The pointer dismisses it, so it must be able to take clicks that land
     // outside any row.
     grabFocus: wantsKeyboard
 
-    Rectangle {
-        anchors.fill: parent
+    // The panel: the part you can see, inset from the window by the shadow.
+    Item {
+        id: panelBox
+        anchors.centerIn: parent
+        width: root.panelWidth
+        height: root.panelHeight
+
+        // The bar's shadow, on the same terms -- see Panel.qml, which
+        // explains why RectangularGlow, why spread 0 and why half alpha.
+        RectangularGlow {
+            readonly property int delta: Cfg.panelShadowSize
+            readonly property int reach:
+                delta + Math.ceil(2 * Cfg.panelShadowBlur)
+
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: Math.round(delta / 3)
+            width: parent.width
+            height: parent.height
+            cornerRadius: Cfg.panelRadius + delta
+            glowRadius: reach
+            spread: 0
+            color: Qt.rgba(Cfg.panelShadowColor.r, Cfg.panelShadowColor.g,
+                           Cfg.panelShadowColor.b, Cfg.panelShadowColor.a * 0.5)
+            visible: Cfg.panelShadow && Cfg.panelEnable
+            z: -1
+        }
+
+        Rectangle {
+            id: slab
+            anchors.fill: parent
+            radius: Cfg.panelRadius
+            color: Cfg.popoverColor
+        }
+    }
+
+    // The frost, asked for the same way the bar asks: the region carries the
+    // corner radius, so the blur ends where the rounded panel does and the
+    // shadow margin around it stays clear.
+    BackgroundEffect.blurRegion: Region {
+        item: panelBox
         radius: Cfg.panelRadius
-        color: Cfg.popoverColor
     }
 
     Loader {
         id: panelLoader
-        anchors.fill: parent
+        anchors.fill: panelBox
         anchors.margins: Cfg.popoverPadding
         sourceComponent: root.visible ? root.panel : null
         // A panel takes keys of its own (text fields), so the bar has to hold
@@ -66,7 +125,7 @@ PopupWindow {
     Column {
         id: content
         visible: root.panel === null
-        anchors.fill: parent
+        anchors.fill: panelBox
         anchors.margins: Cfg.popoverPadding
         spacing: Cfg.popoverSpacing
 
