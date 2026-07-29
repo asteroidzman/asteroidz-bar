@@ -80,6 +80,15 @@ Pill {
         if (obj.menu) {
             if (!bar)
                 return;
+            // `value` means two different things either side of this line, and
+            // conflating them left every editable row showing its own field
+            // name where the typed text should be. To a PLUGIN, value is the
+            // row's id -- what comes back when the row is picked, and for an
+            // editable row the name of the field. To the POPOVER, value is the
+            // CONTENT of an editable row: the text drawn after the label and
+            // rewritten on every keystroke. So they travel separately: `action`
+            // is the id, `field` the name, and `value` starts as whatever the
+            // plugin prefilled (`edit`) and is the field's text from then on.
             const rows = (obj.menu.rows || []).map(r => ({
                 text: r.text || "",
                 icon: r.icon || "",
@@ -88,13 +97,15 @@ Pill {
                 submenu: r.submenu === true,
                 checked: r.selected === true,
                 input: r.input === true,
-                value: r.value || "",
+                action: r.value || "",
+                field: r.input === true ? (r.value || "") : "",
+                value: r.input === true ? (r.edit || "") : "",
                 plugin: root
             }));
             // An empty menu is a plugin saying "nothing to offer", which is
             // the right answer after acting on a leaf -- and it closes the
             // panel rather than leaving stale rows claiming to be actionable.
-            bar.showMenu(root, rows);
+            bar.showPluginMenu(root, rows);
             return;
         }
         root.state = obj;
@@ -179,6 +190,16 @@ Pill {
     onClicked: button => {
         const which = button === Qt.RightButton ? "right"
                     : button === Qt.MiddleButton ? "middle" : "left";
+
+        // Clicking the pill while its own menu is up closes it, here rather
+        // than by asking the plugin. Now that a plugin's menu replaces its own
+        // rows in place instead of toggling the panel, sending this click on
+        // would have the plugin answer with the same menu again and the panel
+        // would have no way to close from its own pill.
+        if (bar && bar.menuBelongsTo(root)) {
+            bar.closeMenu();
+            return;
+        }
 
         // A configured on-click command wins: it is the simple case, and a
         // plugin that wanted to handle the click itself would not have set one.

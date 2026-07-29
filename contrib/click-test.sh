@@ -162,6 +162,29 @@ else
 	bad "clicking away closes it ($AWAY px)"
 fi
 
+# Text lines inside the panel, top to bottom: "<top> <bottom>" each. A menu row
+# is text with no control beside it, so form_rows cannot find one.
+text_lines() { # text_lines <shot> <panel-left> <panel-right>
+	python3 - "$WORK/$1.png" "$2" "$3" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load(); w, h = im.size
+x0 = max(0, int(sys.argv[2]))
+x1 = min(w, int(sys.argv[3]) + 1)
+ys = [y for y in range(60, h) if any(sum(px[x, y]) > 460 for x in range(x0, x1))]
+groups = []
+for y in ys:
+    if groups and y - groups[-1][-1] <= 2:
+        groups[-1].append(y)
+    else:
+        groups.append([y])
+for g in groups:
+    if len(g) > 4:
+        print(g[0], g[-1])
+PY
+}
+
 # ── the dropdowns inside the panel ──────────────────────────────────────────
 #
 # A Picker opening its list makes the panel taller, and a popup that resizes
@@ -333,9 +356,138 @@ else
 	bad "the display panel shows its form rows (found ${#LINES[@]} labels)"
 fi
 
+# ── a plugin's menu ─────────────────────────────────────────────────────────
+#
+# Plugin rows did nothing at all. The popover raised `activated`, the bar
+# checked the row for a PipeWire node and a tray entry, found neither, and fell
+# through to closing the panel -- so every row in the medication, discord and
+# nordvpn menus looked live, dismissed itself and told the plugin nothing.
+#
+# Driven by a stub rather than by a real plugin: this is the bar's half of the
+# protocol, and a test needing a medication schedule on disk to exercise it
+# would be testing the wrong thing -- and would answer differently on a machine
+# that has one.
+
+cat > "$WORK/stub.py" <<'STUB'
+import json, sys, threading, time
+
+LOG = sys.argv[1]
+
+def emit(o):
+    sys.stdout.write(json.dumps(o) + "\n")
+    sys.stdout.flush()
+
+TOP = {"menu": {"item": "", "rows": [
+    {"text": "Alpha", "value": "a"},
+    {"text": "More", "value": "more", "submenu": True},
+]}}
+SUB = {"menu": {"item": "", "rows": [
+    {"text": "Beta", "value": "b"},
+    {"text": "Name", "value": "name", "input": True, "edit": "prefilled"},
+    {"text": "Save", "value": "save"},
+]}}
+
+def reader():
+    for line in sys.stdin:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if ev.get("event") == "click":
+            emit(TOP)
+        elif ev.get("event") == "menu":
+            v = ev.get("value") or ""
+            with open(LOG, "a") as f:
+                f.write("GOT %s %s\n" % (
+                    v, json.dumps(ev.get("fields") or {}, sort_keys=True)))
+            if v == "more":
+                emit(SUB)
+            else:
+                emit({"menu": {"item": "", "rows": []}})
+
+threading.Thread(target=reader, daemon=True).start()
+while True:
+    emit({"text": "PROBE"})
+    time.sleep(5)
+STUB
+
+PLOG="$WORK/plugin-events.log"
+: > "$PLOG"
+
+cp "$WORK/config.pristine.kdl" "$HL_CONFIG"
+cat >> "$HL_CONFIG" <<EOF
+theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
+bar { enable false; height 48; position "top"; margin { x 8; y 9 }
+	panel { enable true; radius 9; padding 12; blur true; shadow true }
+	modules-left ""; modules-center ""; modules-right "custom/probe"
+	custom "probe" { exec "python3 $WORK/stub.py $PLOG"; continuous true } }
+EOF
+hl_dispatch "reload_config" 1
+sleep 5
+
+hl_move "$PILL_X" "$PILL_Y"
+sleep 1
+hl_click "$PILL_X" "$PILL_Y"
+sleep 3
+shot pmenu
+PMENU="$(panel_pixels pmenu)"
+if [ "$PMENU" -gt 400 ]; then
+	ok "a plugin's pill opens its menu ($PMENU px)"
+else
+	bad "a plugin's pill opens its menu ($PMENU px)"
+fi
+
+read -r ML _ MR _ <<<"$(panel_box pmenu)"
+mapfile -t ROWS < <(text_lines pmenu "$ML" "$MR")
+ROW_X=$(((ML + MR) / 2))
+
+if [ "${#ROWS[@]}" -ge 2 ]; then
+	# Row two is "More", a submenu: it has to swap the rows in place rather
+	# than dismiss, which is what showMenu's toggle would have done.
+	read -r MY0 MY1 <<<"${ROWS[1]}"
+	hl_click "$ROW_X" $(((MY0 + MY1) / 2))
+	sleep 3
+	shot psub
+	PSUB="$(panel_pixels psub)"
+	if grep -q "GOT more" "$PLOG"; then
+		ok "picking a row reaches the plugin"
+	else
+		bad "picking a row reaches the plugin (log: $(tr '\n' ' ' < "$PLOG"))"
+	fi
+	if [ "$PSUB" -gt 400 ]; then
+		ok "a submenu replaces the rows instead of closing the panel"
+	else
+		bad "a submenu replaces the rows instead of closing the panel ($PSUB px)"
+	fi
+
+	# The form that submenu put up. Its editable row has to show what the
+	# plugin PREFILLED, not the field's own name: `value` is the row id to a
+	# plugin and the field's text to the popover, and conflating them printed
+	# "Name: name" where "Name: prefilled" belonged. Picking Save must carry
+	# that text back as a field -- Save is a row like any other and the plugin
+	# has no other way to see what is in the form above it.
+	read -r SL _ SR _ <<<"$(panel_box psub)"
+	mapfile -t SROWS < <(text_lines psub "$SL" "$SR")
+	if [ "${#SROWS[@]}" -ge 3 ]; then
+		read -r SY0 SY1 <<<"${SROWS[2]}"
+		hl_click $(((SL + SR) / 2)) $(((SY0 + SY1) / 2))
+		sleep 3
+		if grep -q '"name": "prefilled"' "$PLOG"; then
+			ok "a form row carries the plugin's prefill back as a field"
+		else
+			bad "a form row carries the plugin's prefill back as a field (log: $(tr '\n' ' ' < "$PLOG"))"
+		fi
+	else
+		bad "the submenu form has its rows (found ${#SROWS[@]})"
+	fi
+else
+	bad "the plugin menu has its rows (found ${#ROWS[@]})"
+fi
+
 kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
 
 echo
 echo "$PASS passed, $FAIL failed"
+
 [ "$FAIL" = 0 ]

@@ -76,7 +76,7 @@ better schema would have bought nothing and broken all of them.
 contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the shadow
 contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included
 contrib/tray-test.sh       # the tray, on a private D-Bus session
-contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns
+contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns, plugin menus
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
 
@@ -101,6 +101,14 @@ size. The panel still grows, so a size assertion alone passes on the broken
 build; only the glyph height gives it away. `Popover.qml` now keeps the surface
 a fixed box and moves the panel inside it, which is why a dropdown can open
 without touching the window size at all.
+
+It also drives a **stub plugin** over the real stdin/stdout protocol, because
+the bar's half of that protocol was never wired up: the popover raised
+`activated`, the bar looked the row up as a PipeWire node and as a tray entry,
+found neither, and closed the panel. Every row in every plugin menu looked
+live, dismissed itself and told the plugin nothing. A stub rather than a real
+plugin, so the test does not depend on a medication schedule existing on the
+machine running it.
 
 `parity.sh` gates on **geometry** — panel extents and every pill border
 position — not on pixels. Pango and Qt never agree to the last subpixel, so a

@@ -209,6 +209,31 @@ PanelWindow {
                 }
                 row.entry.triggered();
             }
+            // A plugin's row. Nothing happened here at all before this: the
+            // popover fell through to `visible = false`, so every row in the
+            // medication, discord and nordvpn menus looked live, closed the
+            // panel and told the plugin nothing.
+            //
+            // The whole form goes back with the row, not just the row: a plugin
+            // that puts editable rows up gets them all as `fields` keyed by
+            // name, because "Save" is a row like any other and has no other way
+            // to see what was typed above it.
+            if (row && row.plugin) {
+                const fields = {};
+                for (const r of rows) {
+                    if (r && r.input && r.field)
+                        fields[r.field] = r.value || "";
+                }
+                row.plugin.send({
+                    event: "menu",
+                    value: row.action || "",
+                    fields: fields
+                });
+                // NOT closed here. What happens to the panel is the plugin's
+                // answer to say: a new set of rows to step into, the same set
+                // again when it rejects a form, or an empty set to dismiss.
+                return;
+            }
             visible = false;
         }
 
@@ -234,6 +259,30 @@ PanelWindow {
     function showRows(rows) {
         menu.rows = rows;
         menu.visible = rows.length > 0;
+    }
+
+    // A plugin answering with a menu while its own is already up is
+    // NAVIGATION -- a submenu, a form replacing a list, the same form again
+    // after a rejected save -- not a second click on its pill. showMenu reads
+    // an open panel as a toggle and closes it, which would have made every
+    // step into a plugin submenu dismiss the thing being stepped into, so the
+    // rows are swapped in place instead. An empty set still closes it, which
+    // is how a plugin says "done" once it has acted.
+    function showPluginMenu(item, rows) {
+        if (menuBelongsTo(item)) {
+            showRows(rows);
+            return;
+        }
+        showMenu(item, rows);
+    }
+
+    // Is the popover currently this item's?
+    function menuBelongsTo(item) {
+        return menu.visible && menu.anchor.item === item;
+    }
+
+    function closeMenu() {
+        menu.visible = false;
     }
 
     // Open an arbitrary component under `item` -- a settings panel rather than
