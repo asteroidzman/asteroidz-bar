@@ -76,6 +76,7 @@ better schema would have bought nothing and broken all of them.
 contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the shadow
 contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included
 contrib/tray-test.sh       # the tray, on a private D-Bus session
+contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
 
@@ -87,6 +88,19 @@ its icon's advance and overflowed into its neighbour, and the panel's shadow
 was drawn by a `MultiEffect` whose source was a plain `Rectangle` — not a
 texture provider, so it drew nothing at all. So the test draws the bar on a
 light wallpaper and measures pixels.
+
+`click-test.sh` drives the bar with a real pointer (`zwlr_virtual_pointer_v1`)
+because every interaction bug so far was "verified" by reading the QML and
+every one of those readings was wrong. Its sharpest check is that the panel
+**repaints** rather than stretches. A popover that resizes while it is mapped
+can hang the client outright: Qt and quickshell each send an
+`xdg_popup.reposition` with its own token, xdg-shell lets the compositor "skip
+all but the last one", and Qt never paints again once its token goes
+unanswered — it just leaves the previous frame stretched over the new surface
+size. The panel still grows, so a size assertion alone passes on the broken
+build; only the glyph height gives it away. `Popover.qml` now keeps the surface
+a fixed box and moves the panel inside it, which is why a dropdown can open
+without touching the window size at all.
 
 `parity.sh` gates on **geometry** — panel extents and every pill border
 position — not on pixels. Pango and Qt never agree to the last subpixel, so a

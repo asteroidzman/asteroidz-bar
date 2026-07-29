@@ -30,7 +30,12 @@ Item {
 
     Text {
         anchors.left: parent.left
-        anchors.verticalCenter: parent.verticalCenter
+        // Level with the control, on the control's terms: once a Picker opens
+        // its list the row is several times a row tall, and a label centred in
+        // THAT sits halfway down the open list with nothing beside it.
+        y: root.control && root.control.implicitHeight > root.rowHeight
+            ? Math.round((root.rowHeight - height) / 2)
+            : Math.round((root.height - height) / 2)
         text: root.label
         color: Cfg.fg
         font.family: Cfg.fontFamily

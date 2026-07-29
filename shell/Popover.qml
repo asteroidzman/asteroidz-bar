@@ -43,37 +43,70 @@ PopupWindow {
             ? Cfg.panelShadowSize + Math.ceil(2 * Cfg.panelShadowBlur)
             : 0
 
+    // THE SURFACE NEVER RESIZES WHILE IT IS UP. This is not a style choice.
+    //
+    // Resizing a mapped popup hangs the client, permanently. Qt resizes the
+    // window (xdg_popup.reposition, its own token) and quickshell re-anchors
+    // straight after (a second reposition, its own token, on its own
+    // xdg_wm_base). When both land in one compositor event-loop cycle wlroots
+    // coalesces them -- xdg-shell says in as many words that "if multiple
+    // reposition requests are sent, the compositor may skip all but the last
+    // one" -- so only the LAST token gets an xdg_popup.repositioned event and
+    // Qt's is never answered. Qt then acks the configure, applies the new size
+    // to its wp_viewport, commits WITHOUT A BUFFER and never paints again: the
+    // old frame stays stretched over the new surface size until the popup is
+    // destroyed. Opening the Scale list did that every time; switching tabs
+    // got away with it only by winning the race.
+    //
+    // So the window is a fixed box and the PANEL moves inside it. Content is
+    // free to grow and shrink -- a dropdown opening, a submenu replacing a
+    // menu -- without a single reposition, because none of it reaches
+    // implicitWidth/implicitHeight while `visible` is true.
     readonly property int panelWidth:
         (panelLoader.item
             ? panelLoader.item.implicitWidth
             : Math.max(Cfg.popoverWidth, content.implicitWidth))
         + 2 * Cfg.popoverPadding
     readonly property int panelHeight:
-        Math.min(700, (panelLoader.item
-                       ? panelLoader.item.implicitHeight
-                       : content.implicitHeight)
-                      + 2 * Cfg.popoverPadding)
+        Math.min(maxPanelHeight, (panelLoader.item
+                                  ? panelLoader.item.implicitHeight
+                                  : content.implicitHeight)
+                                 + 2 * Cfg.popoverPadding)
 
-    implicitWidth: panelWidth + 2 * shadowRoom
-    implicitHeight: panelHeight + 2 * shadowRoom
+    // As tall as the screen below the bar allows, capped. It has to FIT: a
+    // window taller than the space under the pill gets slid back up by the
+    // compositor (set_constraint_adjustment includes slide_y), which would
+    // move the panel out from under the thing that opened it.
+    readonly property int screenHeight:
+        anchor.window && anchor.window.screen ? anchor.window.screen.height : 1080
+    readonly property int maxPanelHeight:
+        Math.min(700, screenHeight - Cfg.height - 2 * Cfg.marginY
+                      - 2 * shadowRoom - 8)
 
-    // ...and the growth is taken back out of the ANCHOR RECT, which is the
-    // only part of this that has to be measured rather than reasoned about.
-    //
-    // Measured: quickshell CENTRES a popup on its anchor horizontally, and
-    // puts the popup's top edge at the anchor's bottom. So the horizontal
-    // half needs no correction at all -- the panel is centred in the window
-    // and the window is centred on the pill -- and the first attempt, which
-    // "compensated" with a negative left margin, simply shoved every popover
-    // one shadow-reach to the left. Negative margins did nothing vertically
-    // either, which left them a reach too low.
-    //
-    // Raising the rect's bottom edge by the reach is what works, and it is
-    // written as a negative y rather than a shortened height because the
-    // reach is LARGER than a pill is tall: `height - room` goes negative and
-    // gets clamped, which lands the panel a few pixels off.
+    // Width is latched at open rather than fixed: a menu is as wide as its
+    // rows, and every popover being as wide as the widest would look absurd.
+    // Latching is enough because nothing MAPS at the wrong width -- the panel
+    // loads before `visible` goes true (see panelLoader) -- and a submenu that
+    // wants more room than its parent had elides instead of resizing.
+    property int lockedWidth: 0
+    onVisibleChanged: {
+        if (visible)
+            lockedWidth = panelWidth + 2 * shadowRoom;
+        else
+            panel = null;
+    }
+
+    implicitWidth: lockedWidth > 0 ? lockedWidth : panelWidth + 2 * shadowRoom
+    implicitHeight: maxPanelHeight + 2 * shadowRoom
+
+    // quickshell CENTRES a popup on its anchor horizontally and puts the
+    // popup's top edge at the anchor's bottom, so no correction is needed in
+    // either direction: the panel is inset from the window's top by the shadow
+    // reach (see panelBox) and centred in it, and the window is centred on the
+    // pill. An earlier attempt "compensated" with a negative left margin and
+    // shoved every popover one shadow-reach to the left.
     anchor.rect: anchor.item
-        ? Qt.rect(0, -shadowRoom, anchor.item.width, anchor.item.height)
+        ? Qt.rect(0, 0, anchor.item.width, anchor.item.height)
         : Qt.rect(0, 0, 1, 1)
 
     // NOT grabbed, because asking does not work here.
@@ -93,9 +126,16 @@ PopupWindow {
     grabFocus: false
 
     // The panel: the part you can see, inset from the window by the shadow.
+    //
+    // Pinned to the TOP of the window rather than centred in it. The window is
+    // now a fixed tall box (see above) and only the panel tracks the content,
+    // so centring would float the panel down the middle of that box and away
+    // from the pill it hangs off.
     Item {
         id: panelBox
-        anchors.centerIn: parent
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: root.shadowRoom
         width: root.panelWidth
         height: root.panelHeight
 
@@ -153,7 +193,14 @@ PopupWindow {
         id: panelLoader
         anchors.fill: panelBox
         anchors.margins: Cfg.popoverPadding
-        sourceComponent: root.visible ? root.panel : null
+        // Loaded as soon as a panel is SET, not when the window becomes
+        // visible: showPanel assigns `panel` and then `visible` in the same
+        // tick, so loading eagerly means implicitWidth is already known when
+        // the surface maps and the window never has to resize itself
+        // afterwards. Waiting for `visible` made it map at the fallback width
+        // and immediately reposition -- the exact move that hangs the client.
+        // The popover clears `panel` when it hides, so nothing is kept alive.
+        sourceComponent: root.panel
         // A panel takes keys of its own (text fields), so the bar has to hold
         // keyboard focus while one is up.
         onLoaded: root.wantsKeyboardPanel = true
