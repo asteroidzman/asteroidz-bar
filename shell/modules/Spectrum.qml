@@ -4,6 +4,14 @@
 // output on stdout, which is one line of N numbers per frame -- so the whole
 // integration is a Process and a split on whitespace.
 //
+// The config goes in a FILE. It used to be handed to `cava -p /dev/stdin` and
+// written down the process's stdin, which avoided putting a file anywhere --
+// and silently never arrived: the live cava processes sat blocked on their
+// config read with zero CPU time for as long as the bar was up, so the
+// visualiser never drew a single frame and the pill quietly showed its
+// fallback glyph instead. A path in XDG_RUNTIME_DIR is not elegant, but it is
+// there before cava looks for it.
+//
 // The cost here is NOT the FFT (measured at about half a percent of one core);
 // it is the redraw, because every frame damages the bar's region on every
 // monitor and forces a recomposite. That is why the frame rate is a config
@@ -28,6 +36,48 @@ Item {
     property var levels: []
     property bool silent: true
 
+    // One config file per visualiser instance -- there is one per output, and
+    // two bars writing the same path would race on every config reload.
+    readonly property string confPath:
+        (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+        + "/asteroidz-bar-cava-" + instanceKey + ".conf"
+    readonly property string instanceKey:
+        Math.random().toString(36).slice(2, 10)
+
+    readonly property string confText:
+        "[general]\n"
+        + "bars = " + Cfg.mediaBars + "\n"
+        + "framerate = " + Cfg.mediaFps + "\n"
+        // autosens so a quiet podcast still fills the bars instead of sitting
+        // on the floor; mono because the pill is far too small for stereo to
+        // read.
+        + "autosens = 1\nsensitivity = 100\n"
+        + "lower_cutoff_freq = 50\nhigher_cutoff_freq = 12000\n"
+        + "[input]\nmethod = pipewire\nsource = auto\n"
+        + "[output]\nmethod = raw\nraw_target = /dev/stdout\n"
+        + "data_format = ascii\nascii_max_range = 1000\n"
+        + "channels = mono\n"
+        + "[smoothing]\nnoise_reduction = 35\n"
+
+    // cava is only started once its config is on disk: it reads the path once,
+    // at startup, and a missing file means it runs with defaults that do not
+    // match what this pill draws.
+    property bool confReady: false
+
+    FileView {
+        id: conf
+        path: root.confPath
+        printErrors: true
+    }
+
+    function writeConf() {
+        conf.setText(root.confText);
+        root.confReady = true;
+    }
+
+    Component.onCompleted: writeConf()
+    onConfTextChanged: writeConf()
+
     // A frame whose bars have all moved less than this is not redrawn. Without
     // it the bar recomposites at the full frame rate on every monitor for
     // motion nobody can see.
@@ -35,33 +85,23 @@ Item {
 
     Process {
         id: cava
-        running: root.running
-        command: ["cava", "-p", "/dev/stdin"]
-        stdinEnabled: true
+        running: root.running && root.confReady
+        command: ["cava", "-p", root.confPath]
 
         onRunningChanged: {
             if (!running) {
                 root.levels = [];
                 root.silent = true;
-                return;
             }
-            // cava reads its config from the path given to -p, and /dev/stdin
-            // means we can hand it one without writing a file into the user's
-            // home or racing another instance over a fixed temp path.
-            //
-            // autosens so a quiet podcast still fills the bars instead of
-            // sitting on the floor; mono because the pill is far too small for
-            // stereo to read.
-            write("[general]\n"
-                  + "bars = " + Cfg.mediaBars + "\n"
-                  + "framerate = " + Cfg.mediaFps + "\n"
-                  + "autosens = 1\nsensitivity = 100\n"
-                  + "lower_cutoff_freq = 50\nhigher_cutoff_freq = 12000\n"
-                  + "[input]\nmethod = pipewire\nsource = auto\n"
-                  + "[output]\nmethod = raw\nraw_target = /dev/stdout\n"
-                  + "data_format = ascii\nascii_max_range = 1000\n"
-                  + "channels = mono\n"
-                  + "[smoothing]\nnoise_reduction = 35\n");
+        }
+
+        stderr: SplitParser {
+            // A cava that cannot open its input says so here and then produces
+            // nothing at all, which otherwise looks exactly like silence.
+            onRead: line => {
+                if (line.trim())
+                    console.warn("asteroidz-bar: cava:", line);
+            }
         }
 
         stdout: SplitParser {
