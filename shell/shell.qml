@@ -18,6 +18,10 @@ ShellRoot {
     id: root
 
     Component.onCompleted: {
+        // Touching the singleton is what creates it. A Singleton nothing ever
+        // refers to is never instantiated, and the wallpaper would simply
+        // never start -- silently, because there is nothing to fail.
+        void Wallpaper.binary;
         if (!Ipc.connected)
             console.warn("asteroidz-bar: ASTEROIDZ_INSTANCE_SIGNATURE not set;"
                          + " running with defaults and no compositor state");

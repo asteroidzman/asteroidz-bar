@@ -1,6 +1,6 @@
 # Maintainer: ralf <ralf.wierzbicki@gmail.com>
 pkgname=asteroidz-bar
-pkgver=0.1.0
+pkgver=0.1.0.r6.g04c074a
 pkgrel=1
 pkgdesc='The asteroidz shell: status bar and HDR10 wallpaper, out of the compositor'
 arch=('x86_64')
@@ -13,7 +13,15 @@ depends=(
   # asteroidzbg's own, since it ships in this package:
   'cairo' 'wayland' 'gdk-pixbuf2' 'libjxl' 'libavif'
 )
-makedepends=('meson' 'ninja' 'wayland-protocols' 'git' 'scdoc')
+makedepends=('meson' 'ninja' 'wayland-protocols' 'git')
+# scdoc is deliberately not listed, and build() disables the man page rather
+# than requiring it.
+#
+# arch-meson passes --auto-features=enabled, which turns asteroidzbg's `auto`
+# man-pages feature into a hard requirement -- so without this the package will
+# not build on a machine that has no scdoc, to produce a man page that was
+# never installed here anyway. Install scdoc and pass
+# -Dasteroidzbg:man-pages=enabled if you want asteroidzbg(1).
 optdepends=(
   'asteroidz: the compositor this draws the bar for'
   'cava: the media visualiser'
@@ -36,14 +44,22 @@ pkgver() {
   cd "$srcdir/$pkgname"
   # 0.1.0.r12.gab34cd1 -- the tag, commits since, and the commit itself, so an
   # installed build can always be traced back to a revision.
-  git describe --long --tags 2>/dev/null \
-    | sed 's/\([^-]*-g\)/r\1/;s/-/./g' \
-    || printf "0.1.0.r%s.g%s" \
-       "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+  #
+  # An `if`, not `git describe ... | sed ... || fallback`: in a pipeline the
+  # exit status is sed's, so the fallback never runs and an untagged repo
+  # produces an EMPTY pkgver, which makepkg rejects outright.
+  local desc
+  if desc="$(git describe --long --tags 2>/dev/null)" && [ -n "$desc" ]; then
+    printf '%s' "$desc" | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+  else
+    printf '0.1.0.r%s.g%s' \
+      "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+  fi
 }
 
 build() {
-  arch-meson "$pkgname" build
+  arch-meson "$pkgname" build \
+    -Dasteroidzbg:man-pages=disabled
   meson compile -C build
 }
 

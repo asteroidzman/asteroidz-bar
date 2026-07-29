@@ -37,6 +37,7 @@ install_data(
 		'shell/Icon.qml',
 		'shell/Compositor.qml',
 		'shell/Metrics.qml',
+		'shell/Wallpaper.qml',
 	],
 	install_dir: qmldir,
 )
@@ -66,6 +67,7 @@ install_data(
 # script itself. The installed copy needs to know where the QML landed.
 conf = configuration_data()
 conf.set('SHELLDIR', get_option('prefix') / qmldir)
+conf.set('BINDIR', get_option('prefix') / get_option('bindir'))
 
 configure_file(
 	input: 'bin/asteroidz-bar',

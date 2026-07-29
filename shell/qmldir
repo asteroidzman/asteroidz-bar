@@ -14,3 +14,4 @@ Icon 1.0 Icon.qml
 Section 1.0 Section.qml
 singleton Metrics 1.0 Metrics.qml
 Popover 1.0 Popover.qml
+singleton Wallpaper 1.0 Wallpaper.qml

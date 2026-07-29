@@ -41,6 +41,13 @@ export QT_QPA_PLATFORM=wayland
 
 SHELL_QML="${ASTEROIDZ_BAR_SHELL:-@SHELLDIR@/shell.qml}"
 
+# The wallpaper binary that belongs to THIS package.
+#
+# Exported as a path rather than left to PATH: a machine with a hand-installed
+# /usr/local/bin/asteroidzbg would otherwise get that one, and the wallpaper
+# would come from a different build than the shell driving it.
+export ASTEROIDZ_BAR_BG="${ASTEROIDZ_BAR_BG:-@BINDIR@/asteroidzbg}"
+
 # Absolute path, never a bare name: a launcher that resolves its own payload
 # through PATH is one PATH edit away from executing itself.
 exec /usr/bin/qs -p "$SHELL_QML" "$@"

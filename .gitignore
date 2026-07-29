@@ -1,2 +1,6 @@
 build/
+src/
+pkg/
+asteroidz-bar/
 *.pkg.tar.zst
+*.log
