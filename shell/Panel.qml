@@ -62,64 +62,50 @@ Item {
 
     // ── the shadow ──────────────────────────────────────────────────────────
     //
-    // A glow with the panel's own shape punched out of it. That is more
-    // machinery than a drop shadow ought to need, and both halves are
-    // load-bearing.
+    // The native bar's shadow, with its geometry rather than a drop shadow's.
+    // scenefx drew a rounded box GROWN by `shadow_size` on every side, gave
+    // it the panel's radius grown to match, blurred the whole thing at
+    // `shadow_blur`, and shifted it down by a third of the size. It is a soft
+    // blob larger than the panel, not an outline traced around it -- which is
+    // why it reads as blended into the panel instead of ringing it.
     //
-    // The punch-out is because the slab is TRANSLUCENT. Anything drawn behind
-    // it shows through -- and what is meant to show through is the
-    // compositor's blur of the wallpaper. A shadow covering the panel's own
-    // area darkens that 15% and takes the frost with it: measured, the panel
-    // interior went from rgb(32,36,42) to rgb(16,17,19). Masked to the region
-    // OUTSIDE the slab, the interior is pixel-identical to having no shadow.
+    // It is deliberately NOT masked out of the panel's own area. The slab is
+    // translucent, so the shadow does tint what shows through it, and a
+    // version with the middle punched out was tried and rejected: with a hard
+    // boundary at the slab's edge the shadow stops being part of the panel
+    // and becomes a halo around it.
     //
-    // RectangularGlow rather than MultiEffect's shadowEnabled because
-    // MultiEffect draws its SOURCE as well as the shadow, which would put a
-    // second copy of the slab behind the real one -- the same darkening by
-    // another route. (And MultiEffect given a plain Rectangle as `source`
-    // draws nothing at all: a Rectangle is not a texture provider. That is
-    // why this panel had no shadow whatsoever.)
-    Item {
-        id: glow
+    // RectangularGlow rather than MultiEffect's shadowEnabled, because
+    // MultiEffect draws its SOURCE as well as the shadow -- a second copy of
+    // the slab behind the real one. (And MultiEffect given a plain Rectangle
+    // as `source` draws nothing whatsoever: a Rectangle is not a texture
+    // provider, which is why this panel had no shadow at all.)
+    RectangularGlow {
+        id: shadow
+
+        readonly property int delta: Cfg.panelShadowSize
+        // How far the shadow reaches: solid out to `delta`, then the blur's
+        // falloff, which for a gaussian is spent by about two sigma.
+        readonly property int reach: delta + Math.ceil(2 * Cfg.panelShadowBlur)
+
         anchors.centerIn: slab
-        // Room for the falloff. The layer is only as big as this item, so a
-        // glow wider than the margin gets cut off square.
-        width: slab.width + 4 * Cfg.panelShadowBlur
-        height: slab.height + 4 * Cfg.panelShadowBlur
-        visible: false
-        layer.enabled: true
+        width: slab.width
+        height: slab.height
+        // Down by a third of the size, so it sits under the panel the way it
+        // sits under a window.
+        anchors.verticalCenterOffset: Math.round(delta / 3)
 
-        RectangularGlow {
-            anchors.centerIn: parent
-            width: slab.width
-            height: slab.height
-            glowRadius: Cfg.panelShadowBlur
-            spread: 0.1
-            color: Cfg.panelShadowColor
-            cornerRadius: Cfg.panelRadius + Cfg.panelShadowBlur
-        }
-    }
-
-    Item {
-        id: hole
-        anchors.fill: glow
-        visible: false
-        layer.enabled: true
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: slab.width
-            height: slab.height
-            radius: Cfg.panelRadius
-            color: "white"
-        }
-    }
-
-    OpacityMask {
-        anchors.fill: glow
-        source: glow
-        maskSource: hole
-        invert: true
+        cornerRadius: Cfg.panelRadius + delta
+        glowRadius: reach
+        // `spread` is how much of the reach stays at full alpha before the
+        // fade begins. Not `delta / reach` -- that would be the grown box's
+        // full width, and a gaussian does not leave its box solid: it puts
+        // the box's own edge at half alpha and spreads the rest both ways.
+        // Half of it is the right approximation, and the difference is
+        // visible: at delta/reach the shadow reads as a hard dark frame
+        // around the panel rather than a shadow under it.
+        spread: delta / (2 * reach)
+        color: Cfg.panelShadowColor
         visible: Cfg.panelShadow && Cfg.panelEnable
         z: -1
     }

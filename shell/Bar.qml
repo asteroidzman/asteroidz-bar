@@ -39,10 +39,27 @@ PanelWindow {
         right: true
     }
 
-    implicitHeight: Cfg.height + 2 * Cfg.marginY
+    // Taller than it reserves, by exactly the shadow's reach.
+    //
+    // The compositor's own bar drew into the scene graph, so its shadow could
+    // spill as far past the panel as it liked. A layer surface cannot: it can
+    // only paint inside itself, and at height + 2*margin there are nine pixels
+    // below the panel -- so a shadow grown by 14 and blurred by 14 lost most
+    // of itself to the surface edge, which is the half that shows.
+    //
+    // The extra height is NOT reserved (see exclusiveZone below), so it costs
+    // no screen space: it is transparent, takes no input, and windows are
+    // free to sit under it.
+    readonly property int shadowRoom:
+        Cfg.panelShadow && Cfg.panelEnable
+            ? Cfg.panelShadowSize + Math.ceil(2 * Cfg.panelShadowBlur)
+            : 0
+
+    implicitHeight: Cfg.height + 2 * Cfg.marginY + shadowRoom
     // Windows are kept clear of the bar AND of the gap it floats in: the
     // margin is part of the bar's footprint, not free space a maximised window
-    // may use, or the panel would sit on top of window content.
+    // may use, or the panel would sit on top of window content. The shadow is
+    // not part of that footprint -- it is something to see through.
     exclusiveZone: Cfg.height + 2 * Cfg.marginY
 
     color: "transparent"
@@ -69,6 +86,21 @@ PanelWindow {
                 item: rightPanel
                 radius: Cfg.panelRadius
             }
+        ]
+    }
+
+    // Input lands on the panels, and nowhere else on this surface.
+    //
+    // The surface spans the whole output and is now taller than it reserves,
+    // so without a mask it would swallow every click that landed in the
+    // transparent gaps between the groups -- including the shadow band below
+    // the bar, which is not reserved and therefore has real window content
+    // under it.
+    mask: Region {
+        regions: [
+            Region { item: leftPanel },
+            Region { item: centerPanel },
+            Region { item: rightPanel }
         ]
     }
 
