@@ -127,6 +127,20 @@ PopupWindow {
         }
     }
 
+    // Input stops at the panel, not at the window.
+    //
+    // The window is a shadow-reach larger than the panel on every side, and
+    // that margin is transparent -- but a popup with no mask takes input
+    // across its whole surface, so the margin above the panel sat ON TOP of
+    // the pill that opened it and swallowed the click. Clicking the same pill
+    // to close the menu did nothing at all, while clicking anywhere else
+    // worked, which made it look like a toggle bug rather than a hit-testing
+    // one.
+    mask: Region {
+        item: panelBox
+        radius: Cfg.panelRadius
+    }
+
     // The frost, asked for the same way the bar asks: the region carries the
     // corner radius, so the blur ends where the rounded panel does and the
     // shadow margin around it stays clear.
