@@ -12,3 +12,4 @@ Panel 1.0 Panel.qml
 Pill 1.0 Pill.qml
 Icon 1.0 Icon.qml
 Section 1.0 Section.qml
+singleton Metrics 1.0 Metrics.qml

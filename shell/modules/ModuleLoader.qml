@@ -60,6 +60,21 @@ Row {
                 return layoutComponent;
             case "title":
                 return titleComponent;
+            case "cpu":
+            case "memory":
+                return metricComponent;
+            case "network":
+                return networkComponent;
+            case "volume":
+                return volumeComponent;
+            case "idle":
+                return idleComponent;
+            case "notify":
+                return notifyComponent;
+            case "weather":
+                return weatherComponent;
+            case "media":
+                return mediaComponent;
             default:
                 return null;
             }
@@ -84,6 +99,41 @@ Row {
     Component {
         id: titleComponent
         Title { screenName: root.screenName }
+    }
+
+    Component {
+        id: metricComponent
+        Metric { kind: root.module }
+    }
+
+    Component {
+        id: networkComponent
+        Network {}
+    }
+
+    Component {
+        id: volumeComponent
+        Volume {}
+    }
+
+    Component {
+        id: idleComponent
+        Idle {}
+    }
+
+    Component {
+        id: notifyComponent
+        Notify {}
+    }
+
+    Component {
+        id: weatherComponent
+        Weather {}
+    }
+
+    Component {
+        id: mediaComponent
+        Media {}
     }
 
     Component.onCompleted: {

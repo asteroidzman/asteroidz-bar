@@ -19,6 +19,8 @@ Item {
     property string text: ""
     // Artwork names, resolved by Icon: asset paths or icon-theme names.
     property var icons: []
+    // Recolours every icon in this pill. See Icon.tint.
+    property color iconTint: "transparent"
     // Tag pills put the number first and what is running on it after, because
     // the icons then read as belonging to the number they follow.
     property bool iconsAfterText: false
@@ -63,6 +65,10 @@ Item {
     // override the media transport controls use, for SVGs that fill their
     // viewBox edge to edge.
     property real iconScale: 1.0
+    // The label's font, so a module that has to MEASURE text (a pinned clock,
+    // a volume level) measures it in the font it will actually be drawn in.
+    readonly property font textFont: label.font
+
     readonly property int iconSize:
         Math.round((implicitHeight - 2 * Cfg.borderWidth
                     - 2 * Cfg.themePaddingY) * iconScale)
@@ -120,6 +126,7 @@ Item {
                     required property string modelData
                     name: modelData
                     size: root.iconSize
+                    tint: root.iconTint
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -188,6 +195,7 @@ Item {
                     required property string modelData
                     name: modelData
                     size: root.iconSize
+                    tint: root.iconTint
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }

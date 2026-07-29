@@ -65,11 +65,8 @@ Pill {
     // with it, plus wide digits everywhere numeric.
     TextMetrics {
         id: metrics
-        font.family: Cfg.fontFamily
-        font.pointSize: Cfg.fontSize
-        font.hintingPreference: Font.PreferFullHinting
-        font.weight: Cfg.fontWeight
-        font.italic: Cfg.fontItalic
+        // The label's own font, so the pin is measured in what it pins.
+        font: root.textFont
         text: {
             let widest = "";
             let best = 0;

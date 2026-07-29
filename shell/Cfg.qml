@@ -192,6 +192,16 @@ Singleton {
     readonly property int minTags: num(bar, "min_tags", 3)
     readonly property bool showLogo: flag(bar, "show_logo", true)
     readonly property int tagIcons: num(bar, "tag_icons", 3)
+    readonly property int interval: num(bar, "interval", 2)
+    readonly property int volumeStep: num(bar, "volume_step", 5)
+    readonly property real netMaxDown: num(bar, "net_max_down", 0)
+    readonly property real netMaxUp: num(bar, "net_max_up", 0)
+    readonly property int mediaWidth: num(bar, "media_width", 280)
+    readonly property int mediaBars: num(bar, "media_bars", 6)
+    readonly property int mediaFps: num(bar, "media_fps", 20)
+    readonly property bool mediaViz: num(bar, "media_viz", 1) !== 0
+    readonly property int weatherInterval: num(bar, "weather_interval", 15)
+    readonly property string weatherLocation: str(bar, "weather_location", "")
 
     function modules(list) {
         return list.split(",").map(s => s.trim()).filter(s => s.length > 0);

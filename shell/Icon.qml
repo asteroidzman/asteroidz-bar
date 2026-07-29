@@ -14,6 +14,7 @@
 
 import Quickshell
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import "."
 
 Image {
@@ -21,6 +22,15 @@ Image {
 
     // Either form. Empty draws nothing.
     property string name: ""
+
+    // Recolour the artwork wholesale. The monochrome status glyphs are drawn
+    // in the theme's colours rather than their own, and for cpu and memory the
+    // tint IS the reading -- so this is not decoration, it is the value.
+    // Transparent leaves the artwork's own colours alone, which is what the
+    // network arrows need (they carry two colours and tinting would flatten
+    // both halves to one).
+    property color tint: "transparent"
+    readonly property bool tinted: tint.a > 0
 
     readonly property var candidates: {
         if (name === "")
@@ -81,4 +91,17 @@ Image {
     fillMode: Image.PreserveAspectFit
     smooth: true
     asynchronous: true
+
+    // Tinting is a MASK, not a colour blend.
+    //
+    // The compositor paints the tint THROUGH the artwork's alpha (a cairo mask
+    // paint), so a monochrome glyph comes out entirely in the tint colour.
+    // MultiEffect's `colorization` is a hue blend that preserves luminance
+    // instead, which turned the dark-drawn cpu and memory glyphs black rather
+    // than blue -- technically a tint, visibly a bug. ColorOverlay is the
+    // operation that was actually meant.
+    layer.enabled: tinted
+    layer.effect: ColorOverlay {
+        color: root.tint
+    }
 }
