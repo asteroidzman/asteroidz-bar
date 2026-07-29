@@ -57,10 +57,24 @@ PopupWindow {
     implicitWidth: panelWidth + 2 * shadowRoom
     implicitHeight: panelHeight + 2 * shadowRoom
 
-    // ...and the growth is taken back out of the anchor, or the panel would
-    // hang one reach lower and one to the right of the pill that opened it.
-    anchor.margins.top: -shadowRoom
-    anchor.margins.left: -shadowRoom
+    // ...and the growth is taken back out of the ANCHOR RECT, which is the
+    // only part of this that has to be measured rather than reasoned about.
+    //
+    // Measured: quickshell CENTRES a popup on its anchor horizontally, and
+    // puts the popup's top edge at the anchor's bottom. So the horizontal
+    // half needs no correction at all -- the panel is centred in the window
+    // and the window is centred on the pill -- and the first attempt, which
+    // "compensated" with a negative left margin, simply shoved every popover
+    // one shadow-reach to the left. Negative margins did nothing vertically
+    // either, which left them a reach too low.
+    //
+    // Raising the rect's bottom edge by the reach is what works, and it is
+    // written as a negative y rather than a shortened height because the
+    // reach is LARGER than a pill is tall: `height - room` goes negative and
+    // gets clamped, which lands the panel a few pixels off.
+    anchor.rect: anchor.item
+        ? Qt.rect(0, -shadowRoom, anchor.item.width, anchor.item.height)
+        : Qt.rect(0, 0, 1, 1)
 
     // The pointer dismisses it, so it must be able to take clicks that land
     // outside any row.
