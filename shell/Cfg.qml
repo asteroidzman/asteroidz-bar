@@ -241,6 +241,10 @@ Singleton {
     // ever produce an even gap -- and it pads the ends of the run against the
     // panel edge too.
     function isIconOnly(module) {
+        // A plugin showing artwork and no label is icon-only too, but whether
+        // it HAS a label is a runtime answer -- so plugins are treated as
+        // labelled here and pay one pill-padding of gap. Guessing the other
+        // way would jam a labelled plugin against its neighbour.
         return ["cpu", "memory", "network", "idle", "notify", "tray", "vpn",
                 "display"].indexOf(module) >= 0;
     }

@@ -27,9 +27,19 @@ Row {
     property string screenName: ""
     property var bar: null
 
-    // `custom/<name>` is a plugin. Phase 5; recognised here so the name does
-    // not warn as unknown in the meantime.
     readonly property bool isCustom: module.startsWith("custom/")
+    readonly property string customName:
+        isCustom ? module.slice("custom/".length) : ""
+
+    // The `custom "<name>" { }` block, matched by name out of what the
+    // compositor served. A name with no block is a typo in modules-* and
+    // loads nothing.
+    readonly property var plugin: {
+        for (const c of Cfg.custom)
+            if (c.name === customName)
+                return c;
+        return null;
+    }
 
     visible: loader.status === Loader.Ready
     spacing: 0
@@ -49,9 +59,11 @@ Row {
 
     Loader {
         id: loader
-        active: !root.isCustom
+        active: !root.isCustom || root.plugin !== null
 
         sourceComponent: {
+            if (root.isCustom)
+                return root.plugin ? customComponent : null;
             switch (root.module) {
             case "clock":
                 return clockComponent;
@@ -151,8 +163,35 @@ Row {
         Display { bar: root.bar }
     }
 
-    Component.onCompleted: {
-        if (!isCustom && loader.sourceComponent === null)
+    Component {
+        id: customComponent
+        Custom { plugin: root.plugin; bar: root.bar }
+    }
+
+    // Warned about only once the config has actually ARRIVED.
+    //
+    // Component.onCompleted runs while the bar is being built, which is before
+    // the compositor has answered `watch bar-config` -- so every plugin was
+    // reported missing at startup and then loaded a moment later, which is the
+    // worst kind of log line: alarming and wrong.
+    property bool complained: false
+
+    function checkName() {
+        if (complained || !Cfg.loaded)
+            return;
+        if (isCustom && !plugin) {
+            console.warn("asteroidz-bar: no custom block named", customName);
+            complained = true;
+        } else if (!isCustom && loader.sourceComponent === null) {
             console.warn("asteroidz-bar: unknown module:", module);
+            complained = true;
+        }
+    }
+
+    Component.onCompleted: checkName()
+    Connections {
+        target: Cfg
+        function onLoadedChanged() { root.checkName(); }
+        function onCustomChanged() { root.checkName(); }
     }
 }

@@ -65,8 +65,24 @@ install_data(
 		'shell/modules/Spectrum.qml',
 		'shell/modules/Tray.qml',
 		'shell/modules/Display.qml',
+		'shell/modules/Custom.qml',
 	],
 	install_dir: qmldir / 'modules',
+)
+
+# The plugins.
+#
+# They move here with the module that runs them: the protocol is the shell's
+# now, and a plugin shipped by the compositor would be a package that installs
+# scripts only another package can use.
+install_data(
+	[
+		'plugins/asteroidz-bar-nordvpn',
+		'plugins/asteroidz-bar-discord',
+		'plugins/asteroidz-bar-medication',
+	],
+	install_dir: get_option('bindir'),
+	install_mode: 'rwxr-xr-x',
 )
 
 # The launcher exists to pin Qt's DPI handling to the compositor's; see the

@@ -55,6 +55,21 @@ Shadows are the shell's own. asteroidz will put a layer shadow behind the whole
 surface, but the surface spans the output — that would be one shadow around all
 three sections including the gaps between them.
 
+## Plugins
+
+`custom "<name>" { exec "..."; continuous true }` in the compositor's `bar {}`
+block, then `custom/<name>` in a module list. The protocol is unchanged from
+the compositor's own: one JSON object per line on stdout, events back on stdin.
+
+```json
+{"text":"Idle","icon":"waybar-discord-voice/discord.svg","tint":"accent"}
+{"menu":{"item":"","rows":[{"text":"Mute","value":"do:mute"}]}}
+```
+
+Three ship with this package — `asteroidz-bar-nordvpn`, `-discord`,
+`-medication` — and they run untouched, which was the test that mattered: a
+better schema would have bought nothing and broken all of them.
+
 ## Testing
 
 ```sh

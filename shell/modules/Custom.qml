@@ -1,0 +1,192 @@
+// A plugin's pill: whatever the process last said it should be.
+//
+// The protocol is the compositor's, unchanged -- one JSON object per line on
+// stdout, events back on stdin -- because the plugins are the point. Three of
+// them already exist and are used daily; a "better" schema would have bought
+// nothing and broken all of them.
+//
+//   {"text":"Idle","icon":"waybar-discord-voice/discord.svg","tint":"accent"}
+//   {"menu":{"item":"","rows":[{"text":"Mute","value":"do:mute"}]}}
+//   {"hidden":true}
+//
+// Two transports, as before: `interval N` runs the command every N seconds and
+// reads one object, `continuous true` keeps one process up and reads a stream.
+// Only a continuous plugin gets the event channel, because only a long-lived
+// process is there to read it.
+
+import Quickshell
+import Quickshell.Io
+import QtQuick
+import ".."
+
+Pill {
+    id: root
+
+    // The `custom "<name>" { }` block this pill is, straight from the
+    // compositor's config.
+    property var plugin: ({})
+    property var bar: null
+
+    readonly property string name: plugin.name || ""
+    readonly property bool continuous: plugin.continuous === true
+    readonly property int interval: plugin.interval || 0
+
+    // What the plugin last said. Kept whole rather than unpacked into
+    // properties so a partial update cannot leave half the old state behind.
+    property var state: ({})
+
+    visible: state.hidden !== true && (state.text || state.icon || icons.length)
+
+    text: state.text || ""
+    icons: {
+        const i = state.icon || plugin.icon || "";
+        if (!i)
+            return [];
+        // "icon" may be one name or an array of them: the discord plugin draws
+        // its logo AND a mute glyph, which is two icons in one pill.
+        return Array.isArray(i) ? i : [i];
+    }
+
+    // Named tints resolve against the theme; anything else is passed to Qt,
+    // so a plugin can send "#e5a50a" for a state the theme has no word for.
+    iconTint: {
+        const t = state.tint || "";
+        switch (t) {
+        case "": return "transparent";
+        case "fg": return Cfg.fg;
+        case "accent": return Cfg.focusBg;
+        case "urgent": return Cfg.urgent;
+        case "dim": return Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45);
+        default: return t;
+        }
+    }
+
+    bg: state.class === "urgent" ? Cfg.urgent
+      : state.class === "active" ? Cfg.focusBg
+      : "transparent"
+
+    fg: state.class === "active" ? Cfg.focusFg : Cfg.fg
+
+    // Icon-only plugins join the tight run of status artwork; one with a label
+    // is padded like any other labelled pill.
+    paddingX: text === "" ? 0 : Cfg.pillPadding
+
+    // ── the process ─────────────────────────────────────────────────────────
+
+    function handle(obj) {
+        if (obj.menu) {
+            if (!bar)
+                return;
+            const rows = (obj.menu.rows || []).map(r => ({
+                text: r.text || "",
+                icon: r.icon || "",
+                enabled: r.enabled !== false,
+                separator: r.separator === true,
+                submenu: r.submenu === true,
+                checked: r.selected === true,
+                input: r.input === true,
+                value: r.value || "",
+                plugin: root
+            }));
+            // An empty menu is a plugin saying "nothing to offer", which is
+            // the right answer after acting on a leaf -- and it closes the
+            // panel rather than leaving stale rows claiming to be actionable.
+            bar.showMenu(root, rows);
+            return;
+        }
+        root.state = obj;
+    }
+
+    function send(obj) {
+        if (proc.running && root.continuous)
+            proc.write(JSON.stringify(obj) + "\n");
+    }
+
+    Process {
+        id: proc
+        command: (root.plugin.exec || "").split(" ").filter(s => s.length > 0)
+        running: root.continuous && command.length > 0
+        stdinEnabled: root.continuous
+
+        stdout: SplitParser {
+            onRead: line => {
+                if (!line.trim())
+                    return;
+                try {
+                    root.handle(JSON.parse(line));
+                } catch (e) {
+                    // A malformed line is the plugin's problem. Dropping it
+                    // beats tearing down a process that will very likely
+                    // deliver a good line next time -- the native runtime made
+                    // the same call.
+                    console.warn("asteroidz-bar: bad JSON from", root.name);
+                }
+            }
+        }
+
+        // stderr is NOT discarded: a plugin that cannot start says so there,
+        // and swallowing it makes "the pill never appeared" unexplainable.
+        stderr: SplitParser {
+            onRead: line => {
+                if (line.trim())
+                    console.warn("asteroidz-bar:", root.name + ":", line);
+            }
+        }
+    }
+
+    // The polled transport. One process per tick, output collected whole:
+    // a plugin that prints its object and exits has no stream to split.
+    Process {
+        id: poll
+        command: proc.command
+        stdout: StdioCollector {
+            onStreamFinished: {
+                for (const line of text.split("\n")) {
+                    if (line.trim()) {
+                        try {
+                            root.handle(JSON.parse(line));
+                        } catch (e) {
+                            console.warn("asteroidz-bar: bad JSON from",
+                                         root.name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: Math.max(1, root.interval) * 1000
+        running: !root.continuous && root.interval > 0
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: if (!poll.running) poll.running = true
+    }
+
+    Component.onCompleted: {
+        // interval 0 with no `continuous` means "run it once at startup",
+        // which is how a plugin that reports something static is written.
+        if (!root.continuous && root.interval === 0
+            && (root.plugin.exec || "") !== "")
+            poll.running = true;
+    }
+
+    // ── interaction ─────────────────────────────────────────────────────────
+
+    onClicked: button => {
+        const which = button === Qt.RightButton ? "right"
+                    : button === Qt.MiddleButton ? "middle" : "left";
+
+        // A configured on-click command wins: it is the simple case, and a
+        // plugin that wanted to handle the click itself would not have set one.
+        const cmd = which === "right" ? plugin.on_click_right : plugin.on_click;
+        if (cmd) {
+            Quickshell.execDetached(["sh", "-c", cmd]);
+            return;
+        }
+        send({ event: "click", button: which });
+    }
+
+    onWheel: delta =>
+        send({ event: "scroll", direction: delta > 0 ? "up" : "down" })
+}
