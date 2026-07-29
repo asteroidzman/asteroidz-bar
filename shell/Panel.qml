@@ -34,7 +34,11 @@ Item {
     // does not implement yet still produced two empty slabs on screen. A Row
     // lays out only its VISIBLE children, so its implicit width is exactly the
     // question being asked.
-    readonly property bool empty: layout.implicitWidth <= 0
+    //
+    // Not readonly: measuring it this way cannot answer for a panel whose
+    // contents hide THEMSELVES, because the measurement then depends on this
+    // panel's own visibility. See Section, which overrides it.
+    property bool empty: layout.implicitWidth <= 0
 
     visible: !empty
     implicitWidth: Math.max(2 * Cfg.panelPadding,

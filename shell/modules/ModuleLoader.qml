@@ -56,8 +56,15 @@ Row {
     // hiding this slot would make the module report itself hidden, which would
     // keep the slot hidden: every module on the bar disappeared at once, and
     // stayed gone. A module with no opinion is shown.
-    visible: loader.status === Loader.Ready
-             && (loader.item === null || loader.item.shown !== false)
+    //
+    // Exposed as well as applied: Section has to ask this WITHOUT going
+    // through `visible`, which is effective visibility and therefore false for
+    // everything inside a section that is currently hidden.
+    readonly property bool wantsShown:
+        loader.status === Loader.Ready
+        && (loader.item === null || loader.item.shown !== false)
+
+    visible: wantsShown
     spacing: 0
 
     // Forwarded from the loaded module so the panel can trim its ends. A

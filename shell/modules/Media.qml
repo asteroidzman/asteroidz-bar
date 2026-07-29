@@ -113,12 +113,17 @@ Row {
         // over the title, and then, once the label made room, left it stranded
         // at the pill's left edge while the room itself moved with the centred
         // row.
+        // Reserved for as long as the visualiser is enabled, whether or not
+        // anything is coming through it: room that appears and disappears with
+        // the audio shifts the title sideways every time a track pauses or a
+        // passage goes quiet.
         leadingSpace: viz.showing ? viz.implicitWidth : 0
 
         Spectrum {
             id: viz
             parent: track.leadingSlot
             anchors.fill: parent
+            active: Cfg.mediaViz
             running: Cfg.mediaViz && root.playing
         }
     }

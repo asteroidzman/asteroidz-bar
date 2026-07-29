@@ -76,6 +76,7 @@ better schema would have bought nothing and broken all of them.
 contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the shadow
 contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included
 contrib/tray-test.sh       # the tray, on a private D-Bus session
+contrib/media-test.sh      # the media module, with a player and no sound
 contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns, plugin menus
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
@@ -109,6 +110,13 @@ found neither, and closed the panel. Every row in every plugin menu looked
 live, dismissed itself and told the plugin nothing. A stub rather than a real
 plugin, so the test does not depend on a medication schedule existing on the
 machine running it.
+
+`media-test.sh` exists because the media module draws nothing at all without
+an MPRIS player, so every question about how it LOOKS was unanswerable on a
+test machine -- which is how the visualiser vanishing on silence went unnoticed
+until it was reported. contrib/mprisstub supplies one, on a private bus, and it
+is deliberately silent: something is playing, there is nothing to hear, and the
+meter has to read zero rather than disappear.
 
 `parity.sh` gates on **geometry** — panel extents and every pill border
 position — not on pixels. Pango and Qt never agree to the last subpixel, so a

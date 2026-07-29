@@ -26,12 +26,22 @@ import ".."
 Item {
     id: root
 
+    // Is the visualiser part of the pill at all? Config, nothing else.
+    property bool active: false
+    // Is there something playing to analyse? cava only runs while there is,
+    // because the cost of this is the redraw and a stopped player has nothing
+    // to redraw for.
     property bool running: false
-    // Whether there is anything worth showing. cava keeps running while
-    // silent -- it costs nothing and it is how we notice the signal coming
-    // back -- but a flat line is not a visualisation, so the pill falls back
-    // to its glyph.
-    readonly property bool showing: running && !silent
+
+    // Shown whenever it is enabled -- NOT only when there is a signal.
+    //
+    // It used to hide itself the moment cava reported silence, so the bars
+    // vanished through any quiet passage and again whenever anything was
+    // paused, and the pill re-laid itself out each time and shifted the title
+    // sideways. A level meter reading zero is a row of flat bars. It is not an
+    // absence, and it should not be drawn as one.
+    readonly property bool showing: active
+    visible: showing
 
     property var levels: []
     property bool silent: true
@@ -134,8 +144,19 @@ Item {
                     moved = Math.max(moved, Math.abs(next[i] - was));
                 }
 
+                // The silence EDGE has to get through the redraw gate, or the
+                // bars freeze at whatever height they last had. Audio that
+                // fades rather than stops moves less than the threshold on
+                // every frame, so nothing was ever committed and the meter sat
+                // holding a stale reading -- which the old code got away with
+                // only because it hid the whole thing when silent.
+                //
+                // This compared `silent` against the expression it had just
+                // been assigned from, so it was always false: dead weight that
+                // read like a guard.
+                const wasSilent = root.silent;
                 root.silent = peak < 0.02;
-                if (moved >= root.redrawEps || root.silent !== (peak < 0.02))
+                if (moved >= root.redrawEps || root.silent !== wasSilent)
                     root.levels = next;
             }
         }
@@ -152,7 +173,14 @@ Item {
         spacing: root.barGap
 
         Repeater {
-            model: root.levels
+            // A flat row when there is nothing to draw. cava is stopped while
+            // nothing plays and reports zeros through silence; either way the
+            // reading is zero, and zero is bars at their floor rather than no
+            // bars. Without the fallback an empty `levels` drew nothing at all
+            // and left a pill-sized hole where the meter belongs.
+            model: root.levels.length > 0
+                ? root.levels
+                : new Array(Cfg.mediaBars).fill(0)
 
             delegate: Rectangle {
                 required property real modelData

@@ -21,6 +21,31 @@ Panel {
 
     visible: !empty && Cfg.sectionOnScreen(monitorFilter, screenName)
 
+    // Asked of the modules, not measured off the Row -- and it has to be,
+    // because measuring it here is circular.
+    //
+    // Panel decides `empty` from layout.implicitWidth, which is right for a
+    // panel of fixed content. A Row lays out only its EFFECTIVELY visible
+    // children, and effective visibility is false for everything inside a
+    // hidden section -- so a section whose modules can hide themselves latches
+    // off for good: media has no player, the section measures zero, the
+    // section hides, and from then on the width can never come back no matter
+    // what the modules want. A player appearing left the pill instantiated,
+    // sized and reporting `shown: true` behind a section that stayed gone.
+    //
+    // Live it hid behind a full centre panel -- the clock kept the section
+    // occupied, so the cycle never got the chance to settle wrong. It needs a
+    // section holding nothing but media to show itself, which is exactly what
+    // contrib/media-test.sh sets up.
+    empty: {
+        for (let i = 0; i < repeater.count; i++) {
+            const it = repeater.itemAt(i);
+            if (it && it.wantsShown)
+                return false;
+        }
+        return true;
+    }
+
     // Zero, because the space between two modules is not a constant: it is
     // measured ink to ink and each module contributes its own padding to it.
     // ModuleLoader draws its own leading gap.

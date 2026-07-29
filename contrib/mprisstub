@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""mprisstub — a fake MPRIS player, so the media module can be tested.
+
+The media module needs a player before it draws anything at all: no player
+means `have` is false and the whole module drops out of the bar. That made
+every question about how it LOOKS unanswerable on a test machine, which is why
+the visualiser vanishing on silence went unnoticed until it was reported.
+
+Deliberately minimal, and deliberately silent: it publishes metadata and a
+playback state and never produces a sample. That is exactly the case that
+matters here -- something is playing, there is nothing to hear, and the meter
+has to read zero rather than disappear.
+
+  mprisstub --title T --artist A --status Playing|Paused|Stopped
+"""
+
+import argparse
+import sys
+
+import dbus
+import dbus.mainloop.glib
+import dbus.service
+from gi.repository import GLib
+
+BUS_NAME = "org.mpris.MediaPlayer2.mprisstub"
+PATH = "/org/mpris/MediaPlayer2"
+ROOT_IFACE = "org.mpris.MediaPlayer2"
+PLAYER_IFACE = "org.mpris.MediaPlayer2.Player"
+PROPS_IFACE = "org.freedesktop.DBus.Properties"
+
+
+class Player(dbus.service.Object):
+    def __init__(self, bus, title, artist, status):
+        super().__init__(bus, PATH)
+        self.title = title
+        self.artist = artist
+        self.status = status
+
+    def player_props(self):
+        return {
+            "PlaybackStatus": self.status,
+            "LoopStatus": "None",
+            "Rate": dbus.Double(1.0),
+            "Shuffle": dbus.Boolean(False),
+            "Metadata": dbus.Dictionary({
+                "mpris:trackid": dbus.ObjectPath(
+                    "/org/mpris/MediaPlayer2/mprisstub/track/1"),
+                # A length, because a player with none reads as a live stream
+                # and some clients treat that as uncontrollable.
+                "mpris:length": dbus.Int64(240_000_000),
+                "xesam:title": self.title,
+                "xesam:artist": dbus.Array([self.artist], signature="s"),
+                "xesam:album": "Test Album",
+            }, signature="sv"),
+            "Volume": dbus.Double(1.0),
+            "Position": dbus.Int64(0),
+            "MinimumRate": dbus.Double(1.0),
+            "MaximumRate": dbus.Double(1.0),
+            "CanGoNext": dbus.Boolean(True),
+            "CanGoPrevious": dbus.Boolean(True),
+            "CanPlay": dbus.Boolean(True),
+            "CanPause": dbus.Boolean(True),
+            "CanSeek": dbus.Boolean(False),
+            "CanControl": dbus.Boolean(True),
+        }
+
+    def root_props(self):
+        return {
+            "CanQuit": dbus.Boolean(False),
+            "CanRaise": dbus.Boolean(False),
+            "HasTrackList": dbus.Boolean(False),
+            "Identity": "mprisstub",
+            "SupportedUriSchemes": dbus.Array([], signature="s"),
+            "SupportedMimeTypes": dbus.Array([], signature="s"),
+        }
+
+    # ── properties ──────────────────────────────────────────────────────────
+
+    @dbus.service.method(PROPS_IFACE, in_signature="ss", out_signature="v")
+    def Get(self, iface, prop):
+        return self.GetAll(iface)[prop]
+
+    @dbus.service.method(PROPS_IFACE, in_signature="s", out_signature="a{sv}")
+    def GetAll(self, iface):
+        if iface == PLAYER_IFACE:
+            return self.player_props()
+        if iface == ROOT_IFACE:
+            return self.root_props()
+        return {}
+
+    @dbus.service.method(PROPS_IFACE, in_signature="ssv")
+    def Set(self, iface, prop, value):
+        pass
+
+    @dbus.service.signal(PROPS_IFACE, signature="sa{sv}as")
+    def PropertiesChanged(self, iface, changed, invalidated):
+        pass
+
+    # ── the root interface ──────────────────────────────────────────────────
+    #
+    # Declared even though both are no-ops. An interface with no methods on it
+    # does not appear in the object's introspection at all, so a client that
+    # looks for org.mpris.MediaPlayer2 before treating the name as a player
+    # sees nothing and skips it -- playerctl, which goes by the bus name, found
+    # this stub perfectly well while the bar did not.
+
+    @dbus.service.method(ROOT_IFACE)
+    def Raise(self):
+        pass
+
+    @dbus.service.method(ROOT_IFACE)
+    def Quit(self):
+        pass
+
+    # ── transport ───────────────────────────────────────────────────────────
+    #
+    # Real enough to be driven: a test that clicks play/pause needs the state
+    # to actually change and to be announced, or it is only testing that a
+    # click does not crash.
+
+    def set_status(self, status):
+        self.status = status
+        self.PropertiesChanged(PLAYER_IFACE, {"PlaybackStatus": status}, [])
+
+    @dbus.service.method(PLAYER_IFACE)
+    def PlayPause(self):
+        self.set_status("Paused" if self.status == "Playing" else "Playing")
+
+    @dbus.service.method(PLAYER_IFACE)
+    def Play(self):
+        self.set_status("Playing")
+
+    @dbus.service.method(PLAYER_IFACE)
+    def Pause(self):
+        self.set_status("Paused")
+
+    @dbus.service.method(PLAYER_IFACE)
+    def Stop(self):
+        self.set_status("Stopped")
+
+    @dbus.service.method(PLAYER_IFACE)
+    def Next(self):
+        pass
+
+    @dbus.service.method(PLAYER_IFACE)
+    def Previous(self):
+        pass
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--title", default="Test Track")
+    ap.add_argument("--artist", default="Test Artist")
+    ap.add_argument("--status", default="Playing",
+                    choices=["Playing", "Paused", "Stopped"])
+    args = ap.parse_args()
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    name = dbus.service.BusName(BUS_NAME, bus)
+    Player(bus, args.title, args.artist, args.status)
+    # So a caller can wait for the name rather than sleeping and hoping.
+    sys.stdout.write("ready\n")
+    sys.stdout.flush()
+    GLib.MainLoop().run()
+    del name
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
