@@ -52,7 +52,13 @@ Item {
         // on the floor; mono because the pill is far too small for stereo to
         // read.
         + "autosens = 1\nsensitivity = 100\n"
-        + "lower_cutoff_freq = 50\nhigher_cutoff_freq = 12000\n"
+        // 50-4000, not 50-12000. Measured against real audio, the wider
+        // range put everything in the top band and left the rest flat: six
+        // bars over 50-12000 read 3;2;1;1;2;9 up to 27;38;50;19;19;117,
+        // never above an eighth of the scale except the last. Over 50-4000
+        // the same audio spreads across all six and uses the whole range.
+        // Six bars is simply too few to spend any of them above 4kHz.
+        + "lower_cutoff_freq = 50\nhigher_cutoff_freq = 4000\n"
         + "[input]\nmethod = pipewire\nsource = auto\n"
         + "[output]\nmethod = raw\nraw_target = /dev/stdout\n"
         + "data_format = ascii\nascii_max_range = 1000\n"
@@ -83,8 +89,8 @@ Item {
     // It used to be given the icon's square -- 28px -- and six bars were
     // divided into it, which came out under four pixels each with a pixel
     // between them: technically a spectrum, visually a texture.
-    readonly property int barWidth: Math.max(4, Math.round(Cfg.height * 0.13))
-    readonly property int barGap: Math.max(1, Math.round(barWidth * 0.45))
+    readonly property int barWidth: Math.max(5, Math.round(Cfg.height * 0.19))
+    readonly property int barGap: Math.max(2, Math.round(barWidth * 0.35))
     implicitWidth: Cfg.mediaBars * barWidth + (Cfg.mediaBars - 1) * barGap
 
     // A frame whose bars have all moved less than this is not redrawn. Without
@@ -156,7 +162,10 @@ Item {
                 // A floor, so a silent-but-present spectrum still reads as a
                 // row of bars rather than as nothing at all.
                 height: Math.max(2, modelData * root.height)
-                anchors.bottom: parent.bottom
+                // Grown from the middle, both ways. Anchored to the bottom it
+                // read as a graph sitting on a baseline, which is not what a
+                // level meter beside a track title should look like.
+                anchors.verticalCenter: parent.verticalCenter
                 radius: 1
                 color: Cfg.focusBg
             }
