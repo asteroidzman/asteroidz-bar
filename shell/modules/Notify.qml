@@ -31,49 +31,59 @@ Pill {
     iconTint: (count > 0 && !dnd) ? Cfg.focusBg : Cfg.fg
     paddingX: 0
 
-    // swaync's D-Bus interface, polled rather than subscribed.
+    // Subscribed, not polled.
     //
-    // The compositor subscribes to the daemon's Subscribe signal because it is
-    // already on the bus; from here that would mean a bus connection whose only
-    // job is one signal. `busctl --json` on a two-second tick costs a fork we
-    // would rather not make either -- but this is the one module whose state
-    // has no file to read and no quickshell service, and two seconds is well
-    // inside how fast a bell needs to react.
+    // This used to ask the bus for three PROPERTIES named count, dnd and
+    // inhibited. swaync has no such properties -- they are METHODS
+    // (NotificationCount, GetDnd, IsInhibited) -- so every tick came back
+    // `Failed to get property count: No such property "count"`, the parse gave
+    // up, and the count sat at zero for ever. The bell read "nothing unread"
+    // with fifty notifications waiting, which is the one thing it exists to
+    // say.
+    //
+    // `swaync-client --subscribe` fixes it and costs less than what it
+    // replaces: one long-lived process that writes a line whenever anything
+    // changes, rather than forking busctl every two seconds to ask. It answers
+    // once on connect too, so there is no gap before the first change.
+    //
+    // Its fields are NAMED -- {"count":51,"dnd":false,"visible":false,
+    // "inhibited":false} -- which is why this and not the daemon's
+    // GetSubscribeData. That returns a bare (bbub) whose order is not
+    // self-describing, and reading it wrong would silently swap the count for
+    // the DND flag; the compositor's own notification module refused it for
+    // that reason and this inherits the refusal.
     Process {
-        id: query
-        command: ["busctl", "--user", "--json=short", "get-property",
-                  "org.erikreider.swaync.cc", "/org/erikreider/swaync/cc",
-                  "org.erikreider.swaync.cc", "count", "dnd", "inhibited"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                // Three separate replies, one per property, in order.
-                const vals = [];
-                for (const line of text.split("\n")) {
-                    if (!line.trim())
-                        continue;
-                    try {
-                        vals.push(JSON.parse(line).data);
-                    } catch (e) {
-                        // The daemon is not running: leave the last state
-                        // rather than flashing the bell empty on one bad tick.
-                        return;
-                    }
-                }
-                if (vals.length >= 3) {
-                    root.count = vals[0] || 0;
-                    root.dnd = !!vals[1];
-                    root.inhibited = !!vals[2];
+        id: sub
+        command: ["swaync-client", "--subscribe"]
+        running: true
+
+        stdout: SplitParser {
+            onRead: line => {
+                if (!line.trim())
+                    return;
+                try {
+                    const o = JSON.parse(line);
+                    root.count = o.count || 0;
+                    root.dnd = !!o.dnd;
+                    root.inhibited = !!o.inhibited;
+                } catch (e) {
+                    // Not a state line. Leave the last one standing rather
+                    // than flashing the bell empty on one bad read.
                 }
             }
         }
     }
 
+    // The daemon is not always up before the bar is, and it can be restarted
+    // under it -- swaync-client exits when that happens, taking the
+    // subscription with it and freezing the bell at its last count. Re-running
+    // it is the whole recovery. The retry is slow on purpose: a daemon that is
+    // not there will not be there any sooner for being asked twice a second.
     Timer {
-        interval: 2000
-        running: true
+        interval: 5000
+        running: !sub.running
         repeat: true
-        triggeredOnStart: true
-        onTriggered: if (!query.running) query.running = true
+        onTriggered: sub.running = true
     }
 
     onClicked: button => {

@@ -77,6 +77,7 @@ contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the s
 contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included
 contrib/tray-test.sh       # the tray, on a private D-Bus session
 contrib/media-test.sh      # the media module, with a player and no sound
+contrib/notify-test.sh     # the bell, against a stubbed swaync
 contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns, plugin menus
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
@@ -117,6 +118,11 @@ test machine -- which is how the visualiser vanishing on silence went unnoticed
 until it was reported. contrib/mprisstub supplies one, on a private bus, and it
 is deliberately silent: something is playing, there is nothing to hear, and the
 meter has to read zero rather than disappear.
+
+`notify-test.sh` fakes swaync with a stub `swaync-client` early on PATH, and
+has it CHANGE its answer partway through: the bell was reading a subscription
+that never updated, and a stub that only ever reports one count would pass
+while being just as broken.
 
 `parity.sh` gates on **geometry** — panel extents and every pill border
 position — not on pixels. Pango and Qt never agree to the last subpixel, so a
