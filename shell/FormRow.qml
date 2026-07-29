@@ -7,14 +7,21 @@ Item {
     property string label: ""
     property Item control: null
 
-    implicitHeight: 28
+    // Tall enough for its control, not a constant: a Picker with its list open
+    // is taller than a row, and a fixed 28 would have the list drawn over
+    // whatever setting comes next instead of pushing it down.
+    implicitHeight: Math.max(28, control ? control.implicitHeight + 4 : 0)
     visible: true
 
     onControlChanged: if (control) {
         control.parent = root;
         control.anchors.left = undefined;
         control.x = Qt.binding(() => 150);
-        control.y = Qt.binding(() => (root.height - control.height) / 2);
+        // Pinned to the TOP once the control is taller than a row: a control
+        // that grows downwards (a list opening) must not drift upwards as it
+        // does, or the thing under the pointer moves out from under it.
+        control.y = Qt.binding(() => control.implicitHeight > 24
+            ? 2 : (root.height - control.height) / 2);
         control.width = Qt.binding(() => root.width - 150);
     }
 

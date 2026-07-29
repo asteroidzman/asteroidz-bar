@@ -163,6 +163,10 @@ Pill {
                         label: "Resolution"
                         width: parent.width
                         control: Picker {
+                            // Every distinct resolution the output actually
+                            // reports, largest first -- a mode wlroots did not
+                            // advertise cannot be committed, and offering one
+                            // only moves the failure later.
                             values: {
                                 const seen = {};
                                 const out = [];
@@ -172,10 +176,11 @@ Pill {
                                     const k = m.width + "x" + m.height;
                                     if (!seen[k]) {
                                         seen[k] = true;
-                                        out.push(k);
+                                        out.push({ k: k, w: m.width, h: m.height });
                                     }
                                 }
-                                return out;
+                                out.sort((a, b) => b.w - a.w || b.h - a.h);
+                                return out.map(e => e.k);
                             }
                             current: panel.currentRes
                             onPicked: v =>
@@ -188,19 +193,28 @@ Pill {
                         label: "Refresh"
                         width: parent.width
                         control: Picker {
+                            // The rates available AT THE CURRENT RESOLUTION,
+                            // matched on both dimensions: two modes can share
+                            // a width and differ in height, and offering
+                            // 1920x1080's rates while 1920x1200 is on screen
+                            // produces a mode string the output does not have.
+                            // Highest first, which is the one people want.
                             values: {
                                 const out = [];
                                 const modes = (panel.current
                                                && panel.current.modes) || [];
                                 const w = panel.activeMode
                                     ? panel.activeMode.width : 0;
+                                const h = panel.activeMode
+                                    ? panel.activeMode.height : 0;
                                 for (const m of modes) {
-                                    if (m.width !== w)
+                                    if (m.width !== w || m.height !== h)
                                         continue;
                                     const hz = Math.round(m.refresh / 1000);
                                     if (out.indexOf(String(hz)) < 0)
                                         out.push(String(hz));
                                 }
+                                out.sort((a, b) => Number(b) - Number(a));
                                 return out;
                             }
                             current: panel.activeMode
