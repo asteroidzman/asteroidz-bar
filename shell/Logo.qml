@@ -5,10 +5,12 @@ pragma Singleton
 // The artwork is a wireframe Atari-Asteroids triangle with a flame out of the
 // back, and the flame is meant to follow the theme -- the SVG says so itself:
 //
-//     the flame hexes below are recoloured to the theme accent by the plugin
-//     at load time (asteroidz_ws.c logo_pixbuf) -- keep them verbatim.
+//     the flame hexes below are substituted for shades of the theme accent, by
+//     string replacement, in asteroidz-bar's shell/Logo.qml -- keep them
+//     verbatim.
 //
-// That plugin is gone, so the recolouring moves here. It cannot be done with a
+// The recolouring used to be the plugin's (asteroidz_ws.c logo_pixbuf); that
+// plugin is gone, so it lives here now. It cannot be done with a
 // tint the way every other icon in the bar is coloured: ColorOverlay paints
 // through the whole alpha channel, so tinting this would flood the hull as
 // well and leave a solid triangle. The colours have to be swapped in the
@@ -28,7 +30,7 @@ Singleton {
 
     // What the artwork is called in the icon search path, and where that
     // search actually found it.
-    readonly property string sourceName: "waybar-asteroidz-workspaces/logo.svg"
+    readonly property string sourceName: "asteroidz-bar/logo.svg"
     readonly property string sourcePath: {
         const roots = Cfg.iconDir.split(":").filter(s => s.length > 0);
         return Paths.resolve(roots.map(r => r + "/" + sourceName));

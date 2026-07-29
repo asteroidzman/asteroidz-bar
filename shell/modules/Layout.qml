@@ -2,7 +2,9 @@
 //
 // Artwork keyed on the layout NAME, because that is what the asset filenames
 // use (tile/scroller/monocle/float.svg) -- the same SVGs the waybar workspace
-// plugin drew. The symbol is the fallback for a layout with no artwork
+// plugin drew, now vendored into asteroidz's own assets/bar-icons rather than
+// left to whichever plugin package happened to install them. The symbol is the
+// fallback for a layout with no artwork
 // installed, which is also why the pill keeps a fixed width: it is clickable,
 // and a control that changes size when you use it moves out from under the
 // pointer.
@@ -34,7 +36,7 @@ Pill {
     }
 
     icons: art !== ""
-        ? ["waybar-asteroidz-workspaces/layouts/" + art + ".svg"]
+        ? ["asteroidz-bar/layouts/" + art + ".svg"]
         : []
     text: art !== "" ? "" : symbol
 

@@ -2,9 +2,9 @@
 //
 // Two kinds of name arrive here and they are not looked up the same way:
 //
-//   "waybar-asteroidz-workspaces/logo.svg"  a path relative to one of the
-//                                           roots in `bar { icon-dir }`
-//   "firefox"                               an icon THEME name (an app id)
+//   "asteroidz-bar/logo.svg"   a path relative to one of the roots in
+//                              `bar { icon-dir }`
+//   "firefox"                  an icon THEME name (an app id)
 //
 // The first is a search path, tried in order, first hit wins -- the same list
 // the native bar walks, so a locally-customised asset still beats the packaged
