@@ -1,0 +1,11 @@
+# A directory with a qmldir is a MODULE, and a module resolves only the types
+# it lists -- the implicit "any .qml file beside me is a type" rule stops
+# applying the moment this file exists. Registering the singletons here (which
+# is the only way to register a singleton) therefore means registering
+# everything else too, or Bar.qml stops being a type the instant Cfg becomes
+# one.
+singleton Ipc 1.0 Ipc.qml
+singleton Cfg 1.0 Cfg.qml
+Bar 1.0 Bar.qml
+Panel 1.0 Panel.qml
+Pill 1.0 Pill.qml

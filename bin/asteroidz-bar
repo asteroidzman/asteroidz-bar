@@ -1,0 +1,38 @@
+#!/bin/sh
+# Launch the shell in the compositor's coordinate space.
+#
+# This exists because of one number. asteroidz renders every label through
+# Pango at a FIXED 96 dpi times the output's scale (text-node.c:
+# `pango_cairo_context_set_resolution(ctx, 96.0 * scale)`), so `theme { font
+# "Ubuntu 16" }` is 16pt at 96dpi -- 21.33 logical pixels -- on every machine.
+#
+# Qt does not work that way. It reads QT_FONT_DPI / Xft.dpi / the desktop's
+# text-scaling-factor and scales the WHOLE scene by the ratio, and this desktop
+# sets 168 dpi. The first headless run came out at exactly 168/96 = 1.75x: a
+# 48px bar drawn 84px tall. Nothing in the config was wrong; Qt was answering a
+# question the compositor had already answered differently.
+#
+# So the DPI knobs are pinned and only the OUTPUT scale is left to do its job
+# -- which is right, and is the same scale the compositor applies. A HiDPI
+# monitor still gets a sharp bar; it just gets one the same size as the
+# compositor's own.
+#
+# Unset rather than overridden where possible: QT_WAYLAND_FORCE_DPI=physical is
+# not the same as absent, and absent is what we want.
+unset QT_WAYLAND_FORCE_DPI
+unset QT_SCREEN_SCALE_FACTORS
+export QT_FONT_DPI=96
+export QT_SCALE_FACTOR=1
+export QT_AUTO_SCREEN_SCALE_FACTOR=0
+export QT_ENABLE_HIGHDPI_SCALING=0
+export QT_QPA_PLATFORM=wayland
+
+# qt6ct would apply this desktop's Qt theme -- fonts, palette, a style sheet --
+# on top of a shell whose entire job is to match the COMPOSITOR's theme.
+unset QT_QPA_PLATFORMTHEME
+
+SHELL_QML="${ASTEROIDZ_BAR_SHELL:-@SHELLDIR@/shell.qml}"
+
+# Absolute path, never a bare name: a launcher that resolves its own payload
+# through PATH is one PATH edit away from executing itself.
+exec /usr/bin/qs -p "$SHELL_QML" "$@"
