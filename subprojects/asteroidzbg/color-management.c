@@ -127,9 +127,37 @@ static const struct wp_image_description_v1_listener image_desc_listener = {
 	.ready = image_desc_ready,
 };
 
-bool cm_apply_to_surface(struct cm_state *cm, struct wl_surface *surface,
+struct wp_color_management_surface_v1 *cm_surface_create(struct cm_state *cm,
+		struct wl_surface *surface) {
+	if (!cm || !cm->manager || !surface) {
+		return NULL;
+	}
+	return wp_color_manager_v1_get_surface(cm->manager, surface);
+}
+
+void cm_surface_destroy(struct wp_color_management_surface_v1 *cm_surface) {
+	if (cm_surface) {
+		wp_color_management_surface_v1_destroy(cm_surface);
+	}
+}
+
+bool cm_apply_to_surface(struct cm_state *cm, struct wl_display *display,
+		struct wp_color_management_surface_v1 *cm_surface,
 		const struct hdr_image *image) {
+	if (!cm_surface) {
+		return false;
+	}
+
 	if (!cm_can_represent(cm, image)) {
+		/* UNSET, not "leave alone".
+		 *
+		 * The wallpaper changes under this surface -- a cycle timer, a hotkey,
+		 * the settings panel -- and going from an HDR file to an SDR one used
+		 * to leave the old BT.2020/PQ description in place. The compositor
+		 * then reads plain sRGB pixels as PQ for every frame after, which is
+		 * not a subtle mistake: it is the whole tone curve wrong, on whatever
+		 * output does not happen to be doing the same transform anyway. */
+		wp_color_management_surface_v1_unset_image_description(cm_surface);
 		return false;
 	}
 
@@ -162,22 +190,39 @@ bool cm_apply_to_surface(struct cm_state *cm, struct wl_surface *surface,
 	struct cm_image_desc_result result = {0};
 	wp_image_description_v1_add_listener(desc, &image_desc_listener, &result);
 
-	/* The surface tag is latched on the next wl_surface commit, which the
-	 * caller performs; ready/failed arrives asynchronously and only affects
-	 * whether the description was usable, so there is no round-trip here. */
-	struct wp_color_management_surface_v1 *cm_surface =
-		wp_color_manager_v1_get_surface(cm->manager, surface);
-	if (!cm_surface) {
+	/* WAIT for it.
+	 *
+	 * "Image descriptions which are not ready are forbidden in this request"
+	 * -- passing one anyway is a protocol error, and a protocol error
+	 * disconnects the client, which here means the bar and the wallpaper both
+	 * disappear. The previous code sent it immediately and explained that the
+	 * round trip was unnecessary because ready/failed "only affects whether
+	 * the description was usable".
+	 *
+	 * This is a wallpaper change: a handful of blocking round trips at the
+	 * moment the picture changes is not a frame budget anyone is counting. */
+	while (!result.ready && !result.failed) {
+		if (wl_display_roundtrip(display) < 0) {
+			wp_image_description_v1_destroy(desc);
+			return false;
+		}
+	}
+	if (result.failed) {
 		wp_image_description_v1_destroy(desc);
+		wp_color_management_surface_v1_unset_image_description(cm_surface);
 		return false;
 	}
+
 	wp_color_management_surface_v1_set_image_description(cm_surface, desc,
 			WP_COLOR_MANAGER_V1_RENDER_INTENT_PERCEPTUAL);
 
-	/* Both objects can go as soon as the request is queued: the compositor
-	 * holds its own references to the surface's description. */
+	/* The DESCRIPTION can go immediately -- "destroying a
+	 * wp_image_description_v1 has no side-effects, not even if
+	 * set_image_description has not yet been followed by a commit". The
+	 * cm_surface must NOT: destroying that one unsets what was just set, and
+	 * doing it here is what stopped every HDR wallpaper from ever being
+	 * tagged. It lives as long as the surface does. */
 	wp_image_description_v1_destroy(desc);
-	wp_color_management_surface_v1_destroy(cm_surface);
 
 	asteroidzbg_log(LOG_DEBUG, "Tagged wallpaper surface as %s / %s",
 			image->primaries == HDR_PRIM_BT2020 ? "BT.2020" : "sRGB",

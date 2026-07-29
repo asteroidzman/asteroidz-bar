@@ -35,6 +35,10 @@ struct azbg_output {
 	struct azbg_backdrop *bd;
 
 	struct wl_surface *surface;
+	/* Created with the surface and kept: a second get_surface for the same
+	 * wl_surface is a protocol error, and destroying this object unsets the
+	 * image description it carries. */
+	struct wp_color_management_surface_v1 *cm_surface;
 	struct zwlr_layer_surface_v1 *layer_surface;
 	struct wp_viewport *viewport;
 	struct wp_fractional_scale_v1 *fract_scale;
@@ -196,7 +200,8 @@ static void render_frame(struct azbg_output *output,
 	/* Tag before the commit below: the image description is latched by the
 	 * same commit that attaches the buffer it describes, so the compositor
 	 * never sees PQ pixels it has not been told about. */
-	cm_apply_to_surface(&output->bd->cm, output->surface, image);
+	cm_apply_to_surface(&output->bd->cm, output->bd->display,
+		output->cm_surface, image);
 
 	wl_surface_attach(output->surface, buf, 0, 0);
 	wl_surface_damage_buffer(output->surface, 0, 0, buffer_width, buffer_height);
@@ -225,6 +230,7 @@ static void destroy_output(struct azbg_output *output) {
 		zwlr_layer_surface_v1_destroy(output->layer_surface);
 	}
 	if (output->surface) {
+		cm_surface_destroy(output->cm_surface);
 		wl_surface_destroy(output->surface);
 	}
 	if (output->viewport) {
@@ -281,6 +287,7 @@ static void create_layer_surface(struct azbg_output *output) {
 	struct azbg_backdrop *bd = output->bd;
 
 	output->surface = wl_compositor_create_surface(bd->compositor);
+	output->cm_surface = cm_surface_create(&bd->cm, output->surface);
 	assert(output->surface);
 
 	/* Empty input region: the wallpaper is scenery. Without this it would

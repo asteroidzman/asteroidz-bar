@@ -20,6 +20,17 @@
 # one: an HDR wallpaper is not something a machine reliably has lying about,
 # and a test that skips itself when it cannot find its input is a test that
 # passes for the wrong reason.
+#
+# WHAT IS STILL NOT COVERED, and cannot be from here: the wp_color_manager_v1
+# TAGGING itself. A headless output is not HDR-capable, so the compositor never
+# advertises BT.2020/PQ, cm_can_represent() is false, and the branch that builds
+# an image description and puts it on the surface is never entered -- which is
+# exactly where two protocol bugs lived unnoticed (the description was set
+# before it was ready, and the colour-management surface was destroyed straight
+# after setting it, which "does the same as unset_image_description" and threw
+# the tag away). "presented as SDR" below is the honest answer for this
+# compositor, not evidence that the HDR path works. Verifying that needs a real
+# HDR-capable output.
 set -u
 
 REPO="${ASTEROIDZ_REPO:-$HOME/asteroidz}"
