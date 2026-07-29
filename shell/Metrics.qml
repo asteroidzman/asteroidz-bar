@@ -127,6 +127,17 @@ Singleton {
         onTriggered: root.sample()
     }
 
+    // Bytes per second, the way a bar should say it: two significant figures
+    // and a unit, because "1493028 B/s" is not a reading anyone parses at a
+    // glance.
+    function rate(bps) {
+        if (bps >= 1024 * 1024)
+            return (bps / (1024 * 1024)).toFixed(1) + " MiB/s";
+        if (bps >= 1024)
+            return (bps / 1024).toFixed(0) + " KiB/s";
+        return Math.round(bps) + " B/s";
+    }
+
     // ── how a reading is shown ──────────────────────────────────────────────
 
     // Amber for "heavy". Not a theme colour because the theme has no word for

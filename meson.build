@@ -38,6 +38,11 @@ install_data(
 		'shell/Compositor.qml',
 		'shell/Metrics.qml',
 		'shell/Wallpaper.qml',
+		'shell/Arrange.qml',
+		'shell/FormRow.qml',
+		'shell/Picker.qml',
+		'shell/Toggle.qml',
+		'shell/Field.qml',
 	],
 	install_dir: qmldir,
 )
@@ -59,6 +64,7 @@ install_data(
 		'shell/modules/Media.qml',
 		'shell/modules/Spectrum.qml',
 		'shell/modules/Tray.qml',
+		'shell/modules/Display.qml',
 	],
 	install_dir: qmldir / 'modules',
 )

@@ -17,6 +17,19 @@ Pill {
     paddingX: 0
     fixedWidth: iconSize + 2 * Cfg.borderWidth + 1
 
+    property var bar: null
+
+    onClicked: button => {
+        if (button !== Qt.LeftButton || !bar)
+            return;
+        bar.showMenu(root, [
+            { text: "Down  " + Metrics.rate(Metrics.rxRate), enabled: false },
+            { text: "Up    " + Metrics.rate(Metrics.txRate), enabled: false },
+            { separator: true },
+            { text: Metrics.linkUp ? "Link up" : "Link down", enabled: false }
+        ]);
+    }
+
     Item {
         id: art
         anchors.centerIn: parent

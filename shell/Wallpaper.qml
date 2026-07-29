@@ -41,13 +41,74 @@ Singleton {
 
     property string path: ""
     property string mode: "fill"
+    property string folder: Quickshell.env("HOME") + "/Pictures"
+    property string order: "random"
+    property int interval: 3600
+
+    // What the browser offers. The same extensions the scripts discover, avif
+    // and jxl included -- an HDR wallpaper has to be pickable here too, not
+    // only nameable in the config file.
+    readonly property var extensions:
+        ["jpg", "jpeg", "png", "webp", "avif", "jxl"]
+
+    property var available: []
+
+    Process {
+        id: scan
+        command: ["find", root.folder, "-maxdepth", "1", "-type", "f"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = [];
+                for (const line of text.split("\n")) {
+                    const f = line.trim();
+                    if (!f)
+                        continue;
+                    const ext = f.slice(f.lastIndexOf(".") + 1).toLowerCase();
+                    if (root.extensions.indexOf(ext) >= 0)
+                        out.push(f);
+                }
+                out.sort();
+                root.available = out;
+            }
+        }
+    }
+
+    onFolderChanged: scan.running = true
+
+    // Write one key back to wallpaper.conf. The file is the interface every
+    // other piece of this desktop already uses -- the cycle daemon, the
+    // hotkeys, set-wallpaper.sh -- so changing it here means they all agree
+    // without any of them knowing about this shell.
+    function setKey(key, value) {
+        const lines = [];
+        let replaced = false;
+        for (const line of conf.text().split("\n")) {
+            if (!line.trim())
+                continue;
+            if (line.startsWith(key + "=")) {
+                lines.push(key + "=" + value);
+                replaced = true;
+            } else {
+                lines.push(line);
+            }
+        }
+        if (!replaced)
+            lines.push(key + "=" + value);
+        conf.setText(lines.join("\n") + "\n");
+    }
 
     FileView {
         id: conf
         path: root.confPath
         watchChanges: true
         onFileChanged: reload()
-        onLoaded: root.apply(parse())
+        onLoaded: {
+            const cfg = parse();
+            if (cfg.folder) root.folder = cfg.folder;
+            if (cfg.order) root.order = cfg.order;
+            if (cfg.interval) root.interval = parseInt(cfg.interval) || 3600;
+            root.apply(cfg);
+        }
 
         function parse() {
             const out = {};

@@ -18,19 +18,27 @@ PopupWindow {
 
     // [{ text, icon, enabled, separator, submenu, checked, input, value }]
     property var rows: []
+    // A whole component instead of rows: the display panel is a form, and a
+    // form is not expressible as a list of one-line targets.
+    property Component panel: null
     property string title: ""
     // Set while a field is being typed into; see Bar.qml, which raises the
     // layer-shell keyboard focus only while this is true.
-    readonly property bool wantsKeyboard: rows.some(r => r && r.input)
+    readonly property bool wantsKeyboard:
+        wantsKeyboardPanel || rows.some(r => r && r.input)
 
     signal activated(int index)
     signal edited(int index, string text)
 
     color: "transparent"
-    implicitWidth: Math.max(Cfg.popoverWidth, content.implicitWidth
-                            + 2 * Cfg.popoverPadding)
-    implicitHeight: Math.min(600, content.implicitHeight
-                             + 2 * Cfg.popoverPadding)
+    implicitWidth: (panelLoader.item
+                    ? panelLoader.item.implicitWidth
+                    : Math.max(Cfg.popoverWidth, content.implicitWidth))
+                   + 2 * Cfg.popoverPadding
+    implicitHeight: Math.min(700, (panelLoader.item
+                                   ? panelLoader.item.implicitHeight
+                                   : content.implicitHeight)
+                                  + 2 * Cfg.popoverPadding)
 
     // The pointer dismisses it, so it must be able to take clicks that land
     // outside any row.
@@ -42,8 +50,22 @@ PopupWindow {
         color: Cfg.popoverColor
     }
 
+    Loader {
+        id: panelLoader
+        anchors.fill: parent
+        anchors.margins: Cfg.popoverPadding
+        sourceComponent: root.visible ? root.panel : null
+        // A panel takes keys of its own (text fields), so the bar has to hold
+        // keyboard focus while one is up.
+        onLoaded: root.wantsKeyboardPanel = true
+        onItemChanged: if (!item) root.wantsKeyboardPanel = false
+    }
+
+    property bool wantsKeyboardPanel: false
+
     Column {
         id: content
+        visible: root.panel === null
         anchors.fill: parent
         anchors.margins: Cfg.popoverPadding
         spacing: Cfg.popoverSpacing

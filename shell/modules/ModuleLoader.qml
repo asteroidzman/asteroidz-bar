@@ -78,6 +78,8 @@ Row {
                 return mediaComponent;
             case "tray":
                 return trayComponent;
+            case "display":
+                return displayComponent;
             default:
                 return null;
             }
@@ -106,17 +108,17 @@ Row {
 
     Component {
         id: metricComponent
-        Metric { kind: root.module }
+        Metric { kind: root.module; bar: root.bar }
     }
 
     Component {
         id: networkComponent
-        Network {}
+        Network { bar: root.bar }
     }
 
     Component {
         id: volumeComponent
-        Volume {}
+        Volume { bar: root.bar }
     }
 
     Component {
@@ -142,6 +144,11 @@ Row {
     Component {
         id: trayComponent
         Tray { bar: root.bar }
+    }
+
+    Component {
+        id: displayComponent
+        Display { bar: root.bar }
     }
 
     Component.onCompleted: {

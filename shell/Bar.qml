@@ -7,6 +7,7 @@
 
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Services.Pipewire
 import QtQuick
 import "."
 import "modules"
@@ -81,6 +82,15 @@ PanelWindow {
 
         onActivated: index => {
             const row = rows[index];
+            // A PipeWire sink, picked from the volume menu. Setting the
+            // preferred default is what "output" means to a person: it moves
+            // where new streams go and what the volume pill controls, which is
+            // the same thing `pactl set-default-sink` did.
+            if (row && row.node) {
+                Pipewire.preferredDefaultAudioSink = row.node;
+                visible = false;
+                return;
+            }
             if (row && row.entry) {
                 // A submenu opens in place rather than closing: the panel is
                 // the same panel, showing a different level.
@@ -118,6 +128,23 @@ PanelWindow {
         menu.visible = rows.length > 0;
     }
 
+    // Open an arbitrary component under `item` -- a settings panel rather than
+    // a list of rows. Menus and panels share one popover for the same reason
+    // there is only one of either: two would need z-order arbitration and a
+    // grab each.
+    function showPanel(item, component) {
+        if (menu.visible) {
+            menu.visible = false;
+            return;
+        }
+        menu.rows = [];
+        menu.anchor.item = item;
+        menu.anchor.edges = Edges.Bottom;
+        menu.anchor.gravity = Edges.Bottom;
+        menu.panel = component;
+        menu.visible = true;
+    }
+
     // Open a menu under `item`, which must be a pill in this bar. Anchored to
     // the pill rather than to the pointer, so the panel stays put while the
     // menu is up and lands in the same place every time.
@@ -129,6 +156,10 @@ PanelWindow {
         menu.anchor.item = item;
         menu.anchor.edges = Edges.Bottom;
         menu.anchor.gravity = Edges.Bottom;
+        // Clear any panel: the popover is shared, and a menu opened after a
+        // settings panel would otherwise draw the panel with the menu's rows
+        // hidden behind it.
+        menu.panel = null;
         showRows(rows);
     }
 

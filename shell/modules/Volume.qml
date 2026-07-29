@@ -58,8 +58,35 @@ Pill {
             sink.audio.volume + (delta > 0 ? step : -step)));
     }
 
+    property var bar: null
+
     onClicked: button => {
-        if (button === Qt.MiddleButton && have)
+        if (button === Qt.MiddleButton && have) {
             sink.audio.muted = !sink.audio.muted;
+            return;
+        }
+        if (button !== Qt.LeftButton || !bar)
+            return;
+
+        // Every sink that can actually play, with the current one checked.
+        // Picking one sets the DEFAULT rather than moving streams, which is
+        // what `pactl set-default-sink` did and what people mean by "output".
+        const rows = [{
+            text: have ? (muted ? "Muted  " : "Volume  ") + pct + "%"
+                       : "no audio server",
+            enabled: false
+        }, { separator: true }];
+
+        for (const node of Pipewire.nodes.values) {
+            if (!node.isSink || !node.audio)
+                continue;
+            rows.push({
+                text: node.nickname || node.description || node.name,
+                checked: sink && node.id === sink.id,
+                value: String(node.id),
+                node: node
+            });
+        }
+        bar.showMenu(root, rows);
     }
 }
