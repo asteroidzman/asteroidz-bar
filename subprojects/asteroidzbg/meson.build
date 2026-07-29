@@ -38,7 +38,6 @@ libavif = dependency('libavif', version: '>=0.11', required: get_option('avif'))
 libjxl = dependency('libjxl', version: '>=0.8', required: get_option('jxl'))
 
 git = find_program('git', required: false, native: true)
-scdoc = find_program('scdoc', required: get_option('man-pages'), native: true)
 
 version = '"@0@"'.format(meson.project_version())
 if git.found()
@@ -79,28 +78,44 @@ wayland_scanner_client = generator(
 protos_src = []
 
 client_protocols = [
+	# xdg-shell is not spoken here at all, but the layer-shell protocol below
+	# mentions xdg_popup in get_popup, so its generated code carries an
+	# extern reference to xdg_popup_interface. Leaving it out still links --
+	# and then fails at dlopen with `undefined symbol: xdg_popup_interface`,
+	# which is a long way from the cause.
 	wl_protocol_dir / 'stable/xdg-shell/xdg-shell.xml',
 	wl_protocol_dir / 'stable/viewporter/viewporter.xml',
-	wl_protocol_dir / 'staging/single-pixel-buffer/single-pixel-buffer-v1.xml',
 	wl_protocol_dir / 'staging/fractional-scale/fractional-scale-v1.xml',
 	wl_protocol_dir / 'staging/color-management/color-management-v1.xml',
 	'wlr-layer-shell-unstable-v1.xml',
 ]
+
 
 foreach filename : client_protocols
 	protos_src += wayland_scanner_code.process(filename)
 	protos_src += wayland_scanner_client.process(filename)
 endforeach
 
-executable(
+# A static library, not a program.
+#
+# asteroidzbg used to be its own process with its own connection and its own
+# event loop; the shell now draws the wallpaper itself, on the display Qt
+# already has (see include/backdrop.h). What is left here is everything that
+# made this a fork of swaybg in the first place -- the HDR decoders, the
+# colour-management tagging, the 10-bit buffers -- with the process removed.
+#
+# Static because there is exactly one consumer and it ships in the same
+# package: a shared library would be a versioned ABI between two halves of one
+# program.
+libasteroidzbg = static_library(
 	'asteroidzbg',
 	[
+		'backdrop.c',
 		'background-image.c',
 		'cairo.c',
 		'color-management.c',
 		'hdr-image.c',
 		'log.c',
-		'main.c',
 		'pool-buffer.c',
 		protos_src,
 	],
@@ -113,28 +128,12 @@ executable(
 		libjxl,
 		wayland_client,
 	],
-	install: true
+	pic: true,
+	install: false,
 )
 
-if scdoc.found()
-	mandir = get_option('mandir')
-	man_files = [
-		'asteroidzbg.1.scd',
-	]
-	foreach filename : man_files
-		topic = filename.split('.')[-3].split('/')[-1]
-		section = filename.split('.')[-2]
-		output = '@0@.@1@'.format(topic, section)
-
-		custom_target(
-			output,
-			input: filename,
-			output: output,
-			command: scdoc,
-			feed: true,
-			capture: true,
-			install: true,
-			install_dir: '@0@/man@1@'.format(mandir, section)
-		)
-	endforeach
-endif
+asteroidzbg_dep = declare_dependency(
+	link_with: libasteroidzbg,
+	include_directories: include_directories('include'),
+	dependencies: [cairo, wayland_client],
+)

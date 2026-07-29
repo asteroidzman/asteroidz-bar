@@ -1,6 +1,6 @@
 # Maintainer: ralf <ralf.wierzbicki@gmail.com>
 pkgname=asteroidz-bar
-pkgver=0.1.0.r6.g04c074a
+pkgver=0.1.0.r9.gee003fa
 pkgrel=1
 pkgdesc='The asteroidz shell: status bar and HDR10 wallpaper, out of the compositor'
 arch=('x86_64')
@@ -8,20 +8,14 @@ url='https://github.com/asteroidzman/asteroidz-bar'
 license=('MIT')
 depends=(
   'quickshell'        # the shell runtime (quickshell-git provides it)
+  'qt6-base'
   'qt6-declarative'
   'qt6-5compat'       # ColorOverlay: the icon tint is a mask, not a blend
-  # asteroidzbg's own, since it ships in this package:
+  # The wallpaper's, which the QML plugin links statically -- there is no
+  # separate wallpaper program any more, so these are this package's own.
   'cairo' 'wayland' 'gdk-pixbuf2' 'libjxl' 'libavif'
 )
 makedepends=('meson' 'ninja' 'wayland-protocols' 'git')
-# scdoc is deliberately not listed, and build() disables the man page rather
-# than requiring it.
-#
-# arch-meson passes --auto-features=enabled, which turns asteroidzbg's `auto`
-# man-pages feature into a hard requirement -- so without this the package will
-# not build on a machine that has no scdoc, to produce a man page that was
-# never installed here anyway. Install scdoc and pass
-# -Dasteroidzbg:man-pages=enabled if you want asteroidzbg(1).
 optdepends=(
   'asteroidz: the compositor this draws the bar for'
   'cava: the media visualiser'
@@ -58,8 +52,7 @@ pkgver() {
 }
 
 build() {
-  arch-meson "$pkgname" build \
-    -Dasteroidzbg:man-pages=disabled
+  arch-meson "$pkgname" build
   meson compile -C build
 }
 

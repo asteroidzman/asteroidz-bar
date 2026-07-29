@@ -122,10 +122,16 @@ PopupWindow {
                         // A field shows what has been typed, with a caret --
                         // the label alone gives no clue where the keystrokes
                         // are going.
+                        //
+                        // `|| ""` on the label, not a bare read: a row is a
+                        // plain object built by whichever module opened the
+                        // menu, and the ones that carry no label at all (every
+                        // separator) were binding `undefined` to a QString.
                         text: row.modelData.input
-                            ? row.modelData.text + ": " + (row.modelData.value || "")
+                            ? (row.modelData.text || "") + ": "
+                              + (row.modelData.value || "")
                               + (root.focusedRow === row.index ? "▌" : "")
-                            : row.modelData.text
+                            : (row.modelData.text || "")
                         color: row.modelData.enabled === false
                             ? Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.4)
                             : Cfg.fg
@@ -139,9 +145,15 @@ PopupWindow {
                 }
 
                 // Checked entries and submenus, drawn at the trailing edge.
+                //
+                // Compared against true rather than tested for truth: a row
+                // that mentions neither field yields `undefined || undefined`,
+                // which is undefined, not false -- and binding that to
+                // `visible` fails outright instead of hiding the marker.
                 Text {
-                    visible: !row.modelData.separator
-                        && (row.modelData.checked || row.modelData.submenu)
+                    visible: row.modelData.separator !== true
+                        && (row.modelData.checked === true
+                            || row.modelData.submenu === true)
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter

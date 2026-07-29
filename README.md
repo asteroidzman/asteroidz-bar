@@ -91,12 +91,34 @@ would pick up Steam and Discord and pass whether or not the code works.
 
 ```
 shell/          the QML: one bar per output, one file per module
+plugin/         the C++ QML module, imported as `Asteroidz.Bar`
 subprojects/
-  asteroidzbg/  the wallpaper (C)
+  asteroidzbg/  the wallpaper, as a static library
+plugins/        the status plugins (the compositor's protocol, unchanged)
 bin/            the launcher
 ```
 
-`asteroidzbg` is vendored from `~/asteroidzbg` and stays C. It tags its surface
-through `wp_color_manager_v1` with BT.2020 primaries and the PQ transfer
-function, and decodes 10-bit sources to match; QML has no way to do that, so
-rewriting it would mean quietly dropping HDR wallpapers on an HDR desktop.
+One process draws all of it. The bar and the wallpaper share a Wayland
+connection, a config and a lifetime: starting `asteroidz-bar` puts both up,
+stopping it takes both down, and there is no second binary to launch or
+supervise.
+
+`plugin/` is what QML cannot express:
+
+- **`Backdrop`** — the wallpaper. It drives `asteroidzbg`, vendored from
+  `~/asteroidzbg` and now built as a static library rather than a program.
+  That code stays C because of one thing: it tags its surface through
+  `wp_color_manager_v1` with BT.2020 primaries and the PQ transfer function
+  and decodes 10-bit AVIF and JPEG XL to match. Qt exposes no way to reach
+  either, so drawing the wallpaper with QML's `Image` would silently flatten
+  every HDR wallpaper to SDR read as plain gamma — the exact bug asteroidzbg
+  was forked from swaybg to fix. Decoding runs on a worker thread; only the
+  attach and commit touch the GUI thread.
+- **`Paths`** — does this file exist? The icon search is a list of roots tried
+  in order, so misses are the normal case; with no existence check the only
+  way to implement it was to let an `Image` fail, which logged a warning per
+  miss for artwork that was found a candidate later.
+
+The module is loaded from an import path the launcher sets, not installed into
+`/usr/lib/qt6/qml`: this package does not write into Qt's tree, and does not
+break when Qt is rebuilt.

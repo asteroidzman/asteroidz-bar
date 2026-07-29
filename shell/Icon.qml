@@ -8,13 +8,19 @@
 //
 // The first is a search path, tried in order, first hit wins -- the same list
 // the native bar walks, so a locally-customised asset still beats the packaged
-// one. There is no file-existence API in QML, so "first hit" is implemented by
-// letting Image fail and moving to the next candidate; a miss costs one
-// rejected load, not a warning and not a blank pill.
+// one.
+//
+// "First hit" is one stat per candidate, through Paths.resolve (the C++
+// module). It used to be implemented by pointing this Image at each candidate
+// in turn and moving on when it failed, which worked but logged a warning for
+// every miss -- and misses are the NORMAL case for a search path, so a cold
+// start printed a dozen "Cannot open" lines about artwork that was found one
+// candidate later and drawn correctly.
 
 import Quickshell
 import QtQuick
 import Qt5Compat.GraphicalEffects
+import Asteroidz.Bar
 import "."
 
 Image {
@@ -32,9 +38,9 @@ Image {
     property color tint: "transparent"
     readonly property bool tinted: tint.a > 0
 
-    readonly property var candidates: {
+    readonly property string resolved: {
         if (name === "")
-            return [];
+            return "";
         // Already a URL: quickshell hands back things like
         // "image://icon/dialog-information" for tray items, whose icon may be
         // a theme name, an inline pixmap, or a path -- it has already done the
@@ -42,29 +48,20 @@ Image {
         // sent it through the bar's icon-dir search, where it matched nothing
         // and the tray drew empty pills.
         if (name.includes("://"))
-            return [name];
+            return name;
         if (name.startsWith("/"))
-            return ["file://" + name];
+            return Paths.resolve([name]);
         if (name.includes("/")) {
             // relative asset: every root in the search path, in order
             const roots = Cfg.iconDir.split(":").filter(s => s.length > 0);
-            return roots.map(r => "file://" + r + "/" + name);
+            return Paths.resolve(roots.map(r => r + "/" + name));
         }
         // theme name; Quickshell hands back "" when the theme has no such icon
-        const p = Quickshell.iconPath(name, true);
-        return p ? [p] : [];
+        return Quickshell.iconPath(name, true);
     }
 
-    property int candidate: 0
-
-    source: candidate < candidates.length ? candidates[candidate] : ""
+    source: resolved
     visible: source !== "" && status === Image.Ready
-
-    onCandidatesChanged: candidate = 0
-    onStatusChanged: {
-        if (status === Image.Error && candidate + 1 < candidates.length)
-            candidate++;
-    }
 
     // The box the artwork is fitted into. Width is the ADVANCE, which is not
     // always the box: a portrait icon fitted into a square box only occupies

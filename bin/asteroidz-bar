@@ -41,12 +41,16 @@ export QT_QPA_PLATFORM=wayland
 
 SHELL_QML="${ASTEROIDZ_BAR_SHELL:-@SHELLDIR@/shell.qml}"
 
-# The wallpaper binary that belongs to THIS package.
+# Where `import Asteroidz.Bar` is found: the C++ module that draws the
+# wallpaper and answers "does this file exist".
 #
-# Exported as a path rather than left to PATH: a machine with a hand-installed
-# /usr/local/bin/asteroidzbg would otherwise get that one, and the wallpaper
-# would come from a different build than the shell driving it.
-export ASTEROIDZ_BAR_BG="${ASTEROIDZ_BAR_BG:-@BINDIR@/asteroidzbg}"
+# Its own directory rather than /usr/lib/qt6/qml, so this package does not
+# write into Qt's tree and does not break when Qt is rebuilt. Both spellings
+# are set because Qt reads both, and the existing value is kept: a developer
+# running against a build tree prepends to it.
+QMLDIR="${ASTEROIDZ_BAR_QML:-@SHELLDIR@/qml}"
+export QML_IMPORT_PATH="${QML_IMPORT_PATH:+$QML_IMPORT_PATH:}$QMLDIR"
+export QML2_IMPORT_PATH="${QML2_IMPORT_PATH:+$QML2_IMPORT_PATH:}$QMLDIR"
 
 # Absolute path, never a bare name: a launcher that resolves its own payload
 # through PATH is one PATH edit away from executing itself.

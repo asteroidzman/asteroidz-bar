@@ -1,0 +1,3 @@
+module Asteroidz.Bar
+plugin asteroidzbarplugin
+classname AsteroidzBarPlugin

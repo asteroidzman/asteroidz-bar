@@ -16,6 +16,13 @@
 #   contrib/parity.sh [-k]      -k keeps the PNGs and prints where they are
 #
 # Exit status is 0 when every measured section is within tolerance.
+#
+# HISTORICAL. This needs a compositor that still HAS a native bar to compare
+# against, and asteroidz removed its own in `bar: remove the native bar;
+# asteroidz-bar draws it now`. Run it against a checkout from before that
+# commit; it is kept because it is the evidence for "looks identical", and
+# because a future change to the drawing can still be checked against that
+# reference.
 set -u
 
 REPO="${ASTEROIDZ_REPO:-$HOME/asteroidz}"
