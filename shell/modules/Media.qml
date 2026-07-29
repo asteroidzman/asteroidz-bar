@@ -94,13 +94,23 @@ Row {
             const a = root.player.trackArtist || "";
             return a ? t + " • " + a : t;
         }
+        // Pinned AND capped at the same width. Pinned so the bar does not
+        // resize itself on every track change; capped because a pinned pill
+        // does not elide -- the label is only ever measured against maxWidth
+        // (see Pill.qml, which explains why fixedWidth cannot be used for it)
+        // -- so a long title simply overflowed the pill and was drawn straight
+        // across the clock and the weather beside it.
         fixedWidth: Cfg.mediaWidth
+        maxWidth: Cfg.mediaWidth
         onClicked: if (root.have) root.player.togglePlaying()
 
         // While something is playing the leading glyph is a live spectrum;
         // paused or silent, it falls back to the transport glyph.
         icons: viz.showing ? [] : [root.playing ? "waybar-media-cava/pause.svg"
                                                 : "waybar-media-cava/play.svg"]
+        // The spectrum is positioned by hand rather than being an icon, so the
+        // label has to be told to leave room for it.
+        leadingSpace: viz.showing ? track.iconSize : 0
 
         Spectrum {
             id: viz

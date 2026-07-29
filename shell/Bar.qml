@@ -22,13 +22,13 @@ PanelWindow {
     WlrLayershell.namespace: "asteroidz-bar"
     WlrLayershell.layer: WlrLayer.Top
     // No keyboard until something asks for it. A bar that takes focus while
-    // idle steals keys from whatever you were typing into, and the popovers
-    // that DO need keys (phase 4) can raise this per-window.
-    // No keyboard until something asks for it. A bar that takes focus while
     // idle steals keys from whatever you were typing into -- so this is raised
-    // only while a popover with a text field is open, and dropped the moment
-    // it closes.
-    WlrLayershell.keyboardFocus: menu.visible && menu.wantsKeyboard
+    // while a popover is OPEN and dropped the moment it closes.
+    //
+    // Any popover, not just one with a text field: a menu has to answer
+    // Escape, and it cannot be sent a key it was never given focus to
+    // receive.
+    WlrLayershell.keyboardFocus: menu.visible
         ? WlrKeyboardFocus.OnDemand
         : WlrKeyboardFocus.None
 

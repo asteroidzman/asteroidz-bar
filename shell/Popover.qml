@@ -76,9 +76,15 @@ PopupWindow {
         ? Qt.rect(0, -shadowRoom, anchor.item.width, anchor.item.height)
         : Qt.rect(0, 0, 1, 1)
 
-    // The pointer dismisses it, so it must be able to take clicks that land
-    // outside any row.
-    grabFocus: wantsKeyboard
+    // Grabbed whenever it is up, not only when something wants typing into.
+    //
+    // The grab is what dismisses a menu: without it a click outside the popup
+    // goes to whatever is under it and the menu just stays, and Escape never
+    // arrives because the popup has no keyboard focus to receive it. Tying it
+    // to `wantsKeyboard` meant only the two forms with text fields could be
+    // dismissed that way -- every ordinary menu had to be closed by clicking
+    // the pill that opened it a second time.
+    grabFocus: visible
 
     // The panel: the part you can see, inset from the window by the shadow.
     Item {
@@ -273,7 +279,9 @@ PopupWindow {
 
     Item {
         anchors.fill: parent
-        focus: root.wantsKeyboard
+        // Focused whenever the popover is up: Escape has to work on a menu,
+        // not just on a form.
+        focus: root.visible
 
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {

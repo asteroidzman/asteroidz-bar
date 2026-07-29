@@ -161,7 +161,7 @@ Row {
 
     Component {
         id: weatherComponent
-        Weather {}
+        Weather { bar: root.bar }
     }
 
     Component {

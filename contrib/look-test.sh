@@ -66,7 +66,12 @@ EOF
 	hl_dispatch "reload_config" 1
 	sleep 1
 
-	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+	# On a PRIVATE bus, so "idle media" means what it says. The shell reads
+	# MPRIS off whatever session bus it is given, and this test used to
+	# inherit the user's -- where it passed only for as long as nobody
+	# happened to be playing anything.
+	dbus-run-session -- \
+		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 		HOME="$HOME" PATH="$PATH" \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \

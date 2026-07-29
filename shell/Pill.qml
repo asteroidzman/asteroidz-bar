@@ -32,6 +32,10 @@ Item {
     property int fixedWidth: 0
     // A cap rather than a pin: a short title should occupy a short pill.
     property int maxWidth: 0
+    // Reserved at the head of the pill for artwork the module draws itself
+    // (the media spectrum). Counted in the width like anything else in the
+    // row, so the label starts after it instead of underneath it.
+    property int leadingSpace: 0
     property bool interactive: true
     // A chip is a filled tile whose own background is the edge you see, so its
     // padding is not slack and must not be trimmed away by the panel.
@@ -143,6 +147,19 @@ Item {
         // children, so an icon-only pill gets no trailing gap.
         spacing: 6
 
+        // Room at the head of the pill for something a module draws itself.
+        //
+        // The media pill's spectrum is positioned absolutely, so it is not in
+        // this Row and the label does not know it is there: while a track was
+        // playing the visualiser was drawn straight over the first few
+        // characters of the title.
+        Item {
+            visible: root.leadingSpace > 0
+            width: root.leadingSpace
+            height: 1
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
         Row {
             id: iconsBefore
             visible: root.icons.length > 0 && !root.iconsAfterText
@@ -207,7 +224,8 @@ Item {
                       + (root.icons.length - 1) * 6 + 6
                     : 0;
                 const room = root.maxWidth - 2 * root.paddingX
-                    - 2 * Cfg.borderWidth - 1 - art;
+                    - 2 * Cfg.borderWidth - 1 - art
+                    - (root.leadingSpace > 0 ? root.leadingSpace + 6 : 0);
                 return Math.min(implicitWidth, Math.max(0, room));
             }
         }
