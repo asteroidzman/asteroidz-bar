@@ -104,10 +104,10 @@ Row {
         maxWidth: Cfg.mediaWidth
         onClicked: if (root.have) root.player.togglePlaying()
 
-        // While something is playing the leading glyph is a live spectrum;
-        // paused or silent, it falls back to the transport glyph.
-        icons: viz.showing ? [] : [root.playing ? "waybar-media-cava/pause.svg"
-                                                : "waybar-media-cava/play.svg"]
+        // No glyph of its own. It used to fall back to a play/pause icon
+        // whenever the spectrum was not showing, which put a SECOND play
+        // button on the bar the moment anything was paused -- a foot from the
+        // transport's own, and not a control at all.
         // The spectrum is not an icon, so the pill reserves room for it and
         // hands back the slot to put it in -- positioning it by hand drew it
         // over the title, and then, once the label made room, left it stranded

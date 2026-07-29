@@ -28,12 +28,16 @@ Row {
     // The asteroidz ship, leading the group.
     Pill {
         visible: Cfg.showLogo
-        icons: ["waybar-asteroidz-workspaces/logo.svg"]
-        // A chip like the tags it leads, so it carries the tag padding rather
-        // than being a bare square: an icon-only CHIP is still a filled tile,
-        // and 36px of artwork with no padding is 32px narrower than the pill
-        // beside it.
-        paddingX: Cfg.tagPadding
+        // Recoloured at runtime so the exhaust burns in the theme's accent --
+        // see Logo.qml, and the note in the SVG itself.
+        icons: [Logo.source]
+        // A chip like the tags it leads, but not one that needs the tag
+        // PADDING: a tag is a number that wants room around it, and this is
+        // artwork. At tagPadding it sat in 32px of empty tile.
+        paddingX: Cfg.pillPadding
+        // ...and the artwork itself was small in the middle of all that. This
+        // fills the chip the way a logo should.
+        iconScale: 1.25
         chip: true
         interactive: false
     }
