@@ -94,7 +94,34 @@ Singleton {
         }
         if (!replaced)
             lines.push(key + "=" + value);
-        conf.setText(lines.join("\n") + "\n");
+
+        const text = lines.join("\n") + "\n";
+        conf.setText(text);
+        // ...and act on it here, rather than waiting to be told about it. The
+        // file watcher does not report our OWN write -- it would loop if it
+        // did -- so a wallpaper picked in the settings panel was written to
+        // disk correctly and then never put on screen.
+        applyConfig(parseText(text));
+    }
+
+    function parseText(t) {
+        const out = {};
+        for (const line of t.split("\n")) {
+            const i = line.indexOf("=");
+            if (i > 0)
+                out[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+        }
+        return out;
+    }
+
+    // Everything the file can say, applied. Shared by the watcher and by
+    // setKey, so a change made here and a change made by the cycle daemon
+    // land in exactly the same way.
+    function applyConfig(cfg) {
+        if (cfg.folder) root.folder = cfg.folder;
+        if (cfg.order) root.order = cfg.order;
+        if (cfg.interval) root.interval = parseInt(cfg.interval) || 3600;
+        root.apply(cfg);
     }
 
     FileView {
@@ -102,23 +129,7 @@ Singleton {
         path: root.confPath
         watchChanges: true
         onFileChanged: reload()
-        onLoaded: {
-            const cfg = parse();
-            if (cfg.folder) root.folder = cfg.folder;
-            if (cfg.order) root.order = cfg.order;
-            if (cfg.interval) root.interval = parseInt(cfg.interval) || 3600;
-            root.apply(cfg);
-        }
-
-        function parse() {
-            const out = {};
-            for (const line of text().split("\n")) {
-                const i = line.indexOf("=");
-                if (i > 0)
-                    out[line.slice(0, i).trim()] = line.slice(i + 1).trim();
-            }
-            return out;
-        }
+        onLoaded: root.applyConfig(root.parseText(text()))
     }
 
     function apply(cfg) {

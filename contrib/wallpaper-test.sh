@@ -152,6 +152,39 @@ else
 	echo "  skip avifenc not installed -- the HDR path is not covered"
 fi
 
+# ── 4: changing it changes it ───────────────────────────────────────────────
+#
+# The shell watches wallpaper.conf, and everything that sets a wallpaper on
+# this desktop -- the cycle daemon, the hotkey, the settings panel -- does it
+# by writing that file. So "does a new value reach the screen" is the whole
+# contract, and it is the one that broke: the settings panel wrote the file
+# correctly and the picture never changed.
+
+SDR2="$WORK/sdr2.png"
+magick -size 640x480 xc:'#cc7722' "$SDR2" 2>/dev/null
+
+QS="$(run_shell "$SDR" "$WORK/change.log")"
+sleep 8
+grim -o "$HL_MON" "$WORK/before.png" 2>/dev/null
+
+# Rewritten under the running shell, exactly as the cycle daemon does it.
+printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$(dirname "$SDR2")" "$SDR2" \
+	> "$WORK/wallpaper.conf"
+sleep 4
+grim -o "$HL_MON" "$WORK/after.png" 2>/dev/null
+
+kill "$QS" 2>/dev/null
+wait "$QS" 2>/dev/null
+
+got_before="$(magick "$WORK/before.png" -crop "${HL_WIDTH}x400+0+400" +repage \
+	-resize 1x1 -format '%[hex:p{0,0}]' info: 2>/dev/null)"
+got_after="$(magick "$WORK/after.png" -crop "${HL_WIDTH}x400+0+400" +repage \
+	-resize 1x1 -format '%[hex:p{0,0}]' info: 2>/dev/null)"
+case "$got_before/$got_after" in
+2244CC*/CC7722*) ok "a new wallpaper in the config reaches the screen" ;;
+*) bad "a new wallpaper in the config reaches the screen (#$got_before -> #$got_after, wanted 2244CC -> CC7722)" ;;
+esac
+
 # ── and nothing was spawned to do it ─────────────────────────────────────────
 
 NOW="$(pgrep -x asteroidzbg 2>/dev/null | sort)"
