@@ -1,6 +1,6 @@
 # Maintainer: ralf <ralf.wierzbicki@gmail.com>
 pkgname=asteroidz-bar
-pkgver=0.1.0.r29.gd0034ff
+pkgver=0.1.1
 pkgrel=1
 pkgdesc='The asteroidz shell: status bar and HDR10 wallpaper, out of the compositor'
 arch=('x86_64')
@@ -23,33 +23,16 @@ optdepends=(
   'pipewire: the volume module'
   'grim: contrib/parity.sh and contrib/tray-test.sh'
 )
-# Built from the local checkout: this has no remote yet. Swap for
-#   source=("git+$url.git#tag=$pkgver")
-# the day it does -- nothing else here changes.
+# The released tag, not the local checkout. This is the same shape asteroidz's
+# PKGBUILD has, and it is what makes the package publishable to the AUR at all:
+# a source anyone can fetch, pinned to a revision the release notes describe.
 #
-# $startdir is the directory holding this PKGBUILD, i.e. the repo itself, so
-# what gets packaged is what is COMMITTED there. Building the working tree
-# directly would quietly package uncommitted edits, and "which version is
-# installed" then stops having an answer.
-source=("git+file://$startdir")
+# The cost is that `makepkg` here no longer builds your working tree -- it
+# builds the tag. To try local changes, commit them and tag, or build the tree
+# directly with meson; packaging uncommitted edits would leave "which version
+# is installed" without an answer either way.
+source=("git+$url.git#tag=$pkgver")
 sha256sums=('SKIP')
-
-pkgver() {
-  cd "$srcdir/$pkgname"
-  # 0.1.0.r12.gab34cd1 -- the tag, commits since, and the commit itself, so an
-  # installed build can always be traced back to a revision.
-  #
-  # An `if`, not `git describe ... | sed ... || fallback`: in a pipeline the
-  # exit status is sed's, so the fallback never runs and an untagged repo
-  # produces an EMPTY pkgver, which makepkg rejects outright.
-  local desc
-  if desc="$(git describe --long --tags 2>/dev/null)" && [ -n "$desc" ]; then
-    printf '%s' "$desc" | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
-  else
-    printf '0.1.0.r%s.g%s' \
-      "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
-  fi
-}
 
 build() {
   arch-meson "$pkgname" build
