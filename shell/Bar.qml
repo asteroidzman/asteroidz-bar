@@ -28,8 +28,15 @@ PanelWindow {
     // Any popover, not just one with a text field: a menu has to answer
     // Escape, and it cannot be sent a key it was never given focus to
     // receive.
+    // Exclusive, not OnDemand, while a menu is up.
+    //
+    // OnDemand leaves it to the compositor to decide when this surface has
+    // the keyboard, and it never decided in our favour: Escape went to
+    // whatever was focused before the menu opened and the menu ignored it. A
+    // menu is modal for as long as it is up, which is exactly what Exclusive
+    // says.
     WlrLayershell.keyboardFocus: menu.visible
-        ? WlrKeyboardFocus.OnDemand
+        ? WlrKeyboardFocus.Exclusive
         : WlrKeyboardFocus.None
 
     anchors {
@@ -122,16 +129,38 @@ PanelWindow {
         ]
     }
 
-    // Below the panels, so a click on a pill reaches the pill: a MouseArea
-    // consumes what it accepts, and this one only ever sees what the pills
-    // did not.
+    // The catcher, which closes the menu on a click that is not on a panel.
+    //
+    // It has to TEST that rather than rely on being underneath, because being
+    // underneath is not enough: the pills use TapHandlers, and a pointer
+    // handler does not consume the event for items below it. Clicking the
+    // open pill therefore ran both -- this closed the menu, and the pill's own
+    // toggle then saw a closed menu and opened it straight back up, so the
+    // one gesture that was supposed to dismiss it was the only one that could
+    // not.
     MouseArea {
         anchors.fill: parent
         z: -10
         enabled: root.menuOpen
         visible: root.menuOpen
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onPressed: menu.visible = false
+        onPressed: mouse => {
+            if (!root.onAPanel(mouse.x, mouse.y))
+                menu.visible = false;
+        }
+    }
+
+    // Is this point on one of the three panels? In the window's own
+    // coordinates, which is what a click on this surface arrives in.
+    function onAPanel(x, y) {
+        for (const p of [leftPanel, centerPanel, rightPanel]) {
+            if (!p.visible)
+                continue;
+            const r = p.mapToItem(null, 0, 0, p.width, p.height);
+            if (x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
+                return true;
+        }
+        return false;
     }
 
     // Escape, and everything a form in a popover needs typed into it.
@@ -140,10 +169,16 @@ PanelWindow {
     // keyboard focus -- the popup never takes any -- so a Keys handler over
     // there would never fire.
     Item {
+        id: keys
         anchors.fill: parent
-        focus: root.menuOpen
+        focus: true
         Keys.onPressed: event => menu.handleKey(event)
     }
+
+    // Taking the keyboard is not the same as an item holding it: without this
+    // the window had focus and nothing in it did, so the key handler above
+    // never ran.
+    onMenuOpenChanged: if (menuOpen) keys.forceActiveFocus()
 
     // Exactly one popover, session-wide, anchored to whatever raised it.
     // Two would need z-order arbitration and a grab each for no benefit: a bar
