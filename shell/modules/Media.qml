@@ -38,7 +38,11 @@ Row {
     readonly property bool playing:
         have && player.playbackState === MprisPlaybackState.Playing
 
-    visible: have
+    // `shown`, not `visible` -- see ModuleLoader. This is the module that made
+    // it necessary: idle, it still measures its transport controls, its pinned
+    // title and its visualiser, so its slot reserved 390px of nothing and the
+    // centre panel drew three times wider than the clock inside it.
+    property bool shown: have
 
     readonly property int leadTrim: 0
     readonly property int trailTrim: Cfg.pillPadding

@@ -42,9 +42,14 @@ Pill {
     // floating in a hole a whole digit wide. This way the width is stable
     // through a ramp and steps only at 9->10 and 99->100, which is a moment
     // the pill is visibly changing anyway.
+    //
+    // Through widthForText, so the speaker glyph keeps its advance. Pinning
+    // to the level alone left this pill ~28px narrow, and content overflows a
+    // pill rather than being clipped -- so what it looked like was the volume
+    // pill jammed against its neighbours with no space either side.
     fixedWidth: !have ? 0
-              : Math.ceil(pct >= 100 ? m100.width : pct >= 10 ? m88.width : m8.width)
-                + 2 * paddingX + 2 * Cfg.borderWidth + 1
+              : widthForText(pct >= 100 ? m100.width
+                           : pct >= 10 ? m88.width : m8.width)
 
     TextMetrics { id: m100; font: root.textFont; text: "100%" }
     TextMetrics { id: m88; font: root.textFont; text: "88%" }

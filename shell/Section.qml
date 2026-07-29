@@ -46,6 +46,23 @@ Panel {
         return 0;
     }
 
+    // The module before this one THAT IS ON SCREEN, which is what decides the
+    // gap in front of it -- not simply the one before it in the config.
+    //
+    // Reading `it.visible` here is what makes this re-evaluate: a binding
+    // captures every property read during its evaluation, function calls
+    // included, so a module appearing or disappearing re-runs the gaps around
+    // it. Without this a hidden media module still handed the clock a
+    // media-sized gap, and the centre panel opened with 12px of nothing.
+    function previousVisible(i) {
+        for (let j = i - 1; j >= 0; j--) {
+            const it = repeater.itemAt(j);
+            if (it && it.visible)
+                return root.names[j];
+        }
+        return "";
+    }
+
     Repeater {
         id: repeater
         model: root.names
@@ -55,7 +72,7 @@ Panel {
             required property int index
 
             module: modelData
-            previous: index === 0 ? "" : root.names[index - 1]
+            previous: root.previousVisible(index)
             screenName: root.screenName
             bar: root.bar
         }

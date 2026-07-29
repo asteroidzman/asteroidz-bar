@@ -13,7 +13,7 @@
 // the transparent gaps between them, which is not the look.
 
 import QtQuick
-import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 import "."
 
 Item {
@@ -60,17 +60,67 @@ Item {
         spacing: root.spacing
     }
 
-    // A shadow the same size and place as the panel would be entirely hidden
-    // behind an opaque one -- the native bar hit exactly this and grew the
-    // shadow by its own blur radius so the soft edge clears the slab. Same
-    // numbers here.
-    MultiEffect {
-        anchors.fill: slab
-        source: slab
-        shadowEnabled: Cfg.panelShadow && Cfg.panelEnable
-        shadowColor: Cfg.panelShadowColor
-        shadowBlur: Cfg.panelShadowBlur / 32.0
-        shadowVerticalOffset: 0
+    // ── the shadow ──────────────────────────────────────────────────────────
+    //
+    // A glow with the panel's own shape punched out of it. That is more
+    // machinery than a drop shadow ought to need, and both halves are
+    // load-bearing.
+    //
+    // The punch-out is because the slab is TRANSLUCENT. Anything drawn behind
+    // it shows through -- and what is meant to show through is the
+    // compositor's blur of the wallpaper. A shadow covering the panel's own
+    // area darkens that 15% and takes the frost with it: measured, the panel
+    // interior went from rgb(32,36,42) to rgb(16,17,19). Masked to the region
+    // OUTSIDE the slab, the interior is pixel-identical to having no shadow.
+    //
+    // RectangularGlow rather than MultiEffect's shadowEnabled because
+    // MultiEffect draws its SOURCE as well as the shadow, which would put a
+    // second copy of the slab behind the real one -- the same darkening by
+    // another route. (And MultiEffect given a plain Rectangle as `source`
+    // draws nothing at all: a Rectangle is not a texture provider. That is
+    // why this panel had no shadow whatsoever.)
+    Item {
+        id: glow
+        anchors.centerIn: slab
+        // Room for the falloff. The layer is only as big as this item, so a
+        // glow wider than the margin gets cut off square.
+        width: slab.width + 4 * Cfg.panelShadowBlur
+        height: slab.height + 4 * Cfg.panelShadowBlur
+        visible: false
+        layer.enabled: true
+
+        RectangularGlow {
+            anchors.centerIn: parent
+            width: slab.width
+            height: slab.height
+            glowRadius: Cfg.panelShadowBlur
+            spread: 0.1
+            color: Cfg.panelShadowColor
+            cornerRadius: Cfg.panelRadius + Cfg.panelShadowBlur
+        }
+    }
+
+    Item {
+        id: hole
+        anchors.fill: glow
+        visible: false
+        layer.enabled: true
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: slab.width
+            height: slab.height
+            radius: Cfg.panelRadius
+            color: "white"
+        }
+    }
+
+    OpacityMask {
+        anchors.fill: glow
+        source: glow
+        maskSource: hole
+        invert: true
+        visible: Cfg.panelShadow && Cfg.panelEnable
         z: -1
     }
 }

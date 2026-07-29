@@ -41,7 +41,23 @@ Row {
         return null;
     }
 
+    // A module that has nothing to show takes NO space, including the gap
+    // before it.
+    //
+    // The Loader being Ready is not the same as the module being on screen:
+    // Media hides itself when no player exists, but a Loader still reports the
+    // width of the item it holds, so an idle media module reserved 390px --
+    // its transport controls, its pinned title and its visualiser -- inside a
+    // centre panel that then drew as a slab three times wider than the clock
+    // sitting at the right-hand end of it.
+    //
+    // The module answers with `shown`, NOT with `visible`. Item.visible is
+    // effective visibility -- it is false whenever an ancestor is hidden -- so
+    // hiding this slot would make the module report itself hidden, which would
+    // keep the slot hidden: every module on the bar disappeared at once, and
+    // stayed gone. A module with no opinion is shown.
     visible: loader.status === Loader.Ready
+             && (loader.item === null || loader.item.shown !== false)
     spacing: 0
 
     // Forwarded from the loaded module so the panel can trim its ends. A

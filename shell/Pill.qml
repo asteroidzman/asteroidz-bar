@@ -40,6 +40,15 @@ Item {
     signal clicked(int button)
     signal wheel(int delta)
 
+    // "Has this got anything to show?" -- asked by ModuleLoader, which owns
+    // the slot this pill sits in and hides it when the answer is no.
+    //
+    // A separate property from `visible` because Item.visible is EFFECTIVE
+    // visibility: it reads false whenever an ancestor is hidden, so a module
+    // that answered with it would latch itself off the moment its slot was
+    // hidden, and never come back.
+    property bool shown: true
+
     // What the panel should trim from this pill when it is the first or last
     // thing in a section, so `panel.padding` is the distance to what you can
     // SEE rather than to a pill's box.
@@ -87,6 +96,25 @@ Item {
     // that was pinned to its own width.
     readonly property int naturalWidth:
         contentWidth + 2 * paddingX + 2 * Cfg.borderWidth + 1
+
+    // What this pill would be if its LABEL were `w` wide instead of what it
+    // currently is. This is how a pill pins itself -- a clock to its widest
+    // month, a volume level to its digit count, a temperature to its widest
+    // reading -- and it exists because every module that did the arithmetic
+    // itself got it wrong the same way.
+    //
+    // Pinning is about the label. Everything else the pill contains still
+    // costs what it costs: the icon still takes its advance, the padding is
+    // still on both sides, the border still sits outside it. Three modules
+    // wrote `text_width + 2*padding` and lost the icon entirely -- about 28px
+    // each. That truncates nothing, because the content simply overflows the
+    // pill's box, so it reads as the NEXT module having no space before it:
+    // reported as a spacing bug in the volume pill, actually a width bug in
+    // three of them.
+    readonly property real labelWidth: label.visible ? label.implicitWidth : 0
+    function widthForText(w) {
+        return Math.ceil(naturalWidth - labelWidth + w);
+    }
 
     implicitWidth: {
         if (fixedWidth > 0)

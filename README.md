@@ -73,9 +73,20 @@ better schema would have bought nothing and broken all of them.
 ## Testing
 
 ```sh
-contrib/parity.sh      # native bar vs this one, pixel geometry
-contrib/tray-test.sh   # the tray, on a private D-Bus session
+contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the shadow
+contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included
+contrib/tray-test.sh       # the tray, on a private D-Bus session
+contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
+
+`look-test.sh` exists because of three bugs that were reported as one
+complaint about spacing and none of which are visible in the QML — they only
+exist once it is drawn. A module that hides itself still had its slot measured
+(an idle media module reserved 390px), a pill pinned to its label's width lost
+its icon's advance and overflowed into its neighbour, and the panel's shadow
+was drawn by a `MultiEffect` whose source was a plain `Rectangle` — not a
+texture provider, so it drew nothing at all. So the test draws the bar on a
+light wallpaper and measures pixels.
 
 `parity.sh` gates on **geometry** — panel extents and every pill border
 position — not on pixels. Pango and Qt never agree to the last subpixel, so a

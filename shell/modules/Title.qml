@@ -22,7 +22,11 @@ Pill {
         return Compositor.activeClient(screenName);
     }
 
-    visible: client && client.title
+    // `shown`, not `visible`: the loader that holds this module hides the
+    // module's slot when it has nothing to show, and Item.visible reports
+    // EFFECTIVE visibility -- so a module reading its own `visible` back would
+    // latch itself off the moment its slot was hidden. See ModuleLoader.
+    shown: client && client.title
     text: (client && client.title) ? client.title : ""
     icons: (client && client.appid) ? [client.appid] : []
 

@@ -86,7 +86,8 @@ Item {
         }
     }
 
-    visible: showing
+    // `shown`, not `visible` -- see ModuleLoader.
+    property bool shown: showing
 
     Row {
         anchors.fill: parent

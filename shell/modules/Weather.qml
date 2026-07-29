@@ -46,7 +46,11 @@ Pill {
 
     // Pinned to the widest reading the pill can ever show, so a temperature
     // crossing zero or going double-digit does not shove the section.
-    fixedWidth: Math.ceil(widest.width) + 2 * paddingX + 2 * Cfg.borderWidth + 1
+    //
+    // widthForText, which keeps the icon's advance: pinning to the label
+    // alone left this pill ~28px narrow, so the temperature overflowed its
+    // box and sat 3px from the idle glyph beside it.
+    fixedWidth: widthForText(widest.width)
     TextMetrics { id: widest; font: root.textFont; text: "-99°" }
 
     function fetch(url, ok) {

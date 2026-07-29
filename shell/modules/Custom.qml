@@ -35,7 +35,10 @@ Pill {
     // properties so a partial update cannot leave half the old state behind.
     property var state: ({})
 
-    visible: state.hidden !== true && (state.text || state.icon || icons.length)
+    // `shown`, not `visible` -- see ModuleLoader: the slot is what hides, and
+    // Item.visible is effective visibility, which would latch this off.
+    shown: state.hidden !== true
+           && (!!state.text || !!state.icon || icons.length > 0)
 
     text: state.text || ""
     icons: {
