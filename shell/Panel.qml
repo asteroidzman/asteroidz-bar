@@ -97,15 +97,25 @@ Item {
 
         cornerRadius: Cfg.panelRadius + delta
         glowRadius: reach
-        // `spread` is how much of the reach stays at full alpha before the
-        // fade begins. Not `delta / reach` -- that would be the grown box's
-        // full width, and a gaussian does not leave its box solid: it puts
-        // the box's own edge at half alpha and spreads the rest both ways.
-        // Half of it is the right approximation, and the difference is
-        // visible: at delta/reach the shadow reads as a hard dark frame
-        // around the panel rather than a shadow under it.
-        spread: delta / (2 * reach)
-        color: Cfg.panelShadowColor
+
+        // Two corrections for the same fact: RectangularGlow is not a
+        // gaussian, and using the configured numbers raw makes it far heavier
+        // than the shadow those numbers described.
+        //
+        // `spread` holds a band at FULL alpha before the fade starts, which a
+        // blurred box has nowhere outside itself -- any spread at all reads
+        // as a hard dark frame around the panel.
+        spread: 0
+
+        // And the alpha is halved. A gaussian-blurred box does not reach its
+        // peak alpha anywhere you can see: the box's own edge sits at HALF,
+        // and the rest of the falloff is spread inside and out. Passing 0.7
+        // straight through therefore renders twice the shadow the compositor
+        // drew from the same config -- which is exactly how this looked, and
+        // why the fix belongs here rather than in a lighter shadow_color that
+        // would then mean something different to every other consumer.
+        color: Qt.rgba(Cfg.panelShadowColor.r, Cfg.panelShadowColor.g,
+                       Cfg.panelShadowColor.b, Cfg.panelShadowColor.a * 0.5)
         visible: Cfg.panelShadow && Cfg.panelEnable
         z: -1
     }
