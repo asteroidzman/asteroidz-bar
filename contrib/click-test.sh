@@ -86,6 +86,15 @@ print(n)
 PY
 }
 
+ACCENT="$(hl_get "get bar-config" | python3 -c '
+import json, sys
+c = (json.load(sys.stdin).get("theme") or {}).get("focus_bg")
+if isinstance(c, list) and len(c) >= 3:
+    print("#%02x%02x%02x" % tuple(max(0, min(255, round(v * 255))) for v in c[:3]))
+elif isinstance(c, str):
+    print(c)
+' 2>/dev/null)"
+
 # The display pill: the only module, so it is at the right edge of the right
 # panel, one pill-height down.
 PILL_X=$((HL_WIDTH - 8 - 12 - 18))
@@ -355,6 +364,129 @@ if [ "${#LINES[@]}" -ge 3 ]; then
 else
 	bad "the display panel shows its form rows (found ${#LINES[@]} labels)"
 fi
+
+
+# ── the display panel stages, and Apply commits ─────────────────────────────
+#
+# The panel used to act on every pick. Choosing 2560x1440 from a list of a
+# dozen modes therefore mode-set to everything scrolled past on the way, and a
+# mode set is a black screen for a moment. Edits now collect and go together.
+#
+# Both halves are asserted, because either alone passes on a broken build: a
+# panel that applies nothing ever would pass "picking does not apply", and the
+# old immediate-apply panel would pass "the scale changed after Apply".
+
+hl_dispatch "set_output_scale,$HL_MON,1" 1
+BEFORE_SCALE="$(hl_get "get all-monitors" | python3 -c '
+import json, sys
+n = sys.argv[1]
+for m in json.load(sys.stdin)["monitors"]:
+    if m["name"] == n: print(m.get("scale")); break
+' "$HL_MON")"
+
+# The dropdown test above leaves the panel OPEN, so open it blind and this
+# click CLOSES it -- and every measurement below then reads bare wallpaper.
+hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200))
+sleep 2
+hl_click "$PILL_X" "$PILL_Y"
+sleep 3
+shot stage_open
+read -r AL AT AR AB <<<"$(panel_box stage_open)"
+mapfile -t AROWS < <(form_rows stage_open "$AL" "$AR")
+
+if [ "${#AROWS[@]}" -ge 3 ]; then
+	read -r AY0 AY1 ACX <<<"${AROWS[2]}"          # Scale
+	SY=$(((AY0 + AY1) / 2))
+	hl_move "$ACX" "$SY"; sleep 1
+	hl_click "$ACX" "$SY"                          # open the list
+	sleep 3
+	shot stage_list
+	# The FIRST row of the open list, which for Scale is 0.75 -- deliberately
+	# not the row for the current value. Picker only emits `picked` when the
+	# value actually changes, so landing on the current one stages nothing and
+	# this test would pass while proving nothing. Rows are Cfg.fontPixelSize *
+	# 1.5 tall and the list starts just under the header.
+	PICKROW=$((SY + 38))
+	hl_click "$ACX" "$PICKROW"
+	sleep 3
+
+	AFTER_PICK="$(hl_get "get all-monitors" | python3 -c '
+import json, sys
+n = sys.argv[1]
+for m in json.load(sys.stdin)["monitors"]:
+    if m["name"] == n: print(m.get("scale")); break
+' "$HL_MON")"
+
+	if [ "$AFTER_PICK" = "$BEFORE_SCALE" ]; then
+		ok "picking a value stages it instead of applying ($BEFORE_SCALE unchanged)"
+	else
+		bad "picking a value stages it instead of applying ($BEFORE_SCALE -> $AFTER_PICK)"
+	fi
+
+	# The Apply button: accent-coloured while there are staged changes, and the
+	# LOWEST accent block in the panel -- the tab pill and the picker's selected
+	# row share that colour.
+	shot staged
+	read -r SL ST SR SB <<<"$(panel_box staged)"
+	read -r APX APY <<<"$(python3 - "$WORK/staged.png" "${ACCENT:-#000000}" "$SL" "$SR" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load(); w, h = im.size
+acc = sys.argv[2].lstrip("#")
+x0, x1 = int(sys.argv[3]), min(w, int(sys.argv[4]) + 1)
+if len(acc) != 6:
+    print(0, 0); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+def near(c):
+    return all(abs(a - b) <= 30 for a, b in zip(c, want))
+rows = {}
+for y in range(60, h):
+    xs = [x for x in range(x0, x1) if near(px[x, y])]
+    if len(xs) > 30:
+        rows[y] = (min(xs), max(xs))
+if not rows:
+    print(0, 0); raise SystemExit
+groups = []
+for y in sorted(rows):
+    if groups and y - groups[-1][-1] <= 2:
+        groups[-1].append(y)
+    else:
+        groups.append([y])
+g = groups[-1]                      # lowest accent block = Apply
+a, b = rows[g[0]][0], rows[g[0]][1]
+print((a + b) // 2, (g[0] + g[-1]) // 2)
+PY
+)"
+
+	if [ "${APY:-0}" -gt 0 ]; then
+		hl_move "$APX" "$APY"; sleep 1
+		hl_click "$APX" "$APY"
+		sleep 3
+		AFTER_APPLY="$(hl_get "get all-monitors" | python3 -c '
+import json, sys
+n = sys.argv[1]
+for m in json.load(sys.stdin)["monitors"]:
+    if m["name"] == n: print(m.get("scale")); break
+' "$HL_MON")"
+		if [ "$AFTER_APPLY" != "$BEFORE_SCALE" ]; then
+			ok "Apply commits the staged change ($BEFORE_SCALE -> $AFTER_APPLY)"
+		else
+			bad "Apply commits the staged change (still $AFTER_APPLY)"
+		fi
+	else
+		bad "the Apply button is on screen (no accent block found)"
+	fi
+else
+	bad "the display panel shows its form rows for the Apply test"
+fi
+
+# Put the output back. Applying a scale really does rescale the layout, so
+# every pill below moves -- leaving 0.75 in place made the plugin tests click
+# empty wallpaper and fail for reasons that had nothing to do with plugins.
+hl_dispatch "set_output_scale,$HL_MON,1" 2
+hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200))
+sleep 2
 
 # ── a plugin's menu ─────────────────────────────────────────────────────────
 #

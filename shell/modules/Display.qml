@@ -80,6 +80,75 @@ Pill {
                 Ipc.dispatch("dispatch " + cmd);
             }
 
+            // ── staged edits ────────────────────────────────────────────────
+            //
+            // Nothing here applies as you touch it. A display panel that acts
+            // on every keystroke and every list pick makes a mode set out of
+            // passing THROUGH a value on the way to the one you wanted, and a
+            // mode set is a black screen for a moment -- so choosing 2560x1440
+            // from a list of a dozen used to walk the monitor through whatever
+            // you scrolled past. Edits collect here and go together on Apply.
+            property var pending: ({})
+            readonly property int pendingCount: Object.keys(pending).length
+
+            // Cleared when the selected output changes: a scale staged for one
+            // monitor must not be applied to the next one you click on.
+            onSelectedChanged: pending = ({})
+
+            function stage(key, value) {
+                const p = Object.assign({}, pending);
+                p[key] = value;
+                pending = p;
+            }
+
+            // The staged value if there is one, else what the output reports.
+            function staged(key, live) {
+                return pending[key] !== undefined ? pending[key] : live;
+            }
+
+            function applyPending() {
+                const c = panel.current;
+                if (!c) {
+                    pending = ({});
+                    return;
+                }
+                const p = pending;
+                const name = c.name;
+
+                // Resolution and refresh are one dispatch: set_output_mode
+                // takes WxH@Hz, so staging them separately and sending two
+                // would mode-set twice, the first time to a rate the new
+                // resolution may not even offer.
+                if (p.res !== undefined || p.hz !== undefined) {
+                    const res = p.res !== undefined ? p.res : panel.currentRes;
+                    const hz = p.hz !== undefined
+                        ? p.hz
+                        : (panel.activeMode
+                           ? String(Math.round(panel.activeMode.refresh / 1000))
+                           : "");
+                    dispatch("set_output_mode," + name + "," + res
+                             + (hz ? "@" + hz : ""));
+                }
+                if (p.scale !== undefined)
+                    dispatch("set_output_scale," + name + "," + p.scale);
+                if (p.x !== undefined || p.y !== undefined) {
+                    dispatch("set_output_position," + name + ","
+                             + (p.x !== undefined ? p.x : c.x) + ","
+                             + (p.y !== undefined ? p.y : c.y));
+                }
+                if (p.vrr !== undefined)
+                    dispatch("set_output_vrr," + name + "," + (p.vrr ? 1 : 0));
+                // The per-output HDR BASELINE, not a runtime flip: the
+                // compositor resolves it against the global hdr-mode policy and
+                // any force_hdr client, and remembers it either way.
+                if (p.hdr !== undefined)
+                    dispatch("set_output_hdr," + name + "," + (p.hdr ? 1 : 0));
+                if (p.icc !== undefined)
+                    dispatch("set_output_icc," + name + "," + p.icc);
+
+                pending = ({});
+            }
+
             Row {
                 id: tabs
                 spacing: 4
@@ -137,9 +206,13 @@ Pill {
                         outputs: panel.outputs
                         selected: panel.selected
                         onPicked: name => panel.selected = name
-                        onMoved: (name, x, y) =>
-                            panel.dispatch("set_output_position," + name
-                                           + "," + x + "," + y)
+                        // Staged like everything else. The drag still snaps
+                        // and still shows where the monitor will land; it just
+                        // does not rearrange the desktop until Apply.
+                        onMoved: (name, x, y) => {
+                            panel.stage("x", x);
+                            panel.stage("y", y);
+                        }
                     }
 
                     Text {
@@ -182,10 +255,8 @@ Pill {
                                 out.sort((a, b) => b.w - a.w || b.h - a.h);
                                 return out.map(e => e.k);
                             }
-                            current: panel.currentRes
-                            onPicked: v =>
-                                panel.dispatch("set_output_mode,"
-                                               + panel.current.name + "," + v)
+                            current: panel.staged("res", panel.currentRes)
+                            onPicked: v => panel.stage("res", v)
                         }
                     }
 
@@ -217,13 +288,10 @@ Pill {
                                 out.sort((a, b) => Number(b) - Number(a));
                                 return out;
                             }
-                            current: panel.activeMode
+                            current: panel.staged("hz", panel.activeMode
                                 ? String(Math.round(panel.activeMode.refresh / 1000))
-                                : ""
-                            onPicked: hz =>
-                                panel.dispatch("set_output_mode,"
-                                    + panel.current.name + ","
-                                    + panel.currentRes + "@" + hz)
+                                : "")
+                            onPicked: hz => panel.stage("hz", hz)
                         }
                     }
 
@@ -235,11 +303,9 @@ Pill {
                         width: parent.width
                         control: Picker {
                             values: ["0.75", "1", "1.25", "1.5", "1.75", "2"]
-                            current: panel.current
-                                ? String(panel.current.scale) : "1"
-                            onPicked: v =>
-                                panel.dispatch("set_output_scale,"
-                                               + panel.current.name + "," + v)
+                            current: panel.staged("scale", panel.current
+                                ? String(panel.current.scale) : "1")
+                            onPicked: v => panel.stage("scale", v)
                         }
                     }
 
@@ -251,11 +317,9 @@ Pill {
                             // the live per-client answer, which is false while
                             // nothing on screen is driving adaptive sync -- a
                             // switch bound to that would flick itself off.
-                            on: panel.current
-                                ? panel.current.vrr_enabled === true : false
-                            onToggled: v =>
-                                panel.dispatch("set_output_vrr,"
-                                    + panel.current.name + "," + (v ? 1 : 0))
+                            on: panel.staged("vrr", panel.current
+                                ? panel.current.vrr_enabled === true : false)
+                            onToggled: v => panel.stage("vrr", v)
                         }
                     }
 
@@ -267,16 +331,15 @@ Pill {
                         visible: panel.current
                                  && panel.current.hdr_capable === true
                         control: Toggle {
-                            on: panel.current ? panel.current.hdr === true : false
-                            // toggle_hdr acts on the FOCUSED output, so move
-                            // focus there first -- the same two-step the tag
-                            // pills do for `view`.
-                            onToggled: {
-                                if (Compositor.focusedMonitor !== panel.current.name)
-                                    panel.dispatch("focus_monitor,"
-                                                   + panel.current.name);
-                                panel.dispatch("toggle_hdr");
-                            }
+                            // hdr_enabled, not hdr: `hdr` is what the output is
+                            // REALLY doing right now, which the global hdr-mode
+                            // policy or a force_hdr client can be overriding.
+                            // A switch has to show the setting it writes, or it
+                            // flips back under you -- the same reason the VRR
+                            // row reads vrr_enabled.
+                            on: panel.staged("hdr", panel.current
+                                ? panel.current.hdr_enabled === true : false)
+                            onToggled: v => panel.stage("hdr", v)
                         }
                     }
 
@@ -284,11 +347,80 @@ Pill {
                         label: "ICC profile"
                         width: parent.width
                         control: Field {
-                            text: (panel.current && panel.current.icc_profile) || ""
+                            text: panel.staged("icc",
+                                (panel.current && panel.current.icc_profile) || "")
                             placeholder: "/path/to/profile.icm (SDR)"
-                            onCommitted: v =>
-                                panel.dispatch("set_output_icc,"
-                                               + panel.current.name + "," + v)
+                            onCommitted: v => panel.stage("icc", v)
+                        }
+                    }
+
+                    // Apply / Revert. Present but inert when nothing is
+                    // staged, rather than appearing and disappearing -- a row
+                    // that materialises on first edit shifts everything under
+                    // it, which moves the control you were about to click.
+                    Item {
+                        width: parent.width
+                        height: 34
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: panel.pendingCount === 0
+                                ? "no changes"
+                                : panel.pendingCount + " change"
+                                  + (panel.pendingCount === 1 ? "" : "s")
+                                  + " pending"
+                            color: panel.pendingCount === 0
+                                ? Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+                                : Cfg.fg
+                            font.family: Cfg.fontFamily
+                            font.pointSize: Cfg.fontSize
+                            font.hintingPreference: Font.PreferFullHinting
+                        }
+
+                        Row {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 8
+
+                            Repeater {
+                                model: ["Revert", "Apply"]
+                                delegate: Rectangle {
+                                    required property string modelData
+                                    readonly property bool primary:
+                                        modelData === "Apply"
+                                    readonly property bool live:
+                                        panel.pendingCount > 0
+
+                                    width: 84
+                                    height: 28
+                                    radius: Cfg.themeRadius
+                                    opacity: live ? 1.0 : 0.4
+                                    color: primary && live
+                                        ? Cfg.focusBg
+                                        : Qt.rgba(1, 1, 1, 0.08)
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData
+                                        color: parent.primary && parent.live
+                                            ? Cfg.focusFg : Cfg.fg
+                                        font.family: Cfg.fontFamily
+                                        font.pointSize: Cfg.fontSize
+                                        font.hintingPreference: Font.PreferFullHinting
+                                    }
+
+                                    TapHandler {
+                                        enabled: parent.live
+                                        onTapped: {
+                                            if (parent.primary)
+                                                panel.applyPending();
+                                            else
+                                                panel.pending = ({});
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

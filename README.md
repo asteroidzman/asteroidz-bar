@@ -78,7 +78,8 @@ contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included
 contrib/tray-test.sh       # the tray, on a private D-Bus session
 contrib/media-test.sh      # the media module, with a player and no sound
 contrib/notify-test.sh     # the bell, against a stubbed swaync
-contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns, plugin menus
+contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns,
+                           #   plugin menus, and staged-vs-applied display edits
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
 
