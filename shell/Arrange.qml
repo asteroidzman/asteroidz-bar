@@ -36,8 +36,22 @@ Item {
         return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
     }
 
+    // The hint gets a band of its own at the bottom, and the tiles are laid out
+    // in what is left.
+    //
+    // They used to share the whole canvas, and on a real two-monitor layout
+    // they collided: with a 6400x2160 bounding box the zoom is HEIGHT-limited,
+    // so the 15% breathing room worked out to ~11px top and bottom while the
+    // hint needs ~17px including its margin. DP-1's tile ran from y=10 to
+    // y=140 of a 150px canvas and the hint sat at y=133..146 -- seven pixels
+    // of overlap. The text was still drawn on top (it is declared last) but it
+    // is dimmed, so over the light accent fill of the selected monitor it was
+    // simply unreadable, which reads as being covered.
+    readonly property int hintHeight: Math.round(Cfg.fontPixelSize * 1.15)
+    readonly property int canvasHeight: Math.max(1, height - hintHeight)
+
     readonly property real zoom: Math.min(width / (bounds.w * 1.15),
-                                          height / (bounds.h * 1.15))
+                                          canvasHeight / (bounds.h * 1.15))
 
     Rectangle {
         anchors.fill: parent
@@ -66,7 +80,7 @@ Item {
             x: (lx - root.bounds.x) * root.zoom
                + (root.width - root.bounds.w * root.zoom) / 2 + 1
             y: (ly - root.bounds.y) * root.zoom
-               + (root.height - root.bounds.h * root.zoom) / 2 + 1
+               + (root.canvasHeight - root.bounds.h * root.zoom) / 2 + 1
             width: Math.max(1, modelData.width * root.zoom - 2)
             height: Math.max(1, modelData.height * root.zoom - 2)
 
@@ -146,14 +160,25 @@ Item {
         }
     }
 
+    // Centred in the band reserved for it, and readable.
+    //
+    // It was fontSize * 0.6, which is 9.6pt at the shipped 16pt theme, dimmed to
+    // 45% alpha on top of that -- small enough that the instruction it exists to
+    // give could not be read. 0.8 and 60% is still clearly secondary to the
+    // monitor names without being decorative.
     Text {
-        anchors.bottom: parent.bottom
         anchors.left: parent.left
-        anchors.margins: 4
+        anchors.right: parent.right
+        anchors.leftMargin: 6
+        anchors.rightMargin: 6
+        anchors.bottom: parent.bottom
+        height: root.hintHeight
+        verticalAlignment: Text.AlignVCenter
+        elide: Text.ElideRight
         text: "drag to arrange · click to select"
-        color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+        color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.6)
         font.family: Cfg.fontFamily
-        font.pointSize: Math.max(6, Cfg.fontSize * 0.6)
+        font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
         font.hintingPreference: Font.PreferFullHinting
     }
 }

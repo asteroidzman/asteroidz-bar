@@ -238,7 +238,12 @@ Pill {
                     // relationship between rectangles.
                     Arrange {
                         width: parent.width
-                        height: 150
+                        // Font-derived, because Arrange now reserves a band at
+                        // the bottom for its hint and that band scales with the
+                        // theme. At a fixed 150 the tiles lost ~24px of height
+                        // to the reservation; this gives it back, so a
+                        // two-monitor layout draws at the size it did before.
+                        height: Math.round(Cfg.fontPixelSize * 8)
                         outputs: panel.outputs
                         selected: panel.selected
                         onPicked: name => panel.selected = name

@@ -122,14 +122,42 @@ inside 100px, and fails at 16 and 24. Anything sized from a constant now comes
 from `Cfg.fontPixelSize` instead, which is what `FormRow` and `Picker` were
 already doing.
 
-Two things about how it measures, both learned the hard way. The accent
-tolerance is tight (14, not 30) because white text on a dark tab is subpixel
-antialiased and its blue fringe lands within 30 of the accent on every channel
-— a loose match reported the far edge of the *next* tab's label as this tab's
-right edge. And the pill is measured on the row carrying the **most** accent,
-not the middle row: the middle row runs straight through the label, so the fill
-is interrupted by every glyph and the longest unbroken run is the space between
-two letters.
+It also checks that the arrangement canvas does not sit on its own
+"drag to arrange" hint. `zoom` is `min(width/bounds, height/bounds)`, so
+whenever the layout's bounding box is proportionally narrower than the canvas
+the zoom is height-limited and the tiles use every vertical pixel there is —
+the 15% breathing room came to ~11px at the bottom while the hint needs ~17px
+with its margin. `Arrange` now reserves a band for the hint and lays the tiles
+out in what is left.
+
+Three things about how it measures, all learned the hard way.
+
+The accent tolerance is tight (14, not 30) because white text on a dark tab is
+subpixel antialiased and its blue fringe lands within 30 of the accent on every
+channel — a loose match reported the far edge of the *next* tab's label as this
+tab's right edge.
+
+The pill is measured on the row carrying the **most** accent, not the middle
+row: the middle row runs straight through the label, so the fill is interrupted
+by every glyph and the longest unbroken run is the space between two letters.
+
+The hint is found **geometrically, not by colour**. The obvious approach — the
+hint is dim, the monitor name is bright — ignores that the name is antialiased,
+so its glyph edges pass any "dim" test you can write; a luminance window duly
+reported the hint as starting mid-tile, where the name is, and failed on the
+fixed build as loudly as on the broken one. The hint is left-aligned and the
+tiles are centred, so the strip between the canvas edge and the tile's left edge
+holds hint ink and nothing else.
+
+A related trap, for anything that adds an output: `hl_start` sets the virtual
+pointer's coordinate extent from the single output it created, and
+`zwlr_virtual_pointer_v1.motion_absolute` maps coordinates onto the layout's
+bounding box — so an extent that no longer matches scales every click. Call
+`hl_sync_pointer_extent` (in `contrib/lib/headless.sh`) after creating,
+destroying or moving an output. It went unnoticed because `multimonitor.sh`
+places its second output *beside* the first, leaving the layout height alone;
+stacking one below doubled it, and a click aimed at a pill 33px down arrived at
+66px, which fails as "the panel did not open".
 
 It also drives a **stub plugin** over the real stdin/stdout protocol, because
 the bar's half of that protocol was never wired up: the popover raised

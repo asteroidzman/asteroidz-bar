@@ -226,6 +226,89 @@ print("OK", left, right, top, bot, right - left + 1, gap, len(edge_ink))
 PY
 }
 
+# The monitor tile and the hint beneath it: "<tile-top> <tile-bot> <hint-top>
+# <hint-rows>".
+#
+# The tile is the SECOND accent block from the top -- the first is the selected
+# tab pill. With one output that output is selected, so its tile carries the
+# accent and is the only thing in the canvas findable by colour.
+#
+# The hint is found in the columns to the LEFT of the tile, which is the only
+# place it can be told apart from anything else.
+#
+# Distinguishing it by BRIGHTNESS does not work. The obvious idea -- the hint is
+# dim, the monitor name is focus-fg bright -- ignores that the name is
+# antialiased, so its glyph edges pass any "dim" test you can write. Scanning
+# from the tile's top with a 55..190 luminance window duly reported the hint as
+# starting mid-tile, exactly where the name is, and the assertion failed on the
+# FIXED build as loudly as on the broken one.
+#
+# The hint is left-aligned in the canvas and the tiles are centred in it, so the
+# strip between the canvas edge and the tile's left edge holds hint ink and
+# nothing else. Geometry, not colour.
+measure_hint() { # measure_hint <shot> <accent-hex>
+	python3 - "$WORK/$1.png" "$2" <<'PY'
+import sys
+from PIL import Image
+
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load(); w, h = im.size
+acc = sys.argv[2].lstrip("#")
+if len(acc) != 6:
+    print("ERR no-accent"); raise SystemExit
+want = tuple(int(acc[i:i+2], 16) for i in (0, 2, 4))
+
+def near(c, tol=14):
+    return all(abs(a - b) <= tol for a, b in zip(c, want))
+
+def lum(c):
+    return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+
+rows = {}
+for y in range(60, h):
+    xs = [x for x in range(w) if near(px[x, y])]
+    if len(xs) > 20:
+        rows[y] = xs
+groups = []
+for y in sorted(rows):
+    if groups and y - groups[-1][-1] <= 2:
+        groups[-1].append(y)
+    else:
+        groups.append([y])
+if len(groups) < 2:
+    print("ERR only-%d-accent-blocks" % len(groups)); raise SystemExit
+
+tile = groups[1]
+tile_top, tile_bot = tile[0], tile[-1]
+tile_xs = rows[max(tile, key=lambda y: len(rows[y]))]
+tx0, tx1 = min(tile_xs), max(tile_xs)
+
+# The strip left of the tile, inside the canvas. The canvas background is the
+# darkest thing in the panel (rgba(0,0,0,0.25) over the popover colour), so any
+# ink here is the hint.
+strip0 = max(0, tx0 - 130)
+strip1 = max(0, tx0 - 5)
+bg = px[strip0 + 2, tile_top + 4]   # canvas background, beside the tile's top
+
+def is_ink(c):
+    return lum(c) > lum(bg) + 22
+
+# Scanned from the tile's TOP, not its bottom: pre-fix the hint begins ABOVE the
+# tile's bottom edge, so a scan starting below it would never see the overlap it
+# exists to catch.
+first = -1
+count = 0
+for y in range(tile_top, min(h, tile_bot + 90)):
+    n = sum(1 for x in range(strip0, strip1) if is_ink(px[x, y]))
+    if n > 6:
+        count += 1
+        if first < 0:
+            first = y
+
+print("OK", tile_top, tile_bot, first, count)
+PY
+}
+
 round() { # round "<font>" <expected-min-gap>
 	local font="$1" mingap="$2" tag
 	tag="$(echo "$font" | tr ' ' '_')"
@@ -247,6 +330,7 @@ round() { # round "<font>" <expected-min-gap>
 		hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200)); sleep 2
 		return
 	fi
+	local __round_shot="panel_$tag"
 	local left=$2 right=$3 top=$4 bot=$5 width=$6 gap=$7 ink=$8
 	echo "  ..   [$font] tab pill ${width}x$((bot - top + 1)) at x=$left..$right, gap=${gap}px, edge-ink=$ink"
 
@@ -273,6 +357,37 @@ round() { # round "<font>" <expected-min-gap>
 		bad "[$font] the tab pill grew with the text (${width}px wide, ${height}px tall)"
 	fi
 
+	# ── the arrangement canvas does not sit on its own hint ──────────────
+	#
+	# Reported live: "the 'drag to arrange' text is partially covered by the DP-1
+	# rectangle and is very small". Both true, one cause -- the tiles and the
+	# hint shared the whole canvas.
+	#
+	# `zoom` is min(width/bounds, height/bounds), so whenever the layout's
+	# bounding box is proportionally NARROWER than the canvas the zoom is
+	# height-limited and the tiles use every vertical pixel there is. The canvas
+	# aspect is ~3.0 and a single 1920x1080 output is 1.78, so this reproduces on
+	# the ordinary one-output harness -- 7px of overlap, pre-fix. (I first built
+	# this with a second virtual output stacked below, on the assumption that one
+	# output was too wide to trigger it. That was wrong, and the extra machinery
+	# failed on both builds for reasons of its own.)
+	local hout; hout="$(measure_hint "$__round_shot" "$acc")"
+	# shellcheck disable=SC2086
+	set -- $hout
+	if [ "${1:-ERR}" != "OK" ]; then
+		bad "[$font] the arrangement canvas is measurable (${hout})"
+	else
+		local tile_top=$2 tile_bot=$3 hint_top=$4 hint_rows=$5
+		echo "  ..   [$font] monitor tile y=$tile_top..$tile_bot, hint text starts y=$hint_top (${hint_rows} rows)"
+		if [ "$hint_rows" -eq 0 ]; then
+			bad "[$font] the hint is drawn at all (no text found under the tile)"
+		elif [ "$hint_top" -gt "$tile_bot" ]; then
+			ok "[$font] the hint sits below the tiles, not under them"
+		else
+			bad "[$font] the hint sits below the tiles, not under them (hint $hint_top, tile ends $tile_bot)"
+		fi
+	fi
+
 	hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200)); sleep 2
 }
 
@@ -283,6 +398,8 @@ round() { # round "<font>" <expected-min-gap>
 round "Ubuntu 16" 4
 round "Ubuntu 24" 4
 round "Ubuntu 11" 4
+
+
 
 kill "$QS" 2>/dev/null
 
