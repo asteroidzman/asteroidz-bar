@@ -109,16 +109,20 @@ default. In `~/.config/asteroidz/config.kdl`:
 
 ```kdl
 window-rule {
-	title "asteroidz settings"
-	float #true
+	match title="asteroidz settings"
+	open-floating
 	width 1100
 	height 800
-	center #true
 }
 ```
 
-`title`, not `app-id`: the app id is `org.quickshell`, which every quickshell
-toplevel shares.
+`match`, not bare properties: matchers live in a `match` child node, and
+everything beside it is an action. `title`, not `app-id`, because the app id is
+`org.quickshell` and every quickshell toplevel shares it — and it is a **regex**,
+so it matches as a substring unless you anchor it.
+
+`asteroidz -R` lists every field a rule accepts, and `amsg get window-rule-schema`
+serves the same table with an explanation per field.
 
 ## Blur and shadows
 
