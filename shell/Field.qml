@@ -12,6 +12,22 @@ Rectangle {
     property string placeholder: ""
     signal committed(string value)
 
+    // The value from OUTSIDE, for a field that mirrors state someone else owns.
+    //
+    // Separate from `text` because binding a live value straight onto `text`
+    // fights the keyboard: typing assigns to input.text, which breaks the
+    // binding, so the field stops tracking the value it is supposed to be
+    // showing -- and until it breaks, every external update resets the cursor to
+    // the end of the line. This copies in only when the field is not being
+    // edited.
+    //
+    // Leaving the field without pressing Enter therefore puts the shown value
+    // back, which is the honest reading of a commit-on-Enter field: the edit did
+    // not take. The ⏎ hint below says so while the edit is live.
+    property string value: ""
+    onValueChanged: if (!keysHere) input.text = value;
+    Component.onCompleted: input.text = value;
+
     // Claim the popover's key forwarding.
     //
     // Keys arrive at the BAR's surface, not at the popup this lives in -- see
@@ -34,13 +50,21 @@ Rectangle {
 
     // Whether keystrokes will land HERE.
     //
-    // Not `input.focus` and not `input.activeFocus`, though both are tempting.
-    // This is the signal that actually decides: Bar.qml forwards keys to
-    // whatever the popover names as its keyTarget, so being that target IS being
-    // focused, and anything else would be a highlight that lies. activeFocus in
-    // particular is unreliable here -- it additionally requires the popup's
-    // window to be active, which it is not in any dependable way, because the
-    // bar holds the keyboard.
+    // The answer depends on what kind of window this field is in, and there are
+    // two:
+    //
+    // In a POPOVER, not `input.focus` and not `input.activeFocus`, though both
+    // are tempting. Bar.qml forwards keys to whatever the popover names as its
+    // keyTarget, so being that target IS being focused, and anything else would
+    // be a highlight that lies. activeFocus in particular is unreliable there --
+    // it additionally requires the popup's window to be active, which it is not
+    // in any dependable way, because the bar holds the keyboard.
+    //
+    // In an ORDINARY WINDOW -- the settings window is a real xdg toplevel -- none
+    // of that applies: the window has the keyboard itself and Qt's own focus is
+    // exactly where the keys are going. Answering with the popover's rule there
+    // would report false forever, which means no caret, no outline, and a
+    // placeholder drawn over the text you are typing.
     //
     // A field with no affordance was reported as "you can type stuff in but it
     // is not clear you're actually focused on the field", which is the whole
@@ -49,7 +73,9 @@ Rectangle {
     // going.
     readonly property bool keysHere: {
         const w = QsWindow.window;
-        return w !== null && w.keyTarget === input;
+        if (w !== null && w.isPopover === true)
+            return w.keyTarget === input;
+        return input.activeFocus;
     }
 
     // What the value was when this field last became focused, or was last
@@ -63,7 +89,20 @@ Rectangle {
     property string lastCommitted: ""
     readonly property bool dirty: keysHere && input.text !== lastCommitted
 
-    onKeysHereChanged: if (keysHere) lastCommitted = input.text
+    // One handler, both jobs: QML allows exactly one binding per signal, and a
+    // second `onKeysHereChanged` elsewhere in this file is not a duplicate
+    // handler, it is "Property value set multiple times" and the whole type
+    // failing to load.
+    onKeysHereChanged: {
+        if (keysHere)
+            lastCommitted = input.text;
+        else
+            // Left without committing: put the shown value back. An edit that
+            // was not applied should not keep sitting there looking applied, and
+            // if Enter WAS pressed then `value` is already the new one and this
+            // is a no-op.
+            input.text = value;
+    }
 
     implicitHeight: Math.max(24, Math.round(Cfg.fontPixelSize * 1.35))
     radius: Cfg.themeRadius

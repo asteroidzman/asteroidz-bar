@@ -83,6 +83,72 @@ Singleton {
         }
     }
 
+    // One command, one reply, then hang up.
+    //
+    // Neither of the two above fits a `get`. `dispatch` throws the answer away,
+    // which is right for a click handler and useless when the answer IS the
+    // point; `watch` keeps the connection open forever, which is right for a
+    // subscription and an fd leaked per query otherwise.
+    //
+    // The compositor already behaves exactly this way at the other end: a
+    // non-watch command queues its reply, sets `closing`, and closes the fd
+    // once the queue drains (ipc.h). So one line then EOF is the contract, not
+    // an assumption -- and hanging up here on the first line is agreeing with
+    // it rather than guessing.
+    //
+    // `onJson` receives the parsed reply. It is not called at all if the
+    // compositor is not there, which is the same "draw defaults, do not
+    // refuse" stance the rest of this singleton takes.
+    function request(command, onJson) {
+        if (!connected)
+            return;
+        requestComponent.createObject(root, {
+            command: command,
+            handler: onJson
+        });
+    }
+
+    Component {
+        id: requestComponent
+
+        Socket {
+            id: req
+            required property string command
+            required property var handler
+
+            path: root.socketPath
+            connected: true
+
+            onConnectionStateChanged: {
+                if (connected)
+                    write(command + "\n");
+            }
+
+            parser: SplitParser {
+                onRead: line => {
+                    // Hang up FIRST, and unconditionally.
+                    //
+                    // The handler is application code that can throw -- a
+                    // missing field, a rename -- and a throw between parsing
+                    // and closing would leak the socket. Ordering it this way
+                    // means the fd is already released no matter what happens
+                    // next.
+                    req.connected = false;
+                    let obj = null;
+                    try {
+                        obj = JSON.parse(line);
+                    } catch (e) {
+                        console.warn("asteroidz-bar: bad reply to",
+                                     req.command + ":", line);
+                    }
+                    if (obj !== null && req.handler)
+                        req.handler(obj);
+                    req.destroy();
+                }
+            }
+        }
+    }
+
     // Fire-and-forget dispatch, for click handlers. No reply is read: every
     // dispatch answers {"success":true} or an error, and there is nothing
     // useful for a bar to do with either.

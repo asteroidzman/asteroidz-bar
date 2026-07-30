@@ -44,6 +44,82 @@ whenever the wallpaper changes — and serves the **result**. The shell never
 parses KDL: a second reader would agree with the first until one of them gained
 a default, and it would still not see a palette written after startup.
 
+## Settings
+
+`All settings…`, at the top right of the display panel, opens a real window with
+every configuration option the compositor accepts: 95 of them, each with the
+compositor's own one-line explanation, grouped, searchable, and showing which
+file the current value came from.
+
+**Nothing about any individual option lives in this repo.** asteroidz publishes a
+machine-readable schema — type, range, enum members, default, group, label,
+description — and the window is generated from it:
+
+| the schema says | the window does |
+|---|---|
+| `type: bool` | a toggle |
+| `type: enum` + `enum: [...]` | a picker over the members, aliases dropped |
+| `type: color` | a swatch over a checkerboard, plus the `0xRRGGBBAA` |
+| a number with `min` and `max` | a slider, stepped and bounded |
+| a number without both | a text field — a range must not be invented |
+| `desc` | the second line of the row |
+| `source` | the third line: file, line, and the path it is actually at |
+| `source.writable: false` | greyed out, with an **Override** offered |
+
+So an option added to `src/config/config-schema.h` appears here, explained and
+bounded, with no change to any QML file. The alternative — a settings UI with its
+own table of options — is a second description of the config that agrees with the
+compositor's until one of them gains an option.
+
+### Two stages, and why
+
+| | what it does |
+|---|---|
+| **preview** | memory only, sent as you drag (`set-config` with `persist:false`) |
+| **Apply** | the staged set, written to the config file, all or nothing |
+
+Preview exists because a blur radius or a shadow colour is otherwise
+unadjustable: you would have to write to disk to see what a value looks like.
+Drags are coalesced on a 60 ms timer, so a gesture costs a handful of requests
+rather than one per frame.
+
+A preview that is never applied is undone when the window closes — by
+`reload_config`, not by writing the old values back. Those are not the same
+thing: writing `4` back over a preview of `8` leaves the value right and the
+provenance wrong, so a key that *is* saved in `config.kdl` reads back as "changed
+in memory, not saved" from then on.
+
+### Values matugen owns
+
+Nine colours are generated from the wallpaper. The window greys them out and says
+so, because writing to `colors.kdl` is not refused — it is silently reverted the
+next time the wallpaper changes, which looks like the compositor forgetting things
+at random.
+
+**Override** is the escape hatch. `source` in KDL is applied in place and later
+declarations win, so the compositor can append the key at the end of the main
+config and shadow the generated file. It refuses to do that unless asked:
+refusing forever is a dead end, and doing it silently means matugen and this
+window quietly fight over the palette.
+
+### Opening it floating
+
+It is an ordinary xdg toplevel (`FloatingWindow`), so asteroidz tiles it by
+default. In `~/.config/asteroidz/config.kdl`:
+
+```kdl
+window-rule {
+	title "asteroidz settings"
+	float #true
+	width 1100
+	height 800
+	center #true
+}
+```
+
+`title`, not `app-id`: the app id is `org.quickshell`, which every quickshell
+toplevel shares.
+
 ## Blur and shadows
 
 Blur is the compositor's (`ext-background-effect-v1`): the shell reports the
@@ -82,6 +158,9 @@ contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns
                            #   plugin menus, and staged-vs-applied display edits
 contrib/panel-layout-test.sh # the display panel's boxes fit the text in them,
                            #   at three font sizes
+contrib/settings-test.sh   # the settings window: it opens, it is populated,
+                           #   search narrows it, a click previews, Apply persists,
+                           #   and closing undoes an unapplied preview
 contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
                            #   (no compositor needed; runs in seconds)
 contrib/parity.sh          # native bar vs this one (historical; see the header)
@@ -159,6 +238,31 @@ harness and inside the tab row in another, and the tab silently never switched.
 And its real assertion is that **`wallpaper.conf` changed**, not that pixels moved:
 nothing else in the panel writes `folder=`, so a mis-aimed click can only make it
 fail, never falsely pass.
+
+`settings-test.sh` drives the settings window the same way, and every assertion
+in it is a fact from **outside** the bar: a toplevel in the compositor's client
+list, a value in `get config`, a line in the config file, `asteroidz -p` accepting
+the result. Screenshots are used only where the claim is about layout.
+
+Deliberately so, because the three bugs this window could plausibly ship with are
+a control that shows a value it cannot write, a preview that is never undone, and
+an Apply that writes a file the parser then rejects — none of them visible in QML,
+all three visible here. It caught the second one on the first green run: the value
+came back correct and the provenance did not, so the assertion now checks the
+source as well (`0 -> 1/file`, not `0 -> 1`).
+
+Two things about how it measures.
+
+"Ink" is counted against the background found **in the shot**, not against a
+brightness threshold. A constant said 458684 of 459000 sampled pixels were text in
+every shot — the headless theme happens to set the surface to a bright colour —
+and both the "is it populated" and the "does search narrow it" assertions were
+comparing noise.
+
+The toggle is located as the widest contiguous run of one flat non-background
+colour **between 20 and 90 pixels wide**, below the header. Unbounded, the widest
+such run is the search field, and the first version of this clicked into that
+instead. A toggle is 44px of one colour; a glyph stroke is three.
 
 `panel-layout-test.sh` checks the other half: not what the panel does, but
 whether its boxes fit the text in them. The display tabs were `width: 100` with
@@ -246,6 +350,7 @@ would pick up Steam and Discord and pass whether or not the code works.
 
 ```
 shell/          the QML: one bar per output, one file per module
+shell/settings/ the settings window, generated from the compositor's schema
 plugin/         the C++ QML module, imported as `Asteroidz.Bar`
 subprojects/
   asteroidzbg/  the wallpaper, as a static library
@@ -277,6 +382,42 @@ supervise.
 The module is loaded from an import path the launcher sets, not installed into
 `/usr/lib/qt6/qml`: this package does not write into Qt's tree, and does not
 break when Qt is rebuilt.
+
+### `Field.value`, never `Field.text`
+
+Two properties, and binding the wrong one is a bug that looks like a rendering
+glitch:
+
+```qml
+Field { value: Wallpaper.folder }        // right
+Field { text: Wallpaper.folder }         // wrong
+```
+
+`text` is an alias to the `TextInput`, so typing assigns to it — which **breaks
+any binding on it**, and the field silently stops tracking the value it is
+supposed to be showing. Until it breaks, every external update resets the cursor
+to the end of the line, so a value typed in comes out scrambled. `value` is copied
+in only while the field is not being edited, and put back when it loses focus
+without an Enter — which is the honest reading of a commit-on-Enter field: the
+edit did not take.
+
+`Slider` has the same split for the same reason: `value` is what the drag writes,
+`target` is what you bind.
+
+### One `Ipc` call per shape of question
+
+| | |
+|---|---|
+| `Ipc.watch(cmd, fn)` | a subscription; `fn` per update, starting with the initial state |
+| `Ipc.request(cmd, fn)` | one command, one reply, then hang up |
+| `Ipc.dispatch(cmd)` | fire and forget; no reply is read |
+
+`request` exists because neither of the others fits a `get`: `dispatch` throws the
+answer away, and `watch` holds the connection open forever for a reply that
+already arrived. The compositor's end already behaves this way — a non-watch
+command queues its reply, sets `closing`, and closes the fd once the queue drains
+— so hanging up on the first line is agreeing with the contract, not guessing at
+it.
 
 ### Plugins have to die with the bar
 

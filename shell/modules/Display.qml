@@ -16,6 +16,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import ".."
+import "../settings"
 
 Pill {
     id: root
@@ -216,6 +217,33 @@ Pill {
                 }
             }
 
+            // The way in to everything else.
+            //
+            // Not a third tab: a tab promises its content appears in this panel,
+            // and ninety-five explained options with a search box cannot. The
+            // popover latches its width at open and caps its height at 700 with
+            // nothing to scroll, so the overflow would not be clipped -- it would
+            // be silently absent. This opens a real window instead.
+            //
+            // Level with the tab row and right-aligned, so it reads as a
+            // destination rather than as one more of the two things this panel
+            // does.
+            SmallButton {
+                anchors.right: parent.right
+                anchors.verticalCenter: tabs.verticalCenter
+                height: Math.max(28, Math.round(Cfg.fontPixelSize * 1.6))
+                label: "All settings…"
+                onClicked: {
+                    Settings.open();
+                    // The popover is dismissed by the next click outside it, and
+                    // every click in the settings window is one. Closing it here
+                    // means the window opens over a settled bar rather than
+                    // spending its first event on the popover's dismissal.
+                    if (root.bar)
+                        root.bar.closeMenu();
+                }
+            }
+
             Loader {
                 id: content
                 anchors.top: tabs.bottom
@@ -392,7 +420,10 @@ Pill {
                         label: "ICC profile"
                         width: parent.width
                         control: Field {
-                            text: panel.staged("icc",
+                            // `value`, not `text`: a live binding onto `text`
+                            // is broken by the first keystroke and then never
+                            // tracks again. See Field.qml.
+                            value: panel.staged("icc",
                                 (panel.current && panel.current.icc_profile) || "")
                             placeholder: "/path/to/profile.icm (SDR)"
                             onCommitted: v => panel.stage("icc", v)
@@ -518,7 +549,7 @@ Pill {
                         label: "Folder"
                         width: parent.width
                         control: Field {
-                            text: Wallpaper.folder
+                            value: Wallpaper.folder
                             onCommitted: v => Wallpaper.setKey("folder", v)
                         }
                     }
@@ -528,7 +559,7 @@ Pill {
                         width: parent.width
                         control: Field {
                             placeholder: "0 = off"
-                            text: String(Math.round(Wallpaper.interval / 60))
+                            value: String(Math.round(Wallpaper.interval / 60))
                             onCommitted: v =>
                                 Wallpaper.setKey("interval",
                                                  String(Math.round(Number(v) * 60)))

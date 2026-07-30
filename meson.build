@@ -79,6 +79,28 @@ install_data(
 	install_dir: qmldir / 'modules',
 )
 
+# The settings window.
+#
+# Its own directory because it is its own module: a qmldir is what lets a
+# singleton be registered at all, and Schema and Settings are both singletons.
+#
+# A .qml file missing from this list still works from the source tree and
+# vanishes when packaged -- the one failure mode that cannot be caught while
+# developing -- so every file in shell/settings/ belongs here.
+install_data(
+	[
+		'shell/settings/qmldir',
+		'shell/settings/Settings.qml',
+		'shell/settings/Schema.qml',
+		'shell/settings/SettingsWindow.qml',
+		'shell/settings/OptionRow.qml',
+		'shell/settings/Slider.qml',
+		'shell/settings/ColorField.qml',
+		'shell/settings/SmallButton.qml',
+	],
+	install_dir: qmldir / 'settings',
+)
+
 # ── the QML plugin ───────────────────────────────────────────────────────────
 #
 # `import Asteroidz.Bar` -- the two things QML cannot do: draw an HDR

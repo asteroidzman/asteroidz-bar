@@ -1,0 +1,11 @@
+# A directory with a qmldir is a MODULE, and a module resolves only the types it
+# lists -- the "any .qml file beside me is a type" rule stops applying the moment
+# this file exists. So the singletons here force everything else to be listed
+# too; see shell/qmldir, which says the same thing about the directory above.
+singleton Settings 1.0 Settings.qml
+singleton Schema 1.0 Schema.qml
+SettingsWindow 1.0 SettingsWindow.qml
+OptionRow 1.0 OptionRow.qml
+Slider 1.0 Slider.qml
+ColorField 1.0 ColorField.qml
+SmallButton 1.0 SmallButton.qml
