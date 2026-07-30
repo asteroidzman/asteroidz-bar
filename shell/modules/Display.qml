@@ -37,7 +37,18 @@ Pill {
 
         Item {
             id: panel
-            implicitWidth: 460
+            // Wide enough for a label column that fits its longest label at
+            // whatever size the theme is, plus a control beside it. FormRow
+            // reserves Cfg.fontPixelSize * 8 for the label alone, so a panel
+            // fixed at 460 was already squeezing the controls at any font
+            // larger than the default. The floor keeps small themes from
+            // producing a panel narrower than the tabs it has to hold.
+            //
+            // Safe to change: Popover latches its width from this at open and
+            // the panel loads before `visible` goes true, so the surface never
+            // resizes while mapped -- see Popover.qml, which explains at length
+            // why that is not optional.
+            implicitWidth: Math.max(460, Math.round(Cfg.fontPixelSize * 22))
             implicitHeight: tabs.height + content.implicitHeight + 24
 
             property int tab: 0
@@ -149,10 +160,21 @@ Pill {
                 pending = ({});
             }
 
+            // Tabs sized from their LABEL, not from a constant.
+            //
+            // These were `width: 100` with a centred Text that had no width, no
+            // elide and no clip. At the shipped theme "Wallpaper" is wider than
+            // 100px, so it overflowed its pill symmetrically, ate the 4px gap,
+            // and was then painted over by the neighbouring rect -- which reads
+            // as two bugs at once, tabs touching and text cut off, from one
+            // cause. Everything here now derives from Cfg.fontPixelSize, the
+            // way FormRow and Picker already did.
+            // No explicit height: a Row already takes its implicitHeight from
+            // its tallest child, and childrenRect.height inside a positioner
+            // is a binding loop waiting to happen.
             Row {
                 id: tabs
-                spacing: 4
-                height: 32
+                spacing: Cfg.spacing
 
                 Repeater {
                     model: ["Display", "Wallpaper"]
@@ -160,14 +182,28 @@ Pill {
                         required property string modelData
                         required property int index
 
-                        width: 100
-                        height: 28
+                        // The label plus a breath of padding on each side. The
+                        // cap is a backstop, not the normal case: a tab name
+                        // long enough to hit it should elide rather than push
+                        // the row wider than the panel.
+                        readonly property int maxWidth:
+                            Math.round(panel.implicitWidth / 3)
+                        width: Math.min(maxWidth,
+                                        Math.round(label.implicitWidth
+                                                   + Cfg.fontPixelSize * 1.4))
+                        height: Math.max(28, Math.round(Cfg.fontPixelSize * 1.6))
                         radius: Cfg.themeRadius
                         color: panel.tab === index ? Cfg.focusBg
                                                    : Qt.rgba(1, 1, 1, 0.06)
 
                         Text {
+                            id: label
                             anchors.centerIn: parent
+                            width: Math.min(implicitWidth,
+                                            parent.width
+                                            - Math.round(Cfg.fontPixelSize * 0.8))
+                            elide: Text.ElideRight
+                            horizontalAlignment: Text.AlignHCenter
                             text: modelData
                             color: panel.tab === index ? Cfg.focusFg : Cfg.fg
                             font.family: Cfg.fontFamily
@@ -215,7 +251,11 @@ Pill {
                         }
                     }
 
+                    // Elided: an output name is whatever the display's EDID
+                    // says it is, and a long one used to run off the panel.
                     Text {
+                        width: parent.width
+                        elide: Text.ElideRight
                         text: panel.current
                             ? panel.current.name + "  ·  " + panel.currentRes
                               + (panel.activeMode
@@ -360,11 +400,32 @@ Pill {
                     // it, which moves the control you were about to click.
                     Item {
                         width: parent.width
-                        height: 34
+                        height: Math.max(34, Math.round(Cfg.fontPixelSize * 2.0))
 
+                        // Measured, not drawn: both buttons need the width of
+                        // BOTH labels to size themselves alike, and a delegate
+                        // cannot see its sibling's Text.
+                        TextMetrics {
+                            id: revertMetrics
+                            font.family: Cfg.fontFamily
+                            font.pointSize: Cfg.fontSize
+                            text: "Revert"
+                        }
+                        TextMetrics {
+                            id: applyMetrics
+                            font.family: Cfg.fontFamily
+                            font.pointSize: Cfg.fontSize
+                            text: "Apply"
+                        }
+
+                        // Yields to the buttons rather than overrunning them:
+                        // the status text is the expendable half of this row.
                         Text {
                             anchors.left: parent.left
+                            anchors.right: buttons.left
+                            anchors.rightMargin: Cfg.spacing
                             anchors.verticalCenter: parent.verticalCenter
+                            elide: Text.ElideRight
                             text: panel.pendingCount === 0
                                 ? "no changes"
                                 : panel.pendingCount + " change"
@@ -379,9 +440,10 @@ Pill {
                         }
 
                         Row {
+                            id: buttons
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            spacing: 8
+                            spacing: Cfg.spacing
 
                             Repeater {
                                 model: ["Revert", "Apply"]
@@ -392,8 +454,16 @@ Pill {
                                     readonly property bool live:
                                         panel.pendingCount > 0
 
-                                    width: 84
-                                    height: 28
+                                    // Sized from the label, like the tabs. Both
+                                    // buttons take the WIDER of the two labels
+                                    // so the pair stays symmetric -- a Revert
+                                    // narrower than Apply reads as an accident.
+                                    width: Math.round(
+                                        Math.max(revertMetrics.width,
+                                                 applyMetrics.width)
+                                        + Cfg.fontPixelSize * 2.0)
+                                    height: Math.max(28, Math.round(
+                                        Cfg.fontPixelSize * 1.6))
                                     radius: Cfg.themeRadius
                                     opacity: live ? 1.0 : 0.4
                                     color: primary && live

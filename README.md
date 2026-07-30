@@ -80,6 +80,8 @@ contrib/media-test.sh      # the media module, with a player and no sound
 contrib/notify-test.sh     # the bell, against a stubbed swaync
 contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns,
                            #   plugin menus, and staged-vs-applied display edits
+contrib/panel-layout-test.sh # the display panel's boxes fit the text in them,
+                           #   at three font sizes
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
 
@@ -104,6 +106,30 @@ size. The panel still grows, so a size assertion alone passes on the broken
 build; only the glyph height gives it away. `Popover.qml` now keeps the surface
 a fixed box and moves the panel inside it, which is why a dropdown can open
 without touching the window size at all.
+
+`panel-layout-test.sh` checks the other half: not what the panel does, but
+whether its boxes fit the text in them. The display tabs were `width: 100` with
+a centred `Text` carrying no width, no elide and no clip, so at the shipped
+theme "Wallpaper" overflowed its pill on both sides, ate the gap to the tab
+beside it, and was painted over by that tab's fill — reported as two bugs, text
+cut off and tabs touching, from one cause.
+
+It runs at **three font sizes on purpose**, and that is the whole design. Every
+bug of this kind is a fixed pixel constant meeting a theme-sized glyph, so a
+test at one font size tests the one case that happened to fit: run against the
+old code it passes cleanly at `Ubuntu 11`, where "Wallpaper" really does fit
+inside 100px, and fails at 16 and 24. Anything sized from a constant now comes
+from `Cfg.fontPixelSize` instead, which is what `FormRow` and `Picker` were
+already doing.
+
+Two things about how it measures, both learned the hard way. The accent
+tolerance is tight (14, not 30) because white text on a dark tab is subpixel
+antialiased and its blue fringe lands within 30 of the accent on every channel
+— a loose match reported the far edge of the *next* tab's label as this tab's
+right edge. And the pill is measured on the row carrying the **most** accent,
+not the middle row: the middle row runs straight through the label, so the fill
+is interrupted by every glyph and the longest unbroken run is the space between
+two letters.
 
 It also drives a **stub plugin** over the real stdin/stdout protocol, because
 the bar's half of that protocol was never wired up: the popover raised

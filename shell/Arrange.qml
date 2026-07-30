@@ -58,12 +58,17 @@ Item {
             property int lx: modelData.x
             property int ly: modelData.y
 
+            // Inset by a pixel on every side. Outputs are drawn at their exact
+            // layout coordinates, so two monitors that are flush -- which is
+            // what the snap on release deliberately produces -- shared an edge
+            // and rendered as one undifferentiated block. The gap is the only
+            // thing that says "these are two screens".
             x: (lx - root.bounds.x) * root.zoom
-               + (root.width - root.bounds.w * root.zoom) / 2
+               + (root.width - root.bounds.w * root.zoom) / 2 + 1
             y: (ly - root.bounds.y) * root.zoom
-               + (root.height - root.bounds.h * root.zoom) / 2
-            width: modelData.width * root.zoom
-            height: modelData.height * root.zoom
+               + (root.height - root.bounds.h * root.zoom) / 2 + 1
+            width: Math.max(1, modelData.width * root.zoom - 2)
+            height: Math.max(1, modelData.height * root.zoom - 2)
 
             radius: 3
             color: modelData.name === root.selected
@@ -73,6 +78,16 @@ Item {
 
             Text {
                 anchors.centerIn: parent
+                // The canvas is a fraction of real size, so a 1920px-wide
+                // output can land at ~120px here and an output name is longer
+                // than that at any font. Elide rather than overflow -- and
+                // below the width where an ellipsis still says something,
+                // drop the label entirely: "H…" identifies nothing, while the
+                // selection highlight and the tile's own shape already do.
+                width: Math.max(0, parent.width - 8)
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
+                visible: parent.width >= Cfg.fontPixelSize * 3
                 text: tile.modelData.name
                 color: tile.modelData.name === root.selected ? Cfg.focusFg : Cfg.fg
                 font.family: Cfg.fontFamily

@@ -36,6 +36,11 @@ Item {
         y: root.control && root.control.implicitHeight > root.rowHeight
             ? Math.round((root.rowHeight - height) / 2)
             : Math.round((root.height - height) / 2)
+        // Stops at the label column. labelWidth is generous but it is still a
+        // fixed reservation, and a label that outgrows it used to run straight
+        // under the control sitting at x == labelWidth.
+        width: Math.min(implicitWidth, root.labelWidth - 8)
+        elide: Text.ElideRight
         text: root.label
         color: Cfg.fg
         font.family: Cfg.fontFamily
