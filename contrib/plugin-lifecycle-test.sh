@@ -86,45 +86,19 @@ for p in nordvpn discord medication; do
 	check_plugin "$p"
 done
 
-# The daemon guard. asteroidz-bar-discord spawns discord-voiced when it cannot
-# reach the socket, which is right -- but it did so even when a socket FILE was
-# already present, and a second daemon cannot bind a path that is taken. It just
-# sits there. Sixteen were found, the socket dated to the first one and never
-# replaced, fifteen accumulated over one afternoon of bar restarts.
-echo
-echo "=== discord does not pile up daemons behind an existing socket ==="
-DAEMON_COUNT_BEFORE=$(pgrep -c -f 'discord-voiced' 2>/dev/null || echo 0)
-FAKE_RUNTIME="$WORK/runtime"
-mkdir -p "$FAKE_RUNTIME"
-# A socket file that nothing is listening on: exactly the wedged/stale case.
-python3 -c "
-import socket, sys
-s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-s.bind(sys.argv[1])
-" "$FAKE_RUNTIME/discord-voiced.sock"
-[ -S "$FAKE_RUNTIME/discord-voiced.sock" ] \
-	&& ok "a dead socket file is in place for the plugin to find" \
-	|| bad "a dead socket file is in place for the plugin to find"
-
-fifo="$WORK/dg.in"
-mkfifo "$fifo"
-( exec 9>"$fifo"; sleep 12 ) &
-holder=$!
-XDG_RUNTIME_DIR="$FAKE_RUNTIME" "$HERE/plugins/asteroidz-bar-discord" \
-	< "$fifo" > "$WORK/dg.out" 2> "$WORK/dg.err" &
-dpid=$!
-sleep 5
-DAEMON_COUNT_AFTER=$(pgrep -c -f 'discord-voiced' 2>/dev/null || echo 0)
-kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
-sleep 1
-kill -0 "$dpid" 2>/dev/null && kill -KILL "$dpid" 2>/dev/null
-wait "$dpid" 2>/dev/null
-
-if [ "$DAEMON_COUNT_AFTER" -le "$DAEMON_COUNT_BEFORE" ]; then
-	ok "no daemon spawned behind a dead socket ($DAEMON_COUNT_BEFORE -> $DAEMON_COUNT_AFTER)"
-else
-	bad "no daemon spawned behind a dead socket ($DAEMON_COUNT_BEFORE -> $DAEMON_COUNT_AFTER)"
-fi
+# NOT tested here: the daemon.
+#
+# An assertion that the plugin declines to spawn discord-voiced when a socket
+# file already exists was written, passed, and was wrong. It came from finding
+# 16 discord-voiced processes and concluding the plugin was piling them up --
+# but thirteen were bound to /tmp/asteroidz-hl-*/xdg/discord-voiced.sock, litter
+# from headless test runs with their own XDG_RUNTIME_DIR, and one was left by
+# THIS test's own pre-fix run. And discord-voiced unlinks a stale socket and
+# rebinds it, so "a socket file exists" is the case where spawning is the
+# correct recovery. The guard was reverted; see spawn_daemon().
+#
+# The lesson is about the test, not the daemon: a process census on a machine
+# that has been running headless tests all day is mostly a census of the tests.
 
 echo
 echo "$PASS passed, $FAIL failed"

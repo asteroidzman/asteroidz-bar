@@ -323,9 +323,7 @@ def exit_with_the_bar():
 
     A continuous plugin's stdin is a pipe from the bar, so EOF is unambiguous.
     Without this the process runs for ever -- 27 plugin processes were found
-    from five previous bar sessions, the oldest a day old, and because THIS one
-    spawns a daemon on startup each survivor also left a discord-voiced behind
-    (16 of those).
+    from five previous bar sessions, the oldest a day old.
 
     Nothing notices on its own: the obvious backstop, BrokenPipeError from a
     write to the closed stdout, never fires because emit() DEDUPLICATES and a
@@ -338,7 +336,9 @@ def exit_with_the_bar():
     The daemon is deliberately NOT killed here. It holds a live voice
     connection, is started with start_new_session=True precisely so it outlives
     the plugin, and can be stopped from the menu. Taking someone off a call
-    because their bar restarted would be much worse than a stray process.
+    because their bar restarted would be much worse than a stray process, and
+    the plugin has no way to know whether the daemon it finds is the one it
+    started.
     """
     os._exit(0)
 
@@ -350,23 +350,26 @@ def spawn_daemon(spawned=[False], force=False):
     does not have it installed. Once is enough: if it dies later the pill goes
     offline and stays there, which is at least predictable and visible.
 
-    And not at all when a socket is already there.
-    ------------------------------------------------
-    main() only calls this after a FAILED connect, which reads as "no daemon" --
-    but a socket file that exists and will not accept a connection means
-    something else entirely: a wedged daemon, or a stale file left by one that
-    died badly. Another process cannot help with either. It cannot bind, because
-    the path is taken, so it sits there doing nothing at all.
+    Do NOT add "and not when a socket file already exists".
+    ------------------------------------------------------
+    That was tried, on the strength of finding 16 discord-voiced processes with
+    the socket file dated to the first of them. The reasoning was that a second
+    daemon cannot bind a path that is taken, so it must be sitting there doing
+    nothing.
 
-    Which is exactly what was found: 16 discord-voiced processes, the socket
-    file dated to the FIRST one and never replaced, fifteen of them accumulated
-    over one afternoon of bar restarts against a socket none of them could take.
+    Both halves were wrong. Thirteen of those 16 were bound to
+    /tmp/asteroidz-hl-*/xdg/discord-voiced.sock -- litter from headless test
+    runs, each with its own XDG_RUNTIME_DIR, nothing to do with this plugin
+    leaking. And discord-voiced UNLINKS a stale socket and rebinds it: the one
+    remaining stray was listening on exactly the path a test had bind()ed and
+    abandoned.
 
-    `force` still overrides, so "Start daemon" in the menu does what it says.
+    So a socket file present with nothing behind it is the case where spawning
+    is the correct recovery, and refusing to spawn leaves the pill offline until
+    someone forces it from the menu. main() already only reaches here after a
+    connect FAILED, which is the right condition on its own.
     """
     if (spawned[0] and not force) or not DAEMON or not os.access(DAEMON, os.X_OK):
-        return
-    if not force and os.path.exists(SOCKET):
         return
     spawned[0] = True
     try:

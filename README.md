@@ -249,19 +249,28 @@ have caught it, and don't:
   out. A plugin with a stable VPN state can poll for a day without emitting a
   byte.
 
-There was a second-order leak behind it. `asteroidz-bar-discord` spawns
-`discord-voiced` when it cannot reach the socket, deliberately detached
-(`start_new_session=True`) so it outlives the plugin — right, because it holds a
-live voice connection. But it spawned one even when a socket **file** was
-already present, and a second daemon cannot bind a path that is taken, so it sat
-there doing nothing. 16 were found, the socket dated to the first one and never
-replaced. `spawn_daemon` now declines when a socket exists unless forced, so
-"Start daemon" in the menu still works. The plugin does **not** kill the daemon
-on exit: taking someone off a call because their bar restarted would be far
-worse than a stray process.
+A correction worth keeping, because the wrong version of it was committed
+first. 16 `discord-voiced` daemons were also found, and read as a second-order
+leak: `asteroidz-bar-discord` spawns the daemon and detaches it
+(`start_new_session=True`, deliberately -- it holds a live voice connection), so
+every orphaned plugin looked like it had left one behind. A guard was added
+declining to spawn when a socket file already existed.
+
+Both halves of that were wrong. **Thirteen of the 16 were bound to
+`/tmp/asteroidz-hl-*/xdg/discord-voiced.sock`** -- litter from headless test
+runs, each with its own `XDG_RUNTIME_DIR`, nothing to do with the bar. One more
+was left by the lifecycle test's own pre-fix run. And `discord-voiced` **unlinks
+a stale socket and rebinds it**: the stray was listening on exactly the path a
+test had `bind()`ed and abandoned. So "a socket file exists" is the case where
+spawning is the correct *recovery*, and the guard broke it. Reverted; see
+`spawn_daemon()`, which now says so at length.
+
+The transferable lesson is about measurement, not about Discord: **a process
+census on a machine that has been running headless tests all day is mostly a
+census of the tests.** Socket paths distinguished them; process names did not.
 
 `contrib/plugin-lifecycle-test.sh` pins all of it with a pipe and no compositor.
 It asserts each plugin *stays up while stdin is open* as well as exiting when it
 closes — a plugin that died immediately would pass a naive "did it die" check.
-Against the old code all three survive stdin closing, and the daemon count goes
-up by one.
+Against the old code all three survive stdin closing; with the fix all three are
+gone within 200ms.
