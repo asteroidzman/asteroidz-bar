@@ -32,15 +32,54 @@ Rectangle {
             w.keyTarget = input;
     }
 
-    implicitHeight: 24
+    // Whether keystrokes will land HERE.
+    //
+    // Not `input.focus` and not `input.activeFocus`, though both are tempting.
+    // This is the signal that actually decides: Bar.qml forwards keys to
+    // whatever the popover names as its keyTarget, so being that target IS being
+    // focused, and anything else would be a highlight that lies. activeFocus in
+    // particular is unreliable here -- it additionally requires the popup's
+    // window to be active, which it is not in any dependable way, because the
+    // bar holds the keyboard.
+    //
+    // A field with no affordance was reported as "you can type stuff in but it
+    // is not clear you're actually focused on the field", which is the whole
+    // problem: the caret TextInput draws by itself is tied to activeFocus, so it
+    // came and went for reasons having nothing to do with where the keys were
+    // going.
+    readonly property bool keysHere: {
+        const w = QsWindow.window;
+        return w !== null && w.keyTarget === input;
+    }
+
+    // What the value was when this field last became focused, or was last
+    // committed. Only used to decide whether the "press Enter" hint is showing,
+    // so it does not have to survive an external update exactly.
+    //
+    // NOT called `baseline`: Item already declares that as FINAL (it is an
+    // anchor line), and QML rejects the whole type with "Cannot override FINAL
+    // property" -- which surfaces as the BAR failing to load, four levels of
+    // "Type X unavailable" away from the actual line.
+    property string lastCommitted: ""
+    readonly property bool dirty: keysHere && input.text !== lastCommitted
+
+    onKeysHereChanged: if (keysHere) lastCommitted = input.text
+
+    implicitHeight: Math.max(24, Math.round(Cfg.fontPixelSize * 1.35))
     radius: Cfg.themeRadius
-    color: Qt.rgba(1, 1, 1, 0.06)
+    color: keysHere ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
+
+    // The accent outline is the unambiguous part. The fill lifting from 6% to
+    // 12% alone is too subtle to read as a state, and on a light theme it is
+    // nearly invisible.
+    border.width: keysHere ? 2 : 0
+    border.color: Cfg.focusBg
 
     TextInput {
         id: input
         anchors.fill: parent
         anchors.leftMargin: 6
-        anchors.rightMargin: 6
+        anchors.rightMargin: enterHint.visible ? enterHint.width + 10 : 6
         verticalAlignment: TextInput.AlignVCenter
         color: Cfg.fg
         font.family: Cfg.fontFamily
@@ -48,19 +87,53 @@ Rectangle {
         font.hintingPreference: Font.PreferFullHinting
         selectByMouse: true
         clip: true
-        onAccepted: root.committed(text)
+
+        onAccepted: {
+            root.lastCommitted = text;
+            root.committed(text);
+        }
 
         // `focus`, not `activeFocus`. activeFocus additionally requires the
         // item's WINDOW to be active, which this popup's is not in any reliable
         // way -- the bar holds the keyboard. Qt still tracks focus within the
         // popup's own scope and a click sets it, which is the signal wanted.
         onFocusChanged: if (focus) root.claimKeys()
+
+        // Forced on rather than left to TextInput.
+        //
+        // Its own caret is bound to activeFocus, which here is decided by
+        // whether the POPUP's window is active -- nothing to do with where the
+        // keys are actually going. So the caret appeared and vanished for
+        // unrelated reasons, and a field you were typing into often had none.
+        cursorVisible: root.keysHere
+    }
+
+    // "There is an uncommitted edit in here, and Enter is what applies it."
+    //
+    // The two fields in the wallpaper tab apply on Enter and nothing said so --
+    // reported alongside the missing focus highlight. Shown only while focused
+    // AND changed, so it is an instruction at the moment it is actionable rather
+    // than decoration that is always there.
+    Text {
+        id: enterHint
+        anchors.right: parent.right
+        anchors.rightMargin: 6
+        anchors.verticalCenter: parent.verticalCenter
+        visible: root.dirty
+        text: "⏎"
+        color: Cfg.focusBg
+        font.family: Cfg.fontFamily
+        font.pointSize: Cfg.fontSize
+        font.hintingPreference: Font.PreferFullHinting
     }
 
     Text {
         anchors.fill: input
         verticalAlignment: Text.AlignVCenter
-        visible: input.text === "" && !input.activeFocus
+        // keysHere, not activeFocus: the placeholder has to disappear when the
+        // field is the one taking keys, on the same terms as everything else
+        // here.
+        visible: input.text === "" && !root.keysHere
         text: root.placeholder
         color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.4)
         font: input.font

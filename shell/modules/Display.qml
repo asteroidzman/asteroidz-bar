@@ -431,8 +431,13 @@ Pill {
                             anchors.rightMargin: Cfg.spacing
                             anchors.verticalCenter: parent.verticalCenter
                             elide: Text.ElideRight
+                            // "no changes" alone did not say that changes WAIT
+                            // here, which is the difference between this tab and
+                            // the wallpaper one. It matters most when nothing is
+                            // staged, which is exactly when the old text was
+                            // least informative.
                             text: panel.pendingCount === 0
-                                ? "no changes"
+                                ? "Changes wait for Apply"
                                 : panel.pendingCount + " change"
                                   + (panel.pendingCount === 1 ? "" : "s")
                                   + " pending"
@@ -578,6 +583,39 @@ Pill {
                             TapHandler {
                                 onTapped: Wallpaper.setKey("wallpaper", modelData)
                             }
+                        }
+                    }
+
+                    // Says which model this tab is in, because the tab beside it
+                    // is in the opposite one.
+                    //
+                    // The Display tab stages every edit behind Apply/Revert --
+                    // it has to, because passing THROUGH a resolution on the way
+                    // to the one you wanted would mode-set to each, and a mode
+                    // set is a black screen for a moment. Nothing here is
+                    // disruptive or slow, so these apply as you make them, which
+                    // is also the only way picking a wallpaper could work: you
+                    // choose it by seeing it.
+                    //
+                    // Two opposite models in one panel is fine. Two opposite
+                    // models with nothing saying which is which is not, and was
+                    // reported as "there is no apply button so it's not clear
+                    // how to apply the settings".
+                    Item {
+                        width: parent.width
+                        height: Math.max(26, Math.round(Cfg.fontPixelSize * 1.4))
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            elide: Text.ElideRight
+                            text: "Applied as you change them · \u23ce in a field to apply it"
+                            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b,
+                                           Cfg.fg.a * 0.55)
+                            font.family: Cfg.fontFamily
+                            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                            font.hintingPreference: Font.PreferFullHinting
                         }
                     }
                 }

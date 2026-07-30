@@ -479,6 +479,38 @@ for k in Q Q Q; do "$HL_WLVKBD" press "$k" >/dev/null 2>&1; sleep 0.3; done
 sleep 0.5
 shot wp_typed
 
+# The field has to LOOK focused. "You can type stuff in but it is not clear
+# you're actually focused on the field" was reported separately from the keys not
+# arriving, and it is a different bug: TextInput draws its own caret from
+# activeFocus, which here depends on whether the POPUP's window is active and so
+# has nothing to do with where keys are going. Field now draws an accent outline
+# and forces the caret on, both keyed to being the popover's keyTarget -- the one
+# signal that actually decides.
+#
+# Measured as accent pixels gained in the panel, which is what an outline is.
+FOCUS_ACCENT="$(python3 - "$WORK/wp_tab.png" "$WORK/wp_focus.png" "${ACCENT:-#000000}" "$WL" "$WT" "$WR" "$WB" <<'__PY__'
+import sys
+from PIL import Image
+a = Image.open(sys.argv[1]).convert("RGB").load()
+b = Image.open(sys.argv[2]).convert("RGB").load()
+acc = sys.argv[3].lstrip("#")
+l, t, r, bo = (int(v) for v in sys.argv[4:8])
+if len(acc) != 6:
+    print(0); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+def near(c, tol=20):
+    return all(abs(x - y) <= tol for x, y in zip(c, want))
+before = sum(1 for y in range(t, bo) for x in range(l, r) if near(a[x, y]))
+after = sum(1 for y in range(t, bo) for x in range(l, r) if near(b[x, y]))
+print(after - before)
+__PY__
+)"
+if [ "${FOCUS_ACCENT:-0}" -gt 100 ]; then
+	ok "a focused field is outlined in the accent (+${FOCUS_ACCENT}px)"
+else
+	bad "a focused field is outlined in the accent (+${FOCUS_ACCENT}px)"
+fi
+
 TYPED_DIFF="$(python3 - "$WORK/wp_focus.png" "$WORK/wp_typed.png" "$WL" "$WT" "$WR" "$WB" <<'__PY__'
 import sys
 from PIL import Image

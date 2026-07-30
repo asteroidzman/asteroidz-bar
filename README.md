@@ -131,6 +131,27 @@ step short. Walking it looked right, compiled, ran, and set nothing: the keys
 arrived at the bar with `keyTarget` still `null`. Only instrumenting both ends
 showed it, and it is why the first attempted fix changed no behaviour at all.
 
+A field also has to **look** focused, which is a separate bug from the keys not
+arriving and was reported separately: "you can type stuff in but it is not clear
+that you're actually focused on the field". `TextInput` draws its own caret from
+`activeFocus`, which here depends on whether the *popup's* window is active — so
+it appeared and vanished for reasons having nothing to do with where the keys
+were going. `Field` now draws an accent outline, brightens its fill, and forces
+the caret on, all keyed to `keysHere` — being the popover's `keyTarget`, which is
+the one signal that actually decides. A `⏎` appears at the right edge while the
+field is focused *and* changed, so the instruction shows up exactly when it is
+actionable.
+
+And the two tabs are in **opposite models**, which nothing used to say. The
+Display tab stages everything behind Apply/Revert — it has to, because passing
+*through* a resolution on the way to the one you wanted would mode-set to each,
+and a mode set is a black screen for a moment. The Wallpaper tab applies as you
+go, which is the only way picking a wallpaper can work: you choose it by seeing
+it. So each tab now states its own model — "Changes wait for Apply" against
+"Applied as you change them · ⏎ in a field to apply it" — because two opposite
+models in one panel is fine and two opposite models with nothing saying which is
+which is not.
+
 Two things about the test. It finds the second tab **by colour** — the selected
 tab is the topmost accent block, so the other one is just past its right edge —
 because guessing an offset from `panel_box` put the click above the panel in one
