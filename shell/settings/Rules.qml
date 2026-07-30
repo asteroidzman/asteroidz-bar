@@ -137,11 +137,64 @@ Singleton {
         return out;
     }
 
+    // The distinct values a matcher could take from the windows open right now.
+    //
+    // A rule editor that only offers a text box is asking you to know the app id
+    // of a window you are looking at -- which is not shown anywhere, and is
+    // `org.mozilla.firefox` rather than "Firefox". The compositor already reports
+    // it for every client.
+    //
+    // Anchored, because these are REGEXES. `^kitty$` is what you mean when you
+    // pick kitty from a list; bare `kitty` would also match `kitty-dropdown` and
+    // anything else containing it, which is a rule that quietly applies to more
+    // than you chose. Regex metacharacters in the value are escaped for the same
+    // reason -- a `.` in an app id is a wildcard otherwise.
+    function windowValuesFor(key) {
+        void Compositor.generation;
+        const seen = {};
+        const out = [];
+        for (const c of Compositor.clients) {
+            const raw = key === "title" ? (c.title || "") : (c.appid || "");
+            if (raw === "")
+                continue;
+            const v = "^" + raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$";
+            if (seen[v])
+                continue;
+            seen[v] = true;
+            out.push(v);
+        }
+        return out;
+    }
+
+    // What to show for one of those, since an anchored escaped regex is not what
+    // a person recognises.
+    function windowLabelFor(key, value) {
+        return value.replace(/^\^/, "").replace(/\$$/, "").replace(/\\(.)/g, "$1");
+    }
+
     function bindTitle(bind) {
         let t = bind.action;
         if (bind.args && bind.args.length)
             t += " " + bind.args.join(" ");
         return t;
+    }
+
+    // What else is already bound to this chord, ignoring `exceptIndex`.
+    //
+    // Worth surfacing because the compositor says nothing: bindings are scanned
+    // in order and the last match wins, so a duplicate does not fail -- the older
+    // one simply stops working, at the next reload, with no message anywhere.
+    // Mode matters: the same chord in two keymodes is not a clash.
+    function bindsFor(chord, exceptIndex) {
+        void generation;
+        const hits = [];
+        for (const b of binds) {
+            if (b.index === exceptIndex || b.chord !== chord)
+                continue;
+            hits.push(bindTitle(b)
+                      + (b.mode && b.mode !== "default" ? " (" + b.mode + ")" : ""));
+        }
+        return hits.join(", ");
     }
 
     function bindFlagSummary(bind) {

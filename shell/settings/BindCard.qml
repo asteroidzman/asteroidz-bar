@@ -68,6 +68,40 @@ Rectangle {
         dirty = true;
     }
 
+    // ── capture ─────────────────────────────────────────────────────────────
+    property bool capturing: false
+    property string captureNote: ""
+    property bool captureBad: false
+
+    function startCapture() {
+        if (capturing)
+            return;
+        capturing = true;
+        captureNote = "";
+        captureBad = false;
+        Ipc.request("capture-chord", reply => {
+            root.capturing = false;
+            if (reply && reply.ok === true) {
+                root.chord = reply.chord;
+                root.dirty = true;
+                // Said out loud, because a chord that is already taken will
+                // simply stop doing its old job once this is saved -- the
+                // compositor takes the LAST matching bind and says nothing.
+                const clash = Rules.bindsFor(reply.chord, root.index);
+                root.captureNote = clash === ""
+                    ? ""
+                    : "Already bound to " + clash + " — saving this will shadow it.";
+                root.captureBad = clash !== "";
+            } else if (reply && reply.error === "cancelled") {
+                root.captureNote = "";
+            } else {
+                root.captureNote = reply && reply.detail
+                    ? reply.detail : "capture failed";
+                root.captureBad = true;
+            }
+        });
+    }
+
     width: parent ? parent.width : 0
     implicitHeight: body.implicitHeight + 2 * Cfg.spacing
     radius: Cfg.themeRadius
@@ -214,16 +248,58 @@ Rectangle {
                 }
             }
 
+            // The chord, typed or PRESSED.
+            //
+            // Capturing has to happen in the compositor, not here: it takes
+            // bindings before the focused surface sees them, so a window reading
+            // its own key events would receive everything except the
+            // combinations that are already bound -- exactly the ones you reach
+            // for when rebinding. `capture-chord` is a deferred reply: the
+            // request goes out, nothing comes back, and the answer arrives when
+            // a key is pressed.
             LabeledRow {
                 rowLabel: "Chord"
-                content: Field {
+                content: Item {
                     width: parent.width
-                    value: root.chord
-                    enabled: root.editable
-                    opacity: root.editable ? 1.0 : 0.4
-                    placeholder: "Super+Shift+Q"
-                    onCommitted: v => { root.chord = v; root.dirty = true; }
+                    implicitHeight: chordField.implicitHeight
+
+                    Field {
+                        id: chordField
+                        anchors.left: parent.left
+                        anchors.right: captureBtn.left
+                        anchors.rightMargin: Cfg.spacing
+                        anchors.verticalCenter: parent.verticalCenter
+                        value: root.chord
+                        enabled: root.editable && !root.capturing
+                        opacity: (root.editable && !root.capturing) ? 1.0 : 0.4
+                        placeholder: root.capturing ? "" : "Super+Shift+Q"
+                        onCommitted: v => { root.chord = v; root.dirty = true; }
+                    }
+
+                    SmallButton {
+                        id: captureBtn
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: root.editable
+                        label: root.capturing ? "Press a key…" : "Capture"
+                        active: root.capturing
+                        onClicked: root.startCapture()
+                    }
                 }
+            }
+
+            Text {
+                width: parent.width
+                visible: root.capturing || root.captureNote !== ""
+                wrapMode: Text.WordWrap
+                text: root.capturing
+                    ? "Press the combination now. Escape cancels. Every key goes "
+                      + "to this capture, so a shortcut you press will not run."
+                    : root.captureNote
+                color: root.captureBad ? Cfg.urgent : Cfg.focusBg
+                font.family: Cfg.fontFamily
+                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                font.hintingPreference: Font.PreferFullHinting
             }
 
             LabeledRow {

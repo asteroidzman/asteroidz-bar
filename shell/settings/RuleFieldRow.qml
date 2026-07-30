@@ -33,15 +33,34 @@ Item {
         Math.max(Math.round(Cfg.fontPixelSize * 8),
                  Math.round(root.width * 0.42))
 
-    implicitHeight: Math.max(control.implicitHeight,
-                             Math.round(Cfg.fontPixelSize * 1.5))
+    // A matcher gets a second line: the windows open right now.
+    readonly property bool offersWindows:
+        field.type === "match" && editable
+        && (field.key === "appid" || field.key === "title")
+
+    // The first line, so the label and its control stay level with each other
+    // when a second line is added below. Centring them in the WHOLE row instead
+    // would drop them halfway down once the window picker appears.
+    readonly property int lineHeight:
+        Math.max(control.implicitHeight, Math.round(Cfg.fontPixelSize * 1.5))
+
+    implicitHeight: lineHeight
+                    + (offersWindows ? fromWindows.implicitHeight + 2 : 0)
+
+    Item {
+        id: line
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: root.lineHeight
+    }
 
     Text {
         id: label
         anchors.left: parent.left
         anchors.right: control.left
         anchors.rightMargin: Cfg.spacing
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenter: line.verticalCenter
         elide: Text.ElideRight
         text: root.field.label
         color: Cfg.fg
@@ -55,7 +74,7 @@ Item {
         id: control
         anchors.right: dropBtn.left
         anchors.rightMargin: Cfg.spacing
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenter: line.verticalCenter
         width: root.controlWidth
         sourceComponent: {
             const t = root.field.type;
@@ -69,10 +88,41 @@ Item {
     SmallButton {
         id: dropBtn
         anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenter: line.verticalCenter
         visible: root.editable
         label: "×"
         onClicked: root.dropped()
+    }
+
+    // Pick a matcher off a window that is open.
+    //
+    // The same inline-picker idiom as "Add a field…" in the rule card, and the
+    // same reason: a dropdown that opens as a popup inside a scrolling pane is a
+    // second surface with its own dismiss rules, where expanding in place just
+    // grows the row.
+    Picker {
+        id: fromWindows
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: line.bottom
+        anchors.topMargin: 2
+        visible: root.offersWindows
+        z: 4
+        maxRows: 6
+        values: {
+            const out = ["From an open window…"];
+            for (const v of Rules.windowValuesFor(root.field.key))
+                out.push(Rules.windowLabelFor(root.field.key, v));
+            return out;
+        }
+        current: "From an open window…"
+        onPicked: v => {
+            for (const val of Rules.windowValuesFor(root.field.key))
+                if (Rules.windowLabelFor(root.field.key, val) === v) {
+                    root.changed(val);
+                    return;
+                }
+        }
     }
 
     Component {

@@ -137,11 +137,49 @@ compositor refuses an unknown action too; the picker is so you never reach that
 refusal. Argument boxes carry the argument's kind (`tag-index`, `direction`) as
 their placeholder, from the same schema.
 
+**Capture** beside the chord field presses the keys for you. It goes through the
+compositor's `capture-chord`, not through Qt key events, and that is not an
+implementation detail: the compositor takes bindings *before* the focused surface
+sees them, so a window reading its own keys would receive everything except the
+combinations already bound — which is exactly what you press when rebinding. The
+captured chord is swallowed, so capturing `Super+Q` does not also close this
+window, and the card says so while it waits. If the chord is already bound
+elsewhere the card says that too, because the compositor will not: bindings are
+scanned in order and the last match wins, so a duplicate does not fail, the older
+one just quietly stops working.
+
+**Matchers offer the windows that are open.** An app id is not shown anywhere in
+a normal desktop and is `org.mozilla.firefox` rather than "Firefox", so the rule
+editor lists what `get all-clients` reports. Picked values are **anchored and
+escaped** — `^kitty$`, not `kitty` — because these are regexes: bare `kitty` would
+also match `kitty-dropdown`, and an unescaped `.` in an app id is a wildcard.
+
 Binds that cannot be rewritten — the legacy `bind=` line form — are listed and
 greyed rather than hidden. And `axisbind`, `switchbind` and `gesturebind` have no
 KDL block form at all, so they are named at the foot of the list: a bind list with
 no note would be quietly claiming they do not exist, and someone tidying their
 binds through this window would lose them.
+
+### Its icon
+
+The window carries the asteroidz ship through `xdg-toplevel-icon-v1`, so anything
+that lists windows shows it rather than a generic square.
+
+That protocol carries an icon **name** and a set of pixel buffers, and asteroidz
+records only the name — so the icon has to be a *theme* entry, which is why the
+package installs the ship a second time as
+`share/icons/hicolor/scalable/apps/asteroidz-settings.svg`. Building a `QIcon`
+from a file path instead sends buffers, looks entirely correct from this side, and
+leaves `get all-clients` reporting `"icon": ""`. That is how the first version
+behaved.
+
+It is therefore the packaged ship in its own colours, not the accent-recoloured
+copy `Logo.qml` writes for the bar: recolouring produces a *file*, and a file
+cannot travel down a channel that carries a name.
+
+QML cannot set a window icon at all — QtQuick's `Window` has no `icon` property
+and quickshell's window types do not add one — so this goes through a
+`WindowIcon` singleton in the C++ plugin, alongside `Backdrop` and `Paths`.
 
 ### Opening it floating
 

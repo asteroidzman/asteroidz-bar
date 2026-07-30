@@ -28,6 +28,7 @@
 
 import Quickshell
 import QtQuick
+import Asteroidz.Bar
 import "."
 import ".."
 
@@ -323,6 +324,23 @@ FloatingWindow {
         else
             discardPending();
     }
+
+    // The ship, as this window's icon.
+    //
+    // Wayland's only mechanism is xdg-toplevel-icon-v1, which Qt drives from
+    // QGuiApplication::setWindowIcon -- unreachable from QML, hence the
+    // WindowIcon helper in the plugin.
+    //
+    // A theme NAME, not Logo.source. The protocol carries both a name and pixel
+    // buffers and asteroidz records only the name, so an icon built from a file
+    // path arrives as buffers and is dropped -- `get all-clients` reported
+    // `"icon": ""` for a window that looked correctly iconified from this side.
+    // The package installs the ship as `asteroidz-settings` in hicolor for this.
+    //
+    // It is therefore the packaged ship rather than the accent-recoloured copy
+    // Logo.qml writes: recolouring produces a FILE, and a file cannot travel down
+    // a channel that carries a name.
+    Component.onCompleted: WindowIcon.set("asteroidz-settings")
 
     // ── layout ──────────────────────────────────────────────────────────────
 

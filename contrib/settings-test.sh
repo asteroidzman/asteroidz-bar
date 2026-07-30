@@ -232,6 +232,20 @@ else
 	bad "it has a usable size (${WW}x${WH} at ${WX},${WY})"
 fi
 
+# The window icon, through xdg-toplevel-icon-v1.
+#
+# Asserted from the COMPOSITOR's side, which is the only place the difference
+# shows: the protocol carries an icon name and a set of pixel buffers, asteroidz
+# records only the name, and a QIcon built from a file path has no name -- so the
+# first version of this sent buffers, looked entirely correct from the shell, and
+# left `get all-clients` reporting an empty string.
+WIN_ICON="$(printf '%s' "$WIN" | jq -r '.icon // ""')"
+if [ "$WIN_ICON" = "asteroidz-settings" ]; then
+	ok "the window carries the ship as its icon name ($WIN_ICON)"
+else
+	bad "the window carries the ship as its icon name (got '$WIN_ICON')"
+fi
+
 # ── 2. it is populated ──────────────────────────────────────────────────────
 #
 # Ink, not a row count. Ninety-five options with an explanation each is a lot of

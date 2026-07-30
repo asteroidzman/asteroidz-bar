@@ -120,7 +120,7 @@ qt6 = import('qt6')
 qt6_dep = dependency('qt6', modules: ['Core', 'Gui', 'Qml'])
 
 plugin_moc = qt6.preprocess(
-	moc_headers: ['plugin/wallpaper.hpp', 'plugin/paths.hpp'],
+	moc_headers: ['plugin/wallpaper.hpp', 'plugin/paths.hpp', 'plugin/windowicon.hpp'],
 	# plugin.cpp declares its class in the .cpp and ends with
 	# `#include "plugin.moc"`, which is the form moc expects for a type that
 	# has no header of its own.
@@ -134,6 +134,7 @@ shared_module(
 		'plugin/plugin.cpp',
 		'plugin/wallpaper.cpp',
 		'plugin/paths.cpp',
+		'plugin/windowicon.cpp',
 		plugin_moc,
 	],
 	dependencies: [qt6_dep, asteroidzbg_dep],
@@ -146,6 +147,7 @@ shared_module(
 )
 
 install_data('plugin/qmldir', install_dir: qmlplugindir)
+
 
 # The plugins.
 #

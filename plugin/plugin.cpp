@@ -16,6 +16,7 @@
 #include <QtQml/qqml.h>
 
 #include "paths.hpp"
+#include "windowicon.hpp"
 #include "wallpaper.hpp"
 
 class AsteroidzBarPlugin: public QQmlExtensionPlugin {
@@ -35,6 +36,16 @@ public:
 		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
 			    Q_UNUSED(engine);
 			    return new Paths();
+		    }
+		);
+		qmlRegisterSingletonType<WindowIcon>(
+		    uri,
+		    1,
+		    0,
+		    "WindowIcon",
+		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
+			    Q_UNUSED(engine);
+			    return new WindowIcon();
 		    }
 		);
 	}
