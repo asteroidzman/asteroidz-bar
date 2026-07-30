@@ -315,6 +315,32 @@ def reader(st):
             act(st, v)
             # Close the panel; the daemon's next status event redraws the pill.
             emit({"menu": {"item": "", "rows": []}}, menu_ok=True)
+    exit_with_the_bar()
+
+
+def exit_with_the_bar():
+    """stdin closed: the bar is gone, so stop.
+
+    A continuous plugin's stdin is a pipe from the bar, so EOF is unambiguous.
+    Without this the process runs for ever -- 27 plugin processes were found
+    from five previous bar sessions, the oldest a day old, and because THIS one
+    spawns a daemon on startup each survivor also left a discord-voiced behind
+    (16 of those).
+
+    Nothing notices on its own: the obvious backstop, BrokenPipeError from a
+    write to the closed stdout, never fires because emit() DEDUPLICATES and a
+    plugin whose state has not changed writes nothing at all.
+
+    os._exit, not sys.exit: this runs on a daemon thread and sys.exit only
+    raises SystemExit in the calling thread, while main() blocks on its socket
+    read regardless.
+
+    The daemon is deliberately NOT killed here. It holds a live voice
+    connection, is started with start_new_session=True precisely so it outlives
+    the plugin, and can be stopped from the menu. Taking someone off a call
+    because their bar restarted would be much worse than a stray process.
+    """
+    os._exit(0)
 
 
 def spawn_daemon(spawned=[False], force=False):
@@ -323,8 +349,24 @@ def spawn_daemon(spawned=[False], force=False):
     A retry every few seconds would fork a process forever on a machine that
     does not have it installed. Once is enough: if it dies later the pill goes
     offline and stays there, which is at least predictable and visible.
+
+    And not at all when a socket is already there.
+    ------------------------------------------------
+    main() only calls this after a FAILED connect, which reads as "no daemon" --
+    but a socket file that exists and will not accept a connection means
+    something else entirely: a wedged daemon, or a stale file left by one that
+    died badly. Another process cannot help with either. It cannot bind, because
+    the path is taken, so it sits there doing nothing at all.
+
+    Which is exactly what was found: 16 discord-voiced processes, the socket
+    file dated to the FIRST one and never replaced, fifteen of them accumulated
+    over one afternoon of bar restarts against a socket none of them could take.
+
+    `force` still overrides, so "Start daemon" in the menu does what it says.
     """
     if (spawned[0] and not force) or not DAEMON or not os.access(DAEMON, os.X_OK):
+        return
+    if not force and os.path.exists(SOCKET):
         return
     spawned[0] = True
     try:

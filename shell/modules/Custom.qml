@@ -116,6 +116,25 @@ Pill {
             proc.write(JSON.stringify(obj) + "\n");
     }
 
+    // Stop the plugins when this module goes away.
+    //
+    // Belt to the plugins' own braces. They exit on stdin EOF now, which covers
+    // every way the bar can die including being killed outright -- but relying
+    // on the child to notice makes shutdown asynchronous, and a module that is
+    // being torn down while the shell keeps running (a config reload dropping a
+    // custom block) would otherwise leave a process attached to a pipe nobody
+    // reads.
+    //
+    // The leak this closes was real and quiet: 27 plugin processes across five
+    // previous bar sessions, the oldest a day old, still polling. Nothing killed
+    // them and nothing made them stop -- see exit_with_the_bar() in the plugins,
+    // and note that a write to the dead pipe never raised BrokenPipeError
+    // because emit() deduplicates and an unchanged plugin writes nothing at all.
+    Component.onDestruction: {
+        proc.running = false;
+        poll.running = false;
+    }
+
     Process {
         id: proc
         command: (root.plugin.exec || "").split(" ").filter(s => s.length > 0)

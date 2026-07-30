@@ -203,6 +203,28 @@ def emit(obj, last=[None]):
     sys.stdout.flush()
 
 
+def exit_with_the_bar():
+    """stdin closed: the bar is gone, so stop.
+
+    A continuous plugin's stdin is a pipe from the bar (Custom.qml sets
+    stdinEnabled only for this transport), so EOF means one thing and it is not
+    ambiguous. Without this the process polls for ever: 27 of them were found
+    running from five previous bar sessions, the oldest a day old, still asking
+    nordvpn for its status every few seconds.
+
+    Nothing notices on its own. The obvious backstop -- writing to a closed
+    stdout raises BrokenPipeError -- never fires, because emit() DEDUPLICATES:
+    a plugin whose state has not changed writes nothing at all, so it never
+    touches the broken pipe and never finds out.
+
+    os._exit, not sys.exit: this runs on a daemon thread, and sys.exit only
+    raises SystemExit in the thread that calls it. main() is asleep in
+    time.sleep() and would carry on regardless. Nothing needs flushing -- the
+    only thing stdout led to has just closed.
+    """
+    os._exit(0)
+
+
 def act(value):
     if value == "do:off":
         run(["nordvpn", "disconnect"], timeout=30)
@@ -241,6 +263,7 @@ def reader():
                 # In a thread: connecting takes seconds and the reader must stay
                 # responsive, or the menu that asked for it cannot be dismissed.
                 threading.Thread(target=act, args=(v,), daemon=True).start()
+    exit_with_the_bar()
 
 
 def main():

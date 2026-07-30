@@ -82,6 +82,8 @@ contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns
                            #   plugin menus, and staged-vs-applied display edits
 contrib/panel-layout-test.sh # the display panel's boxes fit the text in them,
                            #   at three font sizes
+contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
+                           #   (no compositor needed; runs in seconds)
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
 
@@ -224,3 +226,42 @@ supervise.
 The module is loaded from an import path the launcher sets, not installed into
 `/usr/lib/qt6/qml`: this package does not write into Qt's tree, and does not
 break when Qt is rebuilt.
+
+### Plugins have to die with the bar
+
+A continuous plugin's stdin is a pipe from the bar, so EOF on it means one
+thing. Each plugin calls `exit_with_the_bar()` when its reader loop ends, and
+`Custom.qml` stops its children on destruction as well.
+
+This was a real leak and a completely silent one. 27 plugin processes were found
+running across five previous bar sessions, the oldest a day old, still polling
+`nordvpn` and Discord every few seconds. Two things that look like they would
+have caught it, and don't:
+
+- The reader thread **does** see stdin close — `for line in sys.stdin` ends. But
+  it is a daemon thread, so its return means nothing, and `main()`'s
+  `while True: poll; emit; sleep` carried on regardless. `sys.exit` would not
+  help either: it raises `SystemExit` only in the calling thread. Hence
+  `os._exit`.
+- Writing to the closed stdout should raise `BrokenPipeError`. It never fires,
+  because `emit()` **deduplicates** — a plugin whose state has not changed
+  writes nothing at all, so it never touches the broken pipe and never finds
+  out. A plugin with a stable VPN state can poll for a day without emitting a
+  byte.
+
+There was a second-order leak behind it. `asteroidz-bar-discord` spawns
+`discord-voiced` when it cannot reach the socket, deliberately detached
+(`start_new_session=True`) so it outlives the plugin — right, because it holds a
+live voice connection. But it spawned one even when a socket **file** was
+already present, and a second daemon cannot bind a path that is taken, so it sat
+there doing nothing. 16 were found, the socket dated to the first one and never
+replaced. `spawn_daemon` now declines when a socket exists unless forced, so
+"Start daemon" in the menu still works. The plugin does **not** kill the daemon
+on exit: taking someone off a call because their bar restarted would be far
+worse than a stray process.
+
+`contrib/plugin-lifecycle-test.sh` pins all of it with a pipe and no compositor.
+It asserts each plugin *stays up while stdin is open* as well as exiting when it
+closes — a plugin that died immediately would pass a naive "did it die" check.
+Against the old code all three survive stdin closing, and the daemon count goes
+up by one.
