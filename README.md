@@ -501,6 +501,23 @@ edit did not take.
 `Slider` has the same split for the same reason: `value` is what the drag writes,
 `target` is what you bind.
 
+### A card's draft is seeded by being open, not by being tapped
+
+`RuleCard` and `BindCard` copy the rule into an editable draft when they open. That
+copy used to happen in the `TapHandler`, which is wrong because **a tap is one of
+three ways a card ends up expanded**:
+
+- you tap it;
+- the page expands a newly added one itself;
+- **every save rebuilds the delegates** — the page re-reads, the model array is
+  replaced, and a card whose index is still the expanded one is *constructed*
+  already open.
+
+The last is the one that bites, because it happens every time you press Save. The
+card came back with an empty draft and printed "This rule has no fields" under a
+header listing them. Binding to `expanded` instead means there is one path and it
+cannot be forgotten on another.
+
 ### `FormRow` reparents, so not inside a `Repeater`
 
 `FormRow` does `control.parent = root`, which is fine at the top level and a trap

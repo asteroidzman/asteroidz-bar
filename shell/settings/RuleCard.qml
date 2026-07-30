@@ -41,6 +41,21 @@ Rectangle {
         dirty = false;
     }
 
+    // Seeded from being EXPANDED, not from being tapped.
+    //
+    // A tap is one of three ways a card ends up open and it was the only one that
+    // filled the draft, so the other two rendered an empty editor over a rule
+    // that plainly has fields -- "This rule has no fields" printed underneath a
+    // header listing them.
+    //
+    // The other two: a newly added rule is expanded by the page rather than by a
+    // tap; and after any save the page re-reads, which replaces the model array
+    // and REBUILDS every delegate -- so the card is constructed already expanded,
+    // with a fresh empty draft, and nothing ever taps it. That second one is the
+    // one that bites in normal use, because it happens every time you press Save.
+    onExpandedChanged: if (expanded) startEdit()
+    Component.onCompleted: if (expanded) startEdit()
+
     function setField(key, value) {
         const d = Object.assign({}, draft);
         d[key] = value;
@@ -117,12 +132,10 @@ Rectangle {
 
             TapHandler {
                 onTapped: {
-                    if (root.expanded) {
-                        root.view.expandedRule = -1;
-                    } else {
-                        root.startEdit();
-                        root.view.expandedRule = root.index;
-                    }
+                    // No startEdit here: setting expandedRule flips `expanded`,
+                    // which seeds it. One path, so it cannot be forgotten on
+                    // another.
+                    root.view.expandedRule = root.expanded ? -1 : root.index;
                 }
             }
         }

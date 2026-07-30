@@ -52,6 +52,13 @@ Rectangle {
         dirty = false;
     }
 
+    // Seeded from being EXPANDED, not from being tapped -- see RuleCard, which had
+    // the same bug: a tap was one of three ways a card opens and the only one that
+    // filled the draft. The other two are a newly added bind, which the page
+    // expands itself, and the rebuild that follows every save.
+    onExpandedChanged: if (expanded) startEdit()
+    Component.onCompleted: if (expanded) startEdit()
+
     function setArg(i, v) {
         const a = args.slice();
         while (a.length <= i)
@@ -161,12 +168,7 @@ Rectangle {
 
             TapHandler {
                 onTapped: {
-                    if (root.expanded) {
-                        root.view.expandedBind = -1;
-                    } else {
-                        root.startEdit();
-                        root.view.expandedBind = root.index;
-                    }
+                    root.view.expandedBind = root.expanded ? -1 : root.index;
                 }
             }
         }

@@ -745,6 +745,46 @@ if grep -q 'window-rule {' "$HL_CONFIG"; then
 else
 	bad "...written as a window-rule block"
 fi
+
+# The new rule opens EXPANDED, and its editor has to show the field it was
+# created with.
+#
+# A card's draft used to be seeded only by the tap that expands it, and a tap is
+# one of three ways a card ends up open -- the page expands a new rule itself, and
+# every save rebuilds the delegates, so a card could be constructed already open
+# with an empty draft. It then printed "This rule has no fields" under a header
+# listing them. Reported from a live session, not caught here, because nothing was
+# looking at the card after it opened.
+#
+# Measured as the WARNING's colour: that sentence is the only urgent-coloured text
+# either page can produce, so counting those pixels is counting the bug.
+shot rule_added
+URGENT="$(hl_get "get bar-config" | python3 -c '
+import json, sys
+c = (json.load(sys.stdin).get("theme") or {}).get("urgent")
+if isinstance(c, list) and len(c) >= 3:
+    print("#%02x%02x%02x" % tuple(max(0, min(255, round(v * 255))) for v in c[:3]))
+' 2>/dev/null)"
+WARN_PX="$(python3 - "$WORK/rule_added.png" "${URGENT:-#000000}" \
+		"$WX" "$WY" "$WW" "$WH" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+acc = sys.argv[2].lstrip("#")
+wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
+if len(acc) != 6:
+    print(-1); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+print(sum(1 for y in range(wy, wy + wh, 2) for x in range(wx, wx + ww, 2)
+          if all(abs(a - b) <= 24 for a, b in zip(px[x, y], want))))
+PY
+)"
+if [ "${WARN_PX:-0}" -lt 40 ]; then
+	ok "...and its editor is populated, not warning that it is empty (${WARN_PX}px)"
+else
+	bad "...and its editor is populated, not warning that it is empty (${WARN_PX}px)"
+fi
 if "$REPO/build/asteroidz" -p -c "$HL_CONFIG" 2>&1 | grep -q 'config OK'; then
 	ok "...and the config still parses"
 else
