@@ -388,7 +388,9 @@ FloatingWindow {
                         .concat([{ name: "", label: "Window rules",
                                    page: "rules" },
                                  { name: "", label: "Keybinds",
-                                   page: "binds" }])
+                                   page: "binds" },
+                                 { name: "", label: "Palette",
+                                   page: "palette" }])
 
                     delegate: Rectangle {
                         required property var modelData
@@ -424,8 +426,11 @@ FloatingWindow {
                             onTapped: {
                                 win.page = modelData.page;
                                 win.group = modelData.name;
-                                if (modelData.page !== "options")
+                                if (modelData.page === "rules"
+                                        || modelData.page === "binds")
                                     Rules.load();
+                                if (modelData.page === "palette")
+                                    Matugen.load();
                                 scroll.contentY = 0;
                             }
                         }
@@ -545,6 +550,14 @@ FloatingWindow {
                     visible: active
                     height: active && item ? item.implicitHeight : 0
                     sourceComponent: BindsPage {}
+                }
+
+                Loader {
+                    width: rows.width
+                    active: win.page === "palette"
+                    visible: active
+                    height: active && item ? item.implicitHeight : 0
+                    sourceComponent: MatugenPage {}
                 }
 
                 // Not loaded yet, or loaded and there is nothing to show. Both

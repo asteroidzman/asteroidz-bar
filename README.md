@@ -102,6 +102,38 @@ config and shadow the generated file. It refuses to do that unless asked:
 refusing forever is a dead end, and doing it silently means matugen and this
 window quietly fight over the palette.
 
+### Palette
+
+A third page, over matugen. It maps each of the nine generated colours to a
+Material role — `primary`, `surface_container_high`, `error` — with an optional
+grayscale filter, and a switch per colour for whether matugen owns it at all.
+Turning one off drops it from the template, and your own `config.kdl` decides it
+from then on.
+
+**The role list comes from the installed matugen**, asked for at runtime with
+`--dry-run`, not from a table here. A hardcoded list is a second description of
+somebody else's software that is correct until they add a role.
+
+**The mapping is the source of truth and the template is the render target.** The
+template could be parsed back instead, and that would be one file rather than two,
+but a template is arbitrary text with an arbitrary filter chain — a parser that
+mostly works would silently drop whatever it did not understand the next time the
+file was written. The exception is the first run, where the template is all there
+is: it is parsed then, best-effort, so opening the page and pressing Apply does
+not replace a tuned template with defaults. The previous one is kept as `.bak`.
+
+Apply is one button for the whole page, unlike the rule and bind editors. The
+reason is the opposite of theirs: all nine are rendered from one template by one
+matugen run, so applying one *is* applying all of them.
+
+`matugen/` in this repo holds the template and is installed to
+`/usr/share/asteroidz-bar/matugen/` — it used to live only in one person's
+`~/.config`, which meant the palette the whole desktop is themed from existed on
+exactly one machine and no installation produced it. The package does not copy it
+into `~/.config`: that would overwrite a tuned template on every upgrade. The
+Palette page seeds the user copy the first time it is opened and the file is
+absent, which is the one moment where copying cannot destroy anything.
+
 ### Window rules and keybinds
 
 Two more pages in the sidebar, built the same way — from
@@ -241,6 +273,10 @@ contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns
                            #   plugin menus, and staged-vs-applied display edits
 contrib/panel-layout-test.sh # the display panel's boxes fit the text in them,
                            #   at three font sizes
+contrib/palette-test.sh    # the matugen palette page, fully sandboxed: its
+                           #   template, mapping file and matugen binary are all
+                           #   redirected, so it cannot re-theme the desktop it
+                           #   runs beside
 contrib/settings-test.sh   # the settings window: it opens, it is populated,
                            #   search narrows it, a click previews, Apply persists,
                            #   closing undoes an unapplied preview, and the rule
@@ -360,6 +396,34 @@ first press is lost while the client binds `wl_keyboard`. Whether it is lost is 
 nothing — six assertions failing together, about one run in three. A `BACKSPACE`
 after it is a no-op on an empty field and undoes the stray character otherwise,
 which makes the starting state the same either way.
+
+`palette-test.sh` is sandboxed, and that is the first thing to know about it.
+Applying on that page rewrites a template in `~/.config/matugen` and then runs
+matugen for real — which re-renders every template on the machine and fires every
+post-hook, including a compositor reload. So all three of the page's outside
+connections are redirected: `ASTEROIDZ_MATUGEN_CONF`, `ASTEROIDZ_MATUGEN_TEMPLATE`
+and `ASTEROIDZ_MATUGEN_BIN`, the last at a stub that records its arguments. That
+stub is what makes "Apply re-renders the palette" checkable at all — the assertion
+is a line in a file, not something on screen.
+
+It found a real bug immediately: `applyAll()` read `Wallpaper.wallpaper`, which
+does not exist — the singleton calls it `path` — so Apply wrote the template and
+then silently skipped the render. Reading a wrong property name yields `undefined`
+rather than an error, so nothing anywhere said so.
+
+Three of its own bugs are worth recording, all the same shape — a click that
+misses looks exactly like a control that refused:
+
+- a speculative "Apply does nothing when nothing has changed" click landed on a
+  role **picker** and opened its dropdown, displacing every position measured
+  afterwards. It could never have failed usefully either, so it is gone; the
+  gating is asserted through the button's colour instead.
+- turning a colour off hides its role picker, so the page gets shorter and Apply
+  **moves**. It has to be re-located after the change, not before.
+- Apply is accent-coloured when there is something to apply — and so is every
+  ownership toggle that is on. "The lowest accent block" finds a toggle; the
+  button row is left-aligned and the toggles are hard right, so the side is what
+  tells them apart.
 
 `panel-layout-test.sh` checks the other half: not what the panel does, but
 whether its boxes fit the text in them. The display tabs were `width: 100` with

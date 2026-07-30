@@ -103,6 +103,8 @@ install_data(
 		'shell/settings/RuleCard.qml',
 		'shell/settings/BindCard.qml',
 		'shell/settings/RuleFieldRow.qml',
+		'shell/settings/Matugen.qml',
+		'shell/settings/MatugenPage.qml',
 	],
 	install_dir: qmldir / 'settings',
 )
@@ -147,6 +149,22 @@ shared_module(
 )
 
 install_data('plugin/qmldir', install_dir: qmlplugindir)
+
+# The matugen template.
+#
+# Shipped rather than left to live only in somebody's ~/.config, which is where it
+# was: the palette the whole desktop is themed from existed on exactly one machine
+# and no installation produced it.
+#
+# Installed to /usr/share, NOT copied into ~/.config at install time. A package
+# that wrote into a home directory would overwrite a template the user had tuned,
+# and would do it on every upgrade. The Palette page seeds the user copy from this
+# one the first time it is opened and the file is absent, which is the only moment
+# where doing so cannot destroy anything.
+install_data(
+	['matugen/asteroidz-colors.kdl', 'matugen/README.md'],
+	install_dir: get_option('datadir') / 'asteroidz-bar' / 'matugen',
+)
 
 
 # The plugins.
