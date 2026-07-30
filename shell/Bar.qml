@@ -172,6 +172,11 @@ PanelWindow {
         id: keys
         anchors.fill: parent
         focus: true
+        // Forwarded FIRST, so a text field in a panel gets the keystroke before
+        // the menu's own row handling sees it. The compositor delivers keys to
+        // this surface and the popover never holds focus, so without this a
+        // Field inside a panel could not be typed into -- see Popover.keyTarget.
+        Keys.forwardTo: menu.keyTarget ? [menu.keyTarget] : []
         Keys.onPressed: event => menu.handleKey(event)
     }
 

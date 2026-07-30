@@ -29,6 +29,29 @@ PopupWindow {
     readonly property bool wantsKeyboard:
         wantsKeyboardPanel || rows.some(r => r && r.input)
 
+    // THE TEXT FIELD KEYSTROKES HAVE TO BE FORWARDED TO.
+    //
+    // A Field inside a panel could not be typed into at all. The chain:
+    // the compositor sends keys to whatever holds keyboard focus, which is the
+    // BAR's layer surface (Bar.qml raises WlrKeyboardFocus.Exclusive while a
+    // popover is up); this popup deliberately never grabs focus, because Qt
+    // refuses to create a grabbing popup here and falls back silently; and the
+    // key handler in Bar.qml routes everything to handleKey below, which only
+    // ever knew about the MENU ROWS model. For a panel `rows` is empty, so
+    // focusedRow stayed -1 and every keystroke past Escape was dropped on the
+    // floor. Folder, Cycle and the Display tab's ICC path were all inert.
+    //
+    // So the event has to be forwarded across the window boundary, and it is
+    // forwarded to a real TextInput rather than reimplemented: Field exists
+    // precisely so that selection, the clipboard and IME are Qt's problem and
+    // not ours, and hand-rolling a caret and a UTF-8-aware backspace is what
+    // the native bar had to do.
+    //
+    // Set by Field on itself when clicked -- it walks up to find this object --
+    // so there is no per-call-site wiring to forget when a panel gains a field.
+    readonly property bool isPopover: true
+    property Item keyTarget: null
+
     signal activated(int index)
     signal edited(int index, string text)
 
@@ -90,10 +113,13 @@ PopupWindow {
     // wants more room than its parent had elides instead of resizing.
     property int lockedWidth: 0
     onVisibleChanged: {
-        if (visible)
+        if (visible) {
             lockedWidth = panelWidth + 2 * shadowRoom;
-        else
+        } else {
             panel = null;
+            /* The field is inside the panel that just went away. */
+            keyTarget = null;
+        }
     }
 
     implicitWidth: lockedWidth > 0 ? lockedWidth : panelWidth + 2 * shadowRoom

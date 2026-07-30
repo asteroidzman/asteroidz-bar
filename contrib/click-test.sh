@@ -366,6 +366,148 @@ else
 fi
 
 
+# ── a text field in a panel can actually be typed into ──────────────────────
+#
+# It could not. Keys go to whatever holds keyboard focus, which is the BAR's
+# layer surface (Bar.qml raises WlrKeyboardFocus.Exclusive while a popover is
+# up); the popup deliberately never grabs focus, because Qt refuses to create a
+# grabbing popup here and falls back silently; and Bar.qml routed every key to
+# Popover.handleKey, which only knew about the MENU ROWS model. For a panel
+# `rows` is empty, focusedRow stayed -1, and every keystroke past Escape was
+# dropped. Folder, Cycle and the Display tab's ICC path were all inert.
+#
+# Bar.qml now forwards to Popover.keyTarget, which a Field claims for itself when
+# clicked -- via QsWindow.window, because the visual parent chain does not reach
+# the window at all and a walk up `parent` silently set nothing.
+#
+# Asserted through the FILE the field writes as well as the pixels: text
+# appearing in a box proves the keyboard arrived, and only the file proves the
+# commit path behind it works too.
+
+hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200)); sleep 2
+hl_move "$PILL_X" "$PILL_Y"; sleep 1
+hl_click "$PILL_X" "$PILL_Y"; sleep 3
+shot wp_open
+read -r WL WT WR WB <<<"$(panel_box wp_open)"
+
+# The Wallpaper tab, found by COLOUR rather than by arithmetic from the panel
+# edge. The selected tab is the topmost accent-coloured block in the panel, and
+# the other tab sits immediately to its right past Cfg.spacing. Guessing an
+# offset from the panel box does not work: panel_box here reports a top edge that
+# excludes the shadow, a standalone probe's did not, and the same "+22" landed
+# inside the tab row in one and above the panel in the other -- so the tab never
+# switched, WROWS[0] was the DISPLAY tab's Resolution picker, and the assertions
+# below failed against a build where the field worked perfectly.
+tab_pill() { # tab_pill <shot> <accent-hex>  ->  "left right top bottom"
+	python3 - "$WORK/$1.png" "$2" <<'__PY__'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load(); w, h = im.size
+acc = sys.argv[2].lstrip("#")
+if len(acc) != 6:
+    print("0 0 0 0"); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+def near(c, tol=14):
+    return all(abs(a - b) <= tol for a, b in zip(c, want))
+rows = {}
+for y in range(60, h):
+    xs = [x for x in range(w) if near(px[x, y])]
+    if len(xs) > 20:
+        rows[y] = xs
+if not rows:
+    print("0 0 0 0"); raise SystemExit
+groups = []
+for y in sorted(rows):
+    if groups and y - groups[-1][-1] <= 2:
+        groups[-1].append(y)
+    else:
+        groups.append([y])
+g = groups[0]
+mid = max(g, key=lambda y: len(rows[y]))
+xs = sorted(rows[mid])
+best = cur = [xs[0]]
+for x in xs[1:]:
+    if x - cur[-1] <= 1:
+        cur.append(x)
+    else:
+        if len(cur) > len(best):
+            best = cur
+        cur = [x]
+if len(cur) > len(best):
+    best = cur
+print(best[0], best[-1], g[0], g[-1])
+__PY__
+}
+
+read -r TBL TBR TBT TBB <<<"$(tab_pill wp_open "${ACCENT:-#000000}")"
+if [ "${TBR:-0}" -le 0 ]; then
+	bad "the panel's tab row is on screen"
+fi
+# Just past the selected pill's right edge, plus half the next pill.
+hl_click $((TBR + 40)) $(((TBT + TBB) / 2)); sleep 2
+shot wp_tab
+
+# It really switched: the accent pill moved right, because the selection did.
+read -r NBL _ _ _ <<<"$(tab_pill wp_tab "${ACCENT:-#000000}")"
+if [ "${NBL:-0}" -gt "${TBL:-0}" ]; then
+	ok "clicking the second tab switches to it (accent moved $TBL -> $NBL)"
+else
+	bad "clicking the second tab switches to it (accent still at ${NBL:-0})"
+fi
+
+# The Folder field, positioned from the TAB ROW rather than from form_rows.
+#
+# form_rows was built for the Display tab: it takes the widest dark run on a
+# scanline as the control, and consensus over the rows to find the column. In the
+# wallpaper tab the Folder field holds a long path, whose glyphs fragment that
+# run, and it reported one row where there are three. Rather than teach it a
+# second shape, this anchors off the tab pill measured above -- the first form row
+# sits Cfg.spacing below the tab row, one row-height tall.
+#
+# The arithmetic is self-validating: the assertion below is that wallpaper.conf
+# changed, and nothing else in the panel writes `folder=`. A mis-aimed click can
+# only make this FAIL, never falsely pass.
+FY=$((TBB + 8 + 17))
+FCX=$((WL + 300))
+BEFORE_CONF="$(grep '^folder=' "$WORK/wallpaper.conf" 2>/dev/null)"
+
+hl_move "$FCX" "$FY"; sleep 1
+hl_click "$FCX" "$FY"; sleep 1
+shot wp_focus
+for k in Q Q Q; do "$HL_WLVKBD" press "$k" >/dev/null 2>&1; sleep 0.3; done
+sleep 0.5
+shot wp_typed
+
+TYPED_DIFF="$(python3 - "$WORK/wp_focus.png" "$WORK/wp_typed.png" "$WL" "$WT" "$WR" "$WB" <<'__PY__'
+import sys
+from PIL import Image
+a = Image.open(sys.argv[1]).convert("RGB").load()
+b = Image.open(sys.argv[2]).convert("RGB").load()
+l, t, r, bo = (int(v) for v in sys.argv[3:7])
+print(sum(1 for y in range(t, bo) for x in range(l, r) if a[x, y] != b[x, y]))
+__PY__
+)"
+if [ "${TYPED_DIFF:-0}" -gt 300 ]; then
+	ok "typing into a panel's text field reaches it (${TYPED_DIFF}px changed)"
+else
+	bad "typing into a panel's text field reaches it (${TYPED_DIFF}px changed)"
+fi
+
+# And the file. A field that shows keystrokes and writes nothing is the same bug
+# one layer further on -- and this is the assertion that proves the click landed
+# on the Folder field specifically.
+"$HL_WLVKBD" press ENTER >/dev/null 2>&1
+sleep 1
+AFTER_CONF="$(grep '^folder=' "$WORK/wallpaper.conf" 2>/dev/null)"
+if [ -n "$AFTER_CONF" ] && [ "$AFTER_CONF" != "$BEFORE_CONF" ]; then
+	ok "Enter commits it to wallpaper.conf"
+else
+	bad "Enter commits it to wallpaper.conf (still '$AFTER_CONF')"
+fi
+
+hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200)); sleep 2
+
 # ── the display panel stages, and Apply commits ─────────────────────────────
 #
 # The panel used to act on every pick. Choosing 2560x1440 from a list of a

@@ -109,6 +109,36 @@ build; only the glyph height gives it away. `Popover.qml` now keeps the surface
 a fixed box and moves the panel inside it, which is why a dropdown can open
 without touching the window size at all.
 
+`click-test.sh` also covers the thing that made **every text field in a panel
+inert**: Folder and Cycle on the Wallpaper tab, and the Display tab's ICC path.
+Keys go to whatever holds keyboard focus, which is the *bar's* layer surface
+(`Bar.qml` raises `WlrKeyboardFocus.Exclusive` while a popover is up). The popup
+deliberately never grabs focus — Qt refuses to create a grabbing popup here and
+falls back silently — and `Bar.qml` routed every key to `Popover.handleKey`,
+which only ever knew about the **menu rows** model. For a panel `rows` is empty,
+so `focusedRow` stayed `-1` and every keystroke past Escape was dropped.
+
+`Bar.qml` now forwards to `Popover.keyTarget`, which a `Field` claims for itself
+when clicked — forwarding to a real `TextInput` rather than reimplementing
+editing, because `Field` exists so that selection, the clipboard and IME stay
+Qt's problem.
+
+The interesting part is how a `Field` reaches the popover: **`QsWindow.window`,
+not a walk up `parent`.** The visual parent chain does not reach the window at
+all — a `Loader`'s item is parented to the `Loader`, the `Loader` to the window's
+`contentItem`, and a `PopupWindow` is not an `Item`, so the chain dead-ends one
+step short. Walking it looked right, compiled, ran, and set nothing: the keys
+arrived at the bar with `keyTarget` still `null`. Only instrumenting both ends
+showed it, and it is why the first attempted fix changed no behaviour at all.
+
+Two things about the test. It finds the second tab **by colour** — the selected
+tab is the topmost accent block, so the other one is just past its right edge —
+because guessing an offset from `panel_box` put the click above the panel in one
+harness and inside the tab row in another, and the tab silently never switched.
+And its real assertion is that **`wallpaper.conf` changed**, not that pixels moved:
+nothing else in the panel writes `folder=`, so a mis-aimed click can only make it
+fail, never falsely pass.
+
 `panel-layout-test.sh` checks the other half: not what the panel does, but
 whether its boxes fit the text in them. The display tabs were `width: 100` with
 a centred `Text` carrying no width, no elide and no clip, so at the shipped

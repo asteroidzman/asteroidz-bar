@@ -519,9 +519,10 @@ Pill {
                     }
 
                     FormRow {
-                        label: "Cycle (min, 0=off)"
+                        label: "Cycle (min)"
                         width: parent.width
                         control: Field {
+                            placeholder: "0 = off"
                             text: String(Math.round(Wallpaper.interval / 60))
                             onCommitted: v =>
                                 Wallpaper.setKey("interval",
