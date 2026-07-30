@@ -63,6 +63,12 @@ Singleton {
     readonly property string shippedTemplate:
         Quickshell.env("ASTEROIDZ_MATUGEN_SHIPPED")
         || "/usr/share/asteroidz-bar/matugen/asteroidz-colors.kdl"
+    readonly property string matugenToml:
+        Quickshell.env("ASTEROIDZ_MATUGEN_TOML")
+        || (home + "/.config/matugen/config.toml")
+    readonly property string colorsOut:
+        Quickshell.env("ASTEROIDZ_COLORS_OUT")
+        || (home + "/.config/asteroidz/colors.kdl")
 
     // The nine colours this template owns, in the order they appear in it.
     //
@@ -352,6 +358,79 @@ Singleton {
         return out;
     }
 
+    // ── wiring matugen up ───────────────────────────────────────────────────
+    //
+    // A template matugen has not been told about renders nothing. The entry is
+    // four lines of TOML and the page can add them, which is the difference
+    // between "copy this file and then edit that one" and pressing Apply.
+    //
+    // APPENDED, never rewritten. This is the user's file and it configures every
+    // other themed application on the machine -- rofi, kitty, waybar, btop. A
+    // page that regenerated it would be a settings window that can lose your
+    // whole desktop theme, so it only ever adds a section that is not there, and
+    // keeps the previous contents beside it.
+
+    // Whether matugen's config exists, tracked rather than inferred from an empty
+    // read: FileView.text() answers "" for a file that is missing and for one
+    // that is empty, and those need different writes.
+    property bool tomlExists: false
+
+    function tomlHasEntry(text) {
+        // Asked as "is this template already rendered by something", not "is
+        // there a section called [templates.asteroidz]". The name is the user's
+        // to choose, and a second section pointing at the same template would
+        // render it twice rather than fail -- untidy, and invisible.
+        return text.indexOf("asteroidz-colors.kdl") >= 0;
+    }
+
+    function tomlEntry() {
+        return "\n# asteroidz: the compositor's palette. Added by the settings\n"
+             + "# window's Palette page; edit or remove it freely.\n"
+             + "[templates.asteroidz]\n"
+             + "input_path = \"" + templatePath + "\"\n"
+             + "output_path = \"" + colorsOut + "\"\n"
+             + "# What makes a change visible: matugen writes the file and the\n"
+             + "# compositor re-reads it. Without this the palette changes on disk\n"
+             + "# and the screen does not.\n"
+             + "post_hook = \"amsg dispatch reload_config 2>/dev/null || true\"\n";
+    }
+
+    // Read at load time and acted on SYNCHRONOUSLY at Apply.
+    //
+    // The first version deferred: Apply set a flag and called reload(), meaning
+    // to act in onLoaded. It never fired -- a FileView with `preload: false` does
+    // not re-emit for a reload the way a preloaded one does -- so Apply wrote the
+    // template, ran matugen, reported success, and silently skipped the one step
+    // that makes matugen render the template at all. Nothing observable said so;
+    // the palette test noticed because it looks at the file.
+    FileView {
+        id: tomlFile
+        path: root.matugenToml
+        watchChanges: true
+        onLoaded: root.tomlExists = true
+        onLoadFailed: root.tomlExists = false
+    }
+
+    FileView { id: tomlWriter; path: root.matugenToml;          preload: false }
+    FileView { id: tomlBackup; path: root.matugenToml + ".bak"; preload: false }
+
+    function wireMatugen() {
+        if (!tomlExists) {
+            // No matugen config at all. `[config]` is required for the file to
+            // parse -- matugen refuses one without it.
+            tomlWriter.setText("[config]\n" + tomlEntry());
+            status = (status ? status + " · " : "") + "created matugen's config";
+            return;
+        }
+        const cur = tomlFile.text();
+        if (tomlHasEntry(cur))
+            return;
+        tomlBackup.setText(cur);
+        tomlWriter.setText(cur.replace(/\n*$/, "\n") + tomlEntry());
+        status = (status ? status + " · " : "")
+                 + "added the template to matugen's config";
+    }
+
     // ── applying ────────────────────────────────────────────────────────────
 
     function apply(wallpaper) {
@@ -366,6 +445,9 @@ Singleton {
         mapWriter.setText(serialiseMapping());
         backupWriter.setText(templateFile.text());
         templateWriter.setText(renderTemplate());
+        // And make sure matugen knows about the template, or the render below
+        // produces nothing and says it succeeded.
+        wireMatugen();
         if (wallpaper && wallpaper !== "") {
             render.command = [root.matugenBin, "image", wallpaper];
             render.running = true;

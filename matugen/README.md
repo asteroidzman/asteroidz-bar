@@ -18,7 +18,14 @@ cp /usr/share/asteroidz-bar/matugen/asteroidz-colors.kdl ~/.config/matugen/templ
 The Palette page does this for you the first time you open it, if the file is not
 there.
 
-Then tell matugen about it, in `~/.config/matugen/config.toml`:
+The Palette page also adds the entry below to `~/.config/matugen/config.toml` the
+first time you press Apply, if no template there already points at
+`asteroidz-colors.kdl`. It **appends** — that file configures every other themed
+application on the machine, so a page that regenerated it would be a settings
+window that can lose your whole desktop theme. The previous contents are kept as
+`config.toml.bak`.
+
+To do it by hand instead:
 
 ```toml
 [templates.asteroidz]

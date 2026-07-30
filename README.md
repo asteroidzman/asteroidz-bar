@@ -126,6 +126,13 @@ Apply is one button for the whole page, unlike the rule and bind editors. The
 reason is the opposite of theirs: all nine are rendered from one template by one
 matugen run, so applying one *is* applying all of them.
 
+Apply also **wires the template into matugen's config** if nothing there points at
+it yet — a template matugen has not been told about renders nothing, so without
+this the page would write a file, run matugen, report success, and change nothing.
+It appends and keeps a `.bak`: that file themes every other application on the
+machine, and regenerating it would make this a settings window that can lose your
+whole desktop theme.
+
 `matugen/` in this repo holds the template and is installed to
 `/usr/share/asteroidz-bar/matugen/` — it used to live only in one person's
 `~/.config`, which meant the palette the whole desktop is themed from existed on
@@ -406,10 +413,16 @@ and `ASTEROIDZ_MATUGEN_BIN`, the last at a stub that records its arguments. That
 stub is what makes "Apply re-renders the palette" checkable at all — the assertion
 is a line in a file, not something on screen.
 
-It found a real bug immediately: `applyAll()` read `Wallpaper.wallpaper`, which
+It found two real bugs. `applyAll()` read `Wallpaper.wallpaper`, which
 does not exist — the singleton calls it `path` — so Apply wrote the template and
 then silently skipped the render. Reading a wrong property name yields `undefined`
 rather than an error, so nothing anywhere said so.
+
+And the matugen-config wiring never ran: it set a flag and called `reload()`,
+meaning to act in `onLoaded`, but a `FileView` with `preload: false` does not
+re-emit for a reload the way a preloaded one does. Apply wrote the template, ran
+matugen, reported success, and skipped the one step that makes matugen render the
+template at all. It reads the file synchronously now.
 
 Three of its own bugs are worth recording, all the same shape — a click that
 misses looks exactly like a control that refused:

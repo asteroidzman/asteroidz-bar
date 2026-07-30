@@ -55,6 +55,21 @@ MG_CONF="$WORK/matugen.conf"
 MG_TEMPLATE="$WORK/asteroidz-colors.kdl"
 MG_BIN="$WORK/matugen-stub"
 MG_CALLS="$WORK/matugen-calls"
+MG_TOML="$WORK/matugen-config.toml"
+MG_OUT="$WORK/colors-out.kdl"
+
+# A matugen config with somebody else's templates in it, because that is what the
+# page will meet: this file themes rofi and kitty and waybar too, and a page that
+# regenerated it would be a settings window that can lose your whole desktop
+# theme.
+cat > "$MG_TOML" <<'EOF'
+[config]
+
+[templates.rofi]
+input_path = "/home/somebody/.config/matugen/templates/rofi.rasi"
+output_path = "/home/somebody/.config/rofi/colors.rasi"
+EOF
+TOML_BEFORE="$(cat "$MG_TOML")"
 
 # A template with a KNOWN mapping, so "seeded from the existing template" is
 # checkable: `secondary` is not the default for any of the nine, so finding it in
@@ -121,6 +136,8 @@ dbus-run-session -- \
 	ASTEROIDZ_MATUGEN_CONF="$MG_CONF" \
 	ASTEROIDZ_MATUGEN_TEMPLATE="$MG_TEMPLATE" \
 	ASTEROIDZ_MATUGEN_BIN="$MG_BIN" \
+	ASTEROIDZ_MATUGEN_TOML="$MG_TOML" \
+	ASTEROIDZ_COLORS_OUT="$MG_OUT" \
 	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
 	ASTEROIDZ_BAR_QML="$QMLROOT" \
 	"$HERE/bin/asteroidz-bar" > "$WORK/qs.log" 2>&1 &
@@ -439,6 +456,59 @@ if grep -q "image $WORK/wall.png" "$MG_CALLS"; then
 else
 	bad "...and matugen was re-run against the current wallpaper"
 	sed 's/^/       /' "$MG_CALLS"
+fi
+
+# ── the wiring ──────────────────────────────────────────────────────────────
+#
+# A template matugen has not been told about renders nothing, so Apply also adds
+# the entry. That write is into the user's own matugen config -- the file that
+# themes every other application on the machine -- so what it must NOT do matters
+# as much as what it must.
+if grep -q "asteroidz-colors.kdl" "$MG_TOML"; then
+	ok "Apply wires the template into matugen's config"
+else
+	bad "Apply wires the template into matugen's config"
+fi
+if grep -q "post_hook" "$MG_TOML"; then
+	ok "...with the reload hook, without which nothing reaches the screen"
+else
+	bad "...with the reload hook, without which nothing reaches the screen"
+fi
+# The rest of the file survives. APPENDED, never regenerated.
+if grep -q "templates.rofi" "$MG_TOML" && grep -q "somebody/.config/rofi" "$MG_TOML"; then
+	ok "...leaving the templates that were already there alone"
+else
+	bad "...leaving the templates that were already there alone"
+	sed 's/^/       /' "$MG_TOML"
+fi
+if [ -f "$MG_TOML.bak" ] && [ "$(cat "$MG_TOML.bak")" = "$TOML_BEFORE" ]; then
+	ok "...and keeping the previous contents as .bak"
+else
+	bad "...and keeping the previous contents as .bak"
+fi
+# It is still TOML. A settings page that corrupts matugen's config breaks every
+# themed application at once, and the next wallpaper change is where you find out.
+if command -v python3 >/dev/null && python3 -c "
+import sys, tomllib
+tomllib.load(open('$MG_TOML','rb'))
+" 2>/dev/null; then
+	ok "...and the result still parses as TOML"
+else
+	bad "...and the result still parses as TOML"
+	sed 's/^/       /' "$MG_TOML"
+fi
+# Idempotent: a second Apply must not add a second entry rendering the same
+# template twice.
+BEFORE_N="$(grep -c "asteroidz-colors.kdl" "$MG_TOML")"
+hl_move "$TOGGLE_X" "$TOGGLE_Y"; sleep 1
+hl_click "$TOGGLE_X" "$TOGGLE_Y"; sleep 1
+shot palette_again
+hl_move "$AP_X" "$AP_Y"; sleep 1
+hl_click "$AP_X" "$AP_Y"; sleep 3
+if [ "$(grep -c "asteroidz-colors.kdl" "$MG_TOML")" = "$BEFORE_N" ]; then
+	ok "...and a second Apply does not add it twice"
+else
+	bad "...and a second Apply does not add it twice ($BEFORE_N -> $(grep -c "asteroidz-colors.kdl" "$MG_TOML"))"
 fi
 
 cp "$WORK"/palette*.png "${ASTEROIDZ_SHOT_DIR:-/tmp}"/ 2>/dev/null || true
