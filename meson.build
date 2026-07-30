@@ -97,6 +97,12 @@ install_data(
 		'shell/settings/Slider.qml',
 		'shell/settings/ColorField.qml',
 		'shell/settings/SmallButton.qml',
+		'shell/settings/Rules.qml',
+		'shell/settings/RulesPage.qml',
+		'shell/settings/BindsPage.qml',
+		'shell/settings/RuleCard.qml',
+		'shell/settings/BindCard.qml',
+		'shell/settings/RuleFieldRow.qml',
 	],
 	install_dir: qmldir / 'settings',
 )

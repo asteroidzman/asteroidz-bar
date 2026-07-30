@@ -288,7 +288,16 @@ hl_click "$SEARCH_X" "$SEARCH_Y"; sleep 1
 # key and exits, so the seat only advertises a keyboard while it is alive. On the
 # very first press the client is still binding wl_keyboard and receives only the
 # release. Hence a throwaway press before the real ones.
+#
+# And a BACKSPACE after it, which is the part that took three runs to work out.
+# Whether the throwaway lands is a race, so sometimes the search box already held
+# an "a" and the query became "asmartgaps" -- which matches nothing, so the pane
+# was empty, so the control locator found nothing, so six assertions failed
+# together roughly one run in three. Backspace is a no-op on an empty field and
+# undoes the stray character on a non-empty one, which makes the starting state
+# the same either way.
 "$HL_WLVKBD" press A >/dev/null 2>&1; sleep 0.4
+"$HL_WLVKBD" press BACKSPACE >/dev/null 2>&1; sleep 0.4
 for k in S M A R T G A P S; do
 	"$HL_WLVKBD" press "$k" >/dev/null 2>&1
 	sleep 0.25
@@ -550,6 +559,216 @@ if [ "$PREVIEWED_ON" = "1" ] && [ "$SG_VAL" = "0" ] \
 	ok "closing undoes an unapplied preview (1 -> $SG_VAL/$SG_KIND)"
 else
 	bad "closing undoes an unapplied preview (previewed=$PREVIEWED_ON now=$SG_VAL/$SG_KIND)"
+fi
+
+# ── 8. the rule and bind editors ────────────────────────────────────────────
+#
+# Their Loaders start inactive, so "the shell loads without QML errors" says
+# nothing about them: a broken type in RulesPage would never be instantiated and
+# would never report. Getting there is the point of these.
+
+# Reopened, because section 7 closed it. Deliberately by the same route rather
+# than by leaving the window up: this is also the assertion that a second open
+# works at all, which is a real question -- the window object is kept and reused,
+# and `discardPending` ran on the way out.
+hl_move "$PILL_X" "$PILL_Y"; sleep 1
+hl_click "$PILL_X" "$PILL_Y"; sleep 2
+hl_move "$SET_X" "$SET_Y"; sleep 1
+hl_click "$SET_X" "$SET_Y"; sleep 3
+
+WIN="$(win_json)"
+if [ -n "$WIN" ]; then
+	ok "the settings window reopens"
+else
+	bad "the settings window reopens"
+fi
+read -r WX WY WW WH <<<"$(printf '%s' "$WIN" | python3 -c '
+import json, sys
+s = sys.stdin.read().strip()
+if not s:
+    print("0 0 0 0")
+else:
+    c = json.loads(s)
+    print(c["x"], c["y"], c["width"], c["height"])
+')"
+shot reopened
+
+# The sidebar entries, derived from ONE measurement rather than a stack of
+# assumed heights. "All settings" is selected on open and is the first entry, so
+# the accent pill gives both the origin and the row pitch; every other entry is
+# k rows below it. The Column's spacing is 2.
+read -r SB_TOP SB_H <<<"$(python3 - "$WORK/reopened.png" "${ACCENT:-#000000}" \
+		"$WX" "$WY" "$WW" "$WH" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+acc = sys.argv[2].lstrip("#")
+wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
+if len(acc) != 6:
+    print("0 0"); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+# The sidebar is the left fifth or so, floored at fontPixelSize * 8.
+r = wx + max(int(ww * 0.22), 170)
+rows = [y for y in range(wy, wy + wh)
+        if sum(1 for x in range(wx, r)
+               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))) > 40]
+if not rows:
+    print("0 0"); raise SystemExit
+# The LARGEST run, not the first.
+#
+# The window is tiled and the compositor draws a focused border around it in the
+# same accent, so the first run of accent rows is two pixels of border at the very
+# top of the frame -- which is what this found, and a 2px "row height" put every
+# computed sidebar position off the end of the list. Exactly one entry is selected
+# at a time and every entry is the same height, so the tallest run is the pill.
+groups = []
+for y in rows:
+    if groups and y - groups[-1][-1] <= 2:
+        groups[-1].append(y)
+    else:
+        groups.append([y])
+grp = max(groups, key=len)
+print(grp[0], grp[-1] - grp[0] + 1)
+PY
+)"
+
+if [ "${SB_H:-0}" -gt 10 ]; then
+	ok "the sidebar selection was located (top ${SB_TOP}, ${SB_H}px rows)"
+else
+	bad "the sidebar selection was located (top ${SB_TOP}, ${SB_H}px rows)"
+fi
+
+sidebar_entry_y() { # sidebar_entry_y <index>  ->  the row's vertical centre
+	echo $((SB_TOP + $1 * (SB_H + 2) + SB_H / 2))
+}
+
+SIDEBAR_X=$((WX + 60))
+
+# 0 = All settings, then one row per option group, then Window rules and
+# Keybinds. The group count comes from the schema rather than being hard-coded,
+# so adding a group does not silently start clicking the wrong row.
+NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
+RULES_ROW=$((1 + NGROUPS))
+BINDS_ROW=$((2 + NGROUPS))
+
+# The lowest small control in the content area. On an empty rules page that is
+# "New rule": the intro paragraph is above it and a status line may appear
+# between the two, so "lowest" is the stable description and "first" is not.
+lowest_button() { # lowest_button <shot>  ->  "x y"
+	python3 - "$WORK/$1.png" "$WX" "$WY" "$WW" "$WH" <<'PY'
+import sys
+from collections import Counter
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+wx, wy, ww, wh = (int(v) for v in sys.argv[2:6])
+l = wx + max(int(ww * 0.22), 170) + 20
+r = wx + ww - 20
+top = wy + 75
+bot = wy + wh - 20
+bg = Counter(px[x, y] for y in range(top, bot, 2)
+             for x in range(l, r, 2)).most_common(1)[0][0]
+def isbg(c):
+    return all(abs(a - b) <= 12 for a, b in zip(c, bg))
+found = []
+for y in range(top, bot):
+    cur = None
+    x0 = l
+    for x in range(l, r + 1):
+        c = px[x, y] if x < r else None
+        if c is not None and cur is not None \
+                and all(abs(a - b) <= 3 for a, b in zip(c, cur)):
+            continue
+        n = x - x0
+        # Bounded above as well as below: the bind page carries a filter field
+        # that spans the whole pane, and an unbounded "widest run" would find
+        # that every time.
+        if cur is not None and not isbg(cur) and 30 <= n <= 160:
+            found.append((y, (x0 + x) // 2))
+        cur = c
+        x0 = x
+if not found:
+    print("0 0"); raise SystemExit
+rows = []
+for y, cx in found:
+    if rows and y - rows[-1][-1][0] <= 3:
+        rows[-1].append((y, cx))
+    else:
+        rows.append([(y, cx)])
+grp = rows[-1]
+mid = grp[len(grp) // 2]
+print(mid[1], mid[0])
+PY
+}
+
+RULES_Y="$(sidebar_entry_y "$RULES_ROW")"
+hl_move "$SIDEBAR_X" "$RULES_Y"; sleep 1
+hl_click "$SIDEBAR_X" "$RULES_Y"; sleep 2
+shot rules
+
+RULES_BEFORE="$(hl_get "get window-rules" | jq '.count')"
+read -r NEW_X NEW_Y <<<"$(lowest_button rules)"
+if [ "${NEW_X:-0}" -gt 0 ]; then
+	ok "the rules page is showing, with its New rule button (${NEW_X},${NEW_Y})"
+else
+	bad "the rules page is showing, with its New rule button"
+fi
+
+hl_move "$NEW_X" "$NEW_Y"; sleep 1
+hl_click "$NEW_X" "$NEW_Y"; sleep 3
+
+RULES_AFTER="$(hl_get "get window-rules" | jq '.count')"
+if [ "${RULES_AFTER:-0}" -eq $((RULES_BEFORE + 1)) ]; then
+	ok "New rule adds one ($RULES_BEFORE -> $RULES_AFTER)"
+else
+	bad "New rule adds one ($RULES_BEFORE -> $RULES_AFTER)"
+fi
+
+# A BLOCK, not a legacy line -- the writer's whole contract.
+if grep -q 'window-rule {' "$HL_CONFIG"; then
+	ok "...written as a window-rule block"
+else
+	bad "...written as a window-rule block"
+fi
+if "$REPO/build/asteroidz" -p -c "$HL_CONFIG" 2>&1 | grep -q 'config OK'; then
+	ok "...and the config still parses"
+else
+	bad "...and the config still parses"
+fi
+
+BINDS_Y="$(sidebar_entry_y "$BINDS_ROW")"
+hl_move "$SIDEBAR_X" "$BINDS_Y"; sleep 1
+hl_click "$SIDEBAR_X" "$BINDS_Y"; sleep 2
+shot binds
+
+BINDS_BEFORE="$(hl_get "get binds" | jq '.count')"
+read -r BNEW_X BNEW_Y <<<"$(lowest_button binds)"
+if [ "${BNEW_X:-0}" -gt 0 ]; then
+	ok "the binds page is showing, with its New bind button (${BNEW_X},${BNEW_Y})"
+else
+	bad "the binds page is showing, with its New bind button"
+fi
+
+hl_move "$BNEW_X" "$BNEW_Y"; sleep 1
+hl_click "$BNEW_X" "$BNEW_Y"; sleep 3
+
+BINDS_AFTER="$(hl_get "get binds" | jq '.count')"
+if [ "${BINDS_AFTER:-0}" -eq $((BINDS_BEFORE + 1)) ]; then
+	ok "New bind adds one ($BINDS_BEFORE -> $BINDS_AFTER)"
+else
+	bad "New bind adds one ($BINDS_BEFORE -> $BINDS_AFTER)"
+fi
+if hl_get "get binds" | jq -e '[.binds[] | select(.chord=="Super+F1")] | length > 0' >/dev/null 2>&1; then
+	ok "...and it is the one the page creates"
+else
+	bad "...and it is the one the page creates"
+fi
+if "$REPO/build/asteroidz" -p -c "$HL_CONFIG" 2>&1 | grep -q 'config OK'; then
+	ok "...and the config still parses"
+else
+	bad "...and the config still parses"
+	"$REPO/build/asteroidz" -p -c "$HL_CONFIG" 2>&1 | head -4 | sed 's/^/       /'
 fi
 
 kill "$QS" 2>/dev/null

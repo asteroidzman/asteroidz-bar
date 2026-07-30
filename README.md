@@ -102,6 +102,47 @@ config and shadow the generated file. It refuses to do that unless asked:
 refusing forever is a dead end, and doing it silently means matugen and this
 window quietly fight over the palette.
 
+### Window rules and keybinds
+
+Two more pages in the sidebar, built the same way — from
+`get window-rule-schema`, `get window-rules`, `get binds` and
+`get dispatch-actions`. Nothing about any individual rule field or dispatch lives
+in this repo.
+
+Both read from records the compositor captures **while it reads the config**, not
+from its parsed structures, because that parse is lossy in exactly the place an
+editor needs:
+
+```
+focus_stack next   →   func = focusstack, arg.i = NEXT
+tag_silent 3       →   func = tagsilent,  arg.ui = 1<<2
+```
+
+Two things follow from the data model rather than from taste:
+
+- **A rule card shows only the fields that rule sets**, and adding one is a
+  deliberate act with its own picker. A rule holds only what it sets — that is
+  what distinguishes "says nothing about blur" from "turns blur off" — so
+  offering all 53 with unset controls would mean a Save could not tell them
+  apart. The × beside a field is how you say "stop mentioning this".
+- **Rules and binds save per card**, not behind the window's Apply bar, which is
+  hidden on those pages. They are addressed by *index*, and a write renumbers
+  everything after a removal — so batching a delete and an edit from two cards
+  would send the second against an index the first invalidated, applied to the
+  wrong rule, silently, because both rules are plausible.
+
+The action is a picker over the 94 dispatch names, not a text field: a typo
+writes a config that fails to reload, and that surfaces at the *next login*. The
+compositor refuses an unknown action too; the picker is so you never reach that
+refusal. Argument boxes carry the argument's kind (`tag-index`, `direction`) as
+their placeholder, from the same schema.
+
+Binds that cannot be rewritten — the legacy `bind=` line form — are listed and
+greyed rather than hidden. And `axisbind`, `switchbind` and `gesturebind` have no
+KDL block form at all, so they are named at the foot of the list: a bind list with
+no note would be quietly claiming they do not exist, and someone tidying their
+binds through this window would lose them.
+
 ### Opening it floating
 
 It is an ordinary xdg toplevel (`FloatingWindow`), so asteroidz tiles it by
@@ -164,7 +205,8 @@ contrib/panel-layout-test.sh # the display panel's boxes fit the text in them,
                            #   at three font sizes
 contrib/settings-test.sh   # the settings window: it opens, it is populated,
                            #   search narrows it, a click previews, Apply persists,
-                           #   and closing undoes an unapplied preview
+                           #   closing undoes an unapplied preview, and the rule
+                           #   and bind editors add through to the config file
 contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
                            #   (no compositor needed; runs in seconds)
 contrib/parity.sh          # native bar vs this one (historical; see the header)
@@ -267,6 +309,19 @@ The toggle is located as the widest contiguous run of one flat non-background
 colour **between 20 and 90 pixels wide**, below the header. Unbounded, the widest
 such run is the search field, and the first version of this clicked into that
 instead. A toggle is 44px of one colour; a glyph stroke is three.
+
+The sidebar is measured from one accent pill rather than from assumed row
+heights — but the **largest** run of accent rows, not the first. The window is
+tiled and the compositor draws a focused border in the same accent, so the first
+run is two pixels of frame, and a 2px "row height" put every computed sidebar
+position off the end of the list.
+
+A throwaway keypress precedes the real ones, because wlvkbd is one-shot and the
+first press is lost while the client binds `wl_keyboard`. Whether it is lost is a
+**race**, so sometimes it landed and the search became `asmartgaps`, which matches
+nothing — six assertions failing together, about one run in three. A `BACKSPACE`
+after it is a no-op on an empty field and undoes the stray character otherwise,
+which makes the starting state the same either way.
 
 `panel-layout-test.sh` checks the other half: not what the panel does, but
 whether its boxes fit the text in them. The display tabs were `width: 100` with
@@ -407,6 +462,15 @@ edit did not take.
 
 `Slider` has the same split for the same reason: `value` is what the drag writes,
 `target` is what you bind.
+
+### `FormRow` reparents, so not inside a `Repeater`
+
+`FormRow` does `control.parent = root`, which is fine at the top level and a trap
+in a delegate: the control outlives the delegate that created it, so when the
+model is re-evaluated the object survives with a dead JS context and every binding
+on it starts failing with `Cannot read property 'round' of undefined` — `Math`
+itself resolving to nothing. Anchor the label and the control directly instead;
+`RuleFieldRow` and `BindCard.LabeledRow` both do.
 
 ### One `Ipc` call per shape of question
 

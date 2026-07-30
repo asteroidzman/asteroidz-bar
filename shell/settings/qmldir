@@ -4,8 +4,14 @@
 # too; see shell/qmldir, which says the same thing about the directory above.
 singleton Settings 1.0 Settings.qml
 singleton Schema 1.0 Schema.qml
+singleton Rules 1.0 Rules.qml
 SettingsWindow 1.0 SettingsWindow.qml
 OptionRow 1.0 OptionRow.qml
 Slider 1.0 Slider.qml
 ColorField 1.0 ColorField.qml
 SmallButton 1.0 SmallButton.qml
+RulesPage 1.0 RulesPage.qml
+BindsPage 1.0 BindsPage.qml
+RuleCard 1.0 RuleCard.qml
+BindCard 1.0 BindCard.qml
+RuleFieldRow 1.0 RuleFieldRow.qml

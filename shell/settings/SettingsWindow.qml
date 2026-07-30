@@ -58,6 +58,14 @@ FloatingWindow {
     property string group: ""
     property string search: ""
 
+    // Which of the three things this window edits is showing.
+    //
+    // Separate from `group`, which selects an option GROUP, because rules and
+    // binds are not options: they have their own schema, their own verbs, and --
+    // the part that shows in the UI -- their own apply model. See applyBar.
+    property string page: "options"
+    readonly property bool onOptions: page === "options"
+
     readonly property var shownOptions: {
         void Schema.generation;
         return Schema.options.filter(
@@ -352,13 +360,24 @@ FloatingWindow {
                 // sorting it here would throw away the one thing a schema cannot
                 // express as a field.
                 Repeater {
-                    model: [{ name: "", label: "All settings" }]
-                        .concat(Schema.groups)
+                    // The option groups, then the two things that are not
+                    // options. `page` distinguishes them: an entry with a page of
+                    // "options" also selects a group, the other two do not.
+                    model: [{ name: "", label: "All settings", page: "options" }]
+                        .concat(Schema.groups.map(
+                            g => ({ name: g.name, label: g.label,
+                                    page: "options" })))
+                        .concat([{ name: "", label: "Window rules",
+                                   page: "rules" },
+                                 { name: "", label: "Keybinds",
+                                   page: "binds" }])
 
                     delegate: Rectangle {
                         required property var modelData
                         readonly property bool selected:
-                            win.group === modelData.name
+                            win.page === modelData.page
+                            && (modelData.page !== "options"
+                                || win.group === modelData.name)
 
                         width: sidebar.width - 2 * Cfg.panelPadding
                         height: Math.max(26, Math.round(Cfg.fontPixelSize * 1.5))
@@ -385,7 +404,10 @@ FloatingWindow {
                         HoverHandler { id: hover }
                         TapHandler {
                             onTapped: {
+                                win.page = modelData.page;
                                 win.group = modelData.name;
+                                if (modelData.page !== "options")
+                                    Rules.load();
                                 scroll.contentY = 0;
                             }
                         }
@@ -439,6 +461,10 @@ FloatingWindow {
                 anchors.rightMargin: Cfg.spacing
                 anchors.verticalCenter: parent.verticalCenter
                 height: parent.height
+                // Options only. It searches the option schema, and leaving it on
+                // the bind page would be a box that filters nothing -- the bind
+                // page carries its own filter, over chords and actions.
+                visible: win.onOptions
                 placeholder: "Search settings"
                 // Round-tripped through `value` so that leaving the field does
                 // not wipe what you searched for: Field puts `value` back when it
@@ -484,12 +510,32 @@ FloatingWindow {
                                        ? Cfg.spacing + 4 : 0)
                 spacing: Cfg.spacing
 
+                // The rule and bind editors, each built once and kept, so that
+                // an expanded card and a half-typed regex survive a trip to the
+                // options page and back.
+                Loader {
+                    width: rows.width
+                    active: win.page === "rules"
+                    visible: active
+                    height: active && item ? item.implicitHeight : 0
+                    sourceComponent: RulesPage {}
+                }
+
+                Loader {
+                    width: rows.width
+                    active: win.page === "binds"
+                    visible: active
+                    height: active && item ? item.implicitHeight : 0
+                    sourceComponent: BindsPage {}
+                }
+
                 // Not loaded yet, or loaded and there is nothing to show. Both
                 // are states a person can land in and neither should render as
                 // an empty pane.
                 Text {
                     width: parent.width
-                    visible: !Schema.ready || win.shownOptions.length === 0
+                    visible: win.onOptions
+                             && (!Schema.ready || win.shownOptions.length === 0)
                     wrapMode: Text.WordWrap
                     text: {
                         if (Schema.error !== "")
@@ -508,7 +554,7 @@ FloatingWindow {
                 }
 
                 Repeater {
-                    model: win.shownOptions
+                    model: win.onOptions ? win.shownOptions : []
 
                     delegate: Column {
                         // An id, not `parent.parent`. Counting visual-parent hops
@@ -603,12 +649,23 @@ FloatingWindow {
         }
 
         // ── the apply bar ───────────────────────────────────────────────────
+        // Only on the options page.
+        //
+        // Not a simplification -- the two apply models are genuinely different
+        // and showing one bar for both would lie about at least one of them.
+        // Options preview live and commit together; rules and binds are addressed
+        // by INDEX and a write renumbers everything after a removal, so batching
+        // two cards' edits would send the second against an index the first
+        // invalidated. Each card saves itself, and the bar that promises
+        // otherwise is absent rather than misleading.
         Rectangle {
             id: applyBar
             anchors.left: sidebar.right
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: Math.max(40, Math.round(Cfg.fontPixelSize * 2.2))
+            visible: win.onOptions
+            height: visible ? Math.max(40, Math.round(Cfg.fontPixelSize * 2.2))
+                            : 0
             color: Qt.rgba(1, 1, 1, 0.04)
 
             // Present and inert when nothing is staged, rather than appearing on
