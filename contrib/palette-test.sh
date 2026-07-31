@@ -458,6 +458,36 @@ else
 	sed 's/^/       /' "$MG_CALLS"
 fi
 
+# ── the generation settings ─────────────────────────────────────────────────
+#
+# The scheme flags have to be ON that invocation. They are CLI-only: matugen
+# accepts `type`/`mode` under [config] in config.toml WITHOUT ERROR and then
+# ignores them, so a caller that omits them silently gets scheme-tonal-spot.
+#
+# Which is exactly what this page used to do. A wallpaper script running
+# `-t scheme-fidelity` and an Apply running bare disagree on 39 of matugen's 50
+# roles, so pressing Apply retoned every themed application on the machine and
+# the next wallpaper change put them all back -- with nothing on screen, in
+# either direction, to say so.
+RENDER_CALL="$(grep "image $WORK/wall.png" "$MG_CALLS" | tail -1)"
+for flag in "-t" "-m" "--contrast"; do
+	if printf '%s ' "$RENDER_CALL" | grep -q -- " $flag "; then
+		ok "...carrying $flag, so the scheme is not silently the default"
+	else
+		bad "...carrying $flag, so the scheme is not silently the default"
+		printf '       %s\n' "$RENDER_CALL"
+	fi
+done
+
+# Recorded in the mapping file too, because the wallpaper script reads it to
+# pass the same values. Two callers, one source of truth.
+if grep -q '^scheme\.type=' "$MG_CONF" && grep -q '^scheme\.mode=' "$MG_CONF"; then
+	ok "...and recorded for the wallpaper script to read back"
+else
+	bad "...and recorded for the wallpaper script to read back"
+	sed 's/^/       /' "$MG_CONF"
+fi
+
 # ── the wiring ──────────────────────────────────────────────────────────────
 #
 # A template matugen has not been told about renders nothing, so Apply also adds

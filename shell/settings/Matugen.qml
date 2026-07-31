@@ -102,6 +102,73 @@ Singleton {
           label: "Attention",            role: "error",                  gray: false }
     ]
 
+    // ── how the palette is generated, not just which role each colour takes ──
+    //
+    // These are matugen's own generation settings, and they are CLI-ONLY. Putting
+    // `type`/`mode` in config.toml's [config] is accepted WITHOUT ERROR and then
+    // ignored -- I checked, and the output is byte-identical to the defaults. So
+    // every caller has to pass them, and any caller that forgets silently gets
+    // scheme-tonal-spot.
+    //
+    // That is not a small difference. Measured on one seed, 39 of matugen's 50
+    // roles differ between scheme-fidelity and scheme-tonal-spot. And `matugen
+    // image` re-renders EVERY template in the config, so a page that forgot these
+    // flags did not just mistheme the compositor -- it retoned rofi, kitty, btop,
+    // nvim and the rest, and the next wallpaper change put them all back.
+    readonly property var schemeTypes: [
+        "scheme-content", "scheme-expressive", "scheme-fidelity",
+        "scheme-fruit-salad", "scheme-monochrome", "scheme-neutral",
+        "scheme-rainbow", "scheme-tonal-spot", "scheme-vibrant"
+    ]
+    readonly property var preferModes: [
+        "", "darkness", "lightness", "saturation", "less-saturation", "value",
+        "closest-to-fallback"
+    ]
+    // matugen's own defaults, so an unset file behaves exactly like a bare run.
+    property var scheme: ({
+        type: "scheme-tonal-spot", mode: "dark", contrast: "0", prefer: ""
+    })
+
+    function setScheme(field, value) {
+        const s = Object.assign({}, scheme);
+        s[field] = value;
+        scheme = s;
+        generation++;
+    }
+
+    // The flags every invocation must carry. Empty strings are dropped rather
+    // than passed as "", which matugen rejects.
+    function schemeArgs() {
+        const a = ["-t", scheme.type, "-m", scheme.mode];
+        if (String(scheme.contrast) !== "")
+            a.push("--contrast", String(scheme.contrast));
+        if (scheme.prefer !== "")
+            a.push("--prefer", scheme.prefer);
+        return a;
+    }
+
+    // ── the other applications ──────────────────────────────────────────────
+    //
+    // Discovered from the user's config.toml rather than configured here. Apply
+    // rewrites all of them and always did; the page just never said so, which is
+    // the part that made it feel like a compositor setting.
+    //
+    // [{ name, output, enabled }]
+    property var templates: []
+
+    function templateEnabled(name) {
+        void generation;
+        const e = mapping["template." + name];
+        return !e || e.role !== "off";
+    }
+
+    function setTemplateEnabled(name, on) {
+        const m = Object.assign({}, mapping);
+        m["template." + name] = { role: on ? "on" : "off", gray: false, owned: on };
+        mapping = m;
+        generation++;
+    }
+
     // key -> { role, gray, owned }
     property var mapping: ({})
     property var roles: []
@@ -144,6 +211,8 @@ Singleton {
 
     function parseMapping(text) {
         const out = {};
+        const sch = Object.assign({}, scheme);
+        let sawScheme = false;
         for (const line of text.split("\n")) {
             const t = line.trim();
             if (!t || t.startsWith("#"))
@@ -154,6 +223,17 @@ Singleton {
             const k = t.slice(0, i).trim();
             // `role[:grayscale]`, or the literal `off`.
             const v = t.slice(i + 1).trim();
+            // Settings are namespaced with a dot; colour keys are C identifiers
+            // and never contain one, so the two cannot collide.
+            if (k.startsWith("scheme.")) {
+                const f = k.slice(7);
+                if (f === "type" || f === "mode" || f === "contrast"
+                    || f === "prefer") {
+                    sch[f] = v;
+                    sawScheme = true;
+                }
+                continue;
+            }
             if (v === "off") {
                 out[k] = { role: defaultsFor(k).role, gray: false, owned: false };
                 continue;
@@ -165,6 +245,8 @@ Singleton {
                 owned: true
             };
         }
+        if (sawScheme)
+            scheme = sch;
         return out;
     }
 
@@ -172,6 +254,16 @@ Singleton {
         const lines = [
             "# Which Material role each asteroidz colour is generated from.",
             "# Written by the settings window; `off` means matugen does not set it.",
+            "",
+            "# How the palette is generated. These are matugen's own flags, and",
+            "# they apply to EVERY template it renders, not just asteroidz -- so",
+            "# anything else that runs matugen (a wallpaper script, say) has to",
+            "# pass the same ones or the two will keep overwriting each other with",
+            "# different schemes. set-wallpaper.sh reads this file for that reason.",
+            "scheme.type=" + scheme.type,
+            "scheme.mode=" + scheme.mode,
+            "scheme.contrast=" + scheme.contrast,
+            "scheme.prefer=" + scheme.prefer,
             ""
         ];
         for (const d of keys) {
@@ -179,7 +271,72 @@ Singleton {
             lines.push(d.key + "=" + (!e.owned ? "off"
                 : e.role + (e.gray ? ":grayscale" : "")));
         }
+        const off = templates.filter(t => !templateEnabled(t.name));
+        if (off.length) {
+            lines.push("");
+            lines.push("# Templates left out of Apply. They stay in matugen's own");
+            lines.push("# config, so a wallpaper change still renders them.");
+            for (const t of off)
+                lines.push("template." + t.name + "=off");
+        }
         return lines.join("\n") + "\n";
+    }
+
+    // ── reading the template list out of matugen's config ───────────────────
+    //
+    // A deliberately shallow TOML read: section headers and output_path, nothing
+    // else. It never rewrites the file from what it parsed, so a value it fails
+    // to understand costs a display string, not the user's config.
+    function parseTemplates(text) {
+        const out = [];
+        let cur = null;
+        for (const raw of text.split("\n")) {
+            const t = raw.trim();
+            const m = /^\[templates\.([^\]]+)\]/.exec(t);
+            if (m) {
+                cur = { name: m[1], output: "" };
+                out.push(cur);
+                continue;
+            }
+            if (/^\[/.test(t)) {
+                cur = null;
+                continue;
+            }
+            if (cur && t.startsWith("output_path")) {
+                const q = /=\s*"(.*)"/.exec(t);
+                if (q)
+                    cur.output = q[1];
+            }
+        }
+        return out;
+    }
+
+    // A config containing only the enabled templates, for Apply.
+    //
+    // matugen has no --template filter: it renders everything in the config it is
+    // given. But it takes `-c`, so a filtered COPY does the job and the user's own
+    // config.toml is never touched -- which matters, because that file themes
+    // every application on the machine and this page is not its owner.
+    function filteredToml(text) {
+        const keep = [];
+        let cur = null, curName = null;
+        for (const raw of text.split("\n")) {
+            const m = /^\s*\[templates\.([^\]]+)\]/.exec(raw);
+            if (m) {
+                curName = m[1];
+                cur = templateEnabled(curName) ? keep : null;
+                if (cur)
+                    cur.push(raw);
+                continue;
+            }
+            if (/^\s*\[/.test(raw)) {
+                curName = null;
+                cur = keep;
+            }
+            if (cur)
+                cur.push(raw);
+        }
+        return keep.join("\n") + "\n";
     }
 
     // Recover the mapping from an existing template, well enough not to lose a
@@ -407,12 +564,29 @@ Singleton {
         id: tomlFile
         path: root.matugenToml
         watchChanges: true
-        onLoaded: root.tomlExists = true
-        onLoadFailed: root.tomlExists = false
+        onLoaded: {
+            root.tomlExists = true;
+            // watchChanges is on, so editing config.toml by hand while the page
+            // is open updates the list rather than leaving it stale.
+            root.templates = root.parseTemplates(tomlFile.text());
+            root.generation++;
+        }
+        onLoadFailed: {
+            root.tomlExists = false;
+            root.templates = [];
+        }
     }
 
     FileView { id: tomlWriter; path: root.matugenToml;          preload: false }
     FileView { id: tomlBackup; path: root.matugenToml + ".bak"; preload: false }
+
+    // The filtered copy lives in the runtime dir, not beside the real config: it
+    // is derived, per-run, and must never be mistaken for the file matugen is
+    // normally pointed at.
+    readonly property string filteredTomlPath:
+        (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+        + "/asteroidz-bar-matugen.toml"
+    FileView { id: filteredWriter; path: root.filteredTomlPath; preload: false }
 
     function wireMatugen() {
         if (!tomlExists) {
@@ -449,7 +623,19 @@ Singleton {
         // produces nothing and says it succeeded.
         wireMatugen();
         if (wallpaper && wallpaper !== "") {
-            render.command = [root.matugenBin, "image", wallpaper];
+            // The real config unless something is actually switched off. Keeping
+            // the common case byte-identical to a bare `matugen image` means the
+            // filtered copy -- the part that can go wrong -- only ever runs when
+            // you asked for it.
+            let cfg = [];
+            const off = templates.filter(t => !templateEnabled(t.name));
+            if (off.length && tomlExists) {
+                filteredWriter.setText(filteredToml(tomlFile.text()));
+                cfg = ["-c", root.filteredTomlPath];
+            }
+            render.command = [root.matugenBin].concat(cfg)
+                             .concat(["image", wallpaper])
+                             .concat(schemeArgs());
             render.running = true;
         } else {
             busy = false;

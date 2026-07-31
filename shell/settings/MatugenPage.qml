@@ -33,10 +33,56 @@ Item {
         dirty = true;
     }
 
+    // Scheme and template edits live in the SAME draft as the colour rows, under
+    // reserved keys. They could have written straight through to the singleton --
+    // they are not persisted until Apply either way -- but then Revert would have
+    // silently declined to undo them, and these two are the controls on this page
+    // that change every application rather than one colour.
+    function schemeValue(field) {
+        void Matugen.generation;
+        const d = draft["@scheme"];
+        if (d && d[field] !== undefined)
+            return d[field];
+        return Matugen.scheme[field];
+    }
+
+    function setSchemeValue(field, v) {
+        const all = Object.assign({}, draft);
+        const one = Object.assign({}, all["@scheme"] || {});
+        one[field] = v;
+        all["@scheme"] = one;
+        draft = all;
+        dirty = true;
+    }
+
+    function templateOn(name) {
+        void Matugen.generation;
+        const d = draft["@templates"];
+        if (d && d[name] !== undefined)
+            return d[name];
+        return Matugen.templateEnabled(name);
+    }
+
+    function setTemplateOn(name, v) {
+        const all = Object.assign({}, draft);
+        const one = Object.assign({}, all["@templates"] || {});
+        one[name] = v;
+        all["@templates"] = one;
+        draft = all;
+        dirty = true;
+    }
+
     function applyAll() {
-        for (const k in draft)
+        for (const f in (draft["@scheme"] || {}))
+            Matugen.setScheme(f, draft["@scheme"][f]);
+        for (const n in (draft["@templates"] || {}))
+            Matugen.setTemplateEnabled(n, draft["@templates"][n]);
+        for (const k in draft) {
+            if (k === "@scheme" || k === "@templates")
+                continue;
             for (const f in draft[k])
                 Matugen.set(k, f, draft[k][f]);
+        }
         draft = ({});
         dirty = false;
         // Wallpaper.PATH. There is no `Wallpaper.wallpaper` -- the singleton
@@ -75,6 +121,119 @@ Item {
             color: Matugen.statusBad ? Cfg.urgent : Cfg.focusBg
             font.family: Cfg.fontFamily
             font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        // At the top, not the foot. This page is one Apply for everything on it,
+        // and it now runs to four scheme rows, nine colours and a row per themed
+        // application -- a button under all of that is off the bottom of the
+        // window on arrival, which reads as a page with no way to save.
+        Row {
+            spacing: Cfg.spacing
+
+            SmallButton {
+                label: Matugen.busy ? "Applying…" : "Apply palette"
+                active: page.dirty
+                onClicked: if (page.dirty && !Matugen.busy) page.applyAll()
+            }
+            SmallButton {
+                label: "Revert"
+                onClicked: { page.draft = ({}); page.dirty = false; }
+            }
+        }
+
+        Item { width: 1; height: Cfg.spacing }
+
+        // ── how the palette is generated ────────────────────────────────────
+        //
+        // Above the per-colour rows because it outranks them: these four decide
+        // what every role IS, and the rows below only pick which role each colour
+        // reads. Changing the scheme moves all nine at once.
+        Text {
+            width: parent.width
+            text: "Scheme"
+            color: Cfg.fg
+            font.family: Cfg.fontFamily
+            font.pointSize: Cfg.fontSize
+            font.bold: true
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "How matugen derives the palette from the wallpaper. These "
+                  + "apply to every application it themes, not just the "
+                  + "compositor — anything else that runs matugen must pass the "
+                  + "same values or the two will keep overwriting each other."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Repeater {
+            model: [
+                { field: "type",     label: "Type",
+                  values: Matugen.schemeTypes },
+                { field: "mode",     label: "Mode",
+                  values: ["dark", "light"] },
+                { field: "contrast", label: "Contrast",
+                  values: ["-1", "-0.5", "0", "0.5", "1"] },
+                { field: "prefer",   label: "Prefer",
+                  values: Matugen.preferModes.map(v => v === "" ? "(default)" : v) }
+            ]
+
+            delegate: Item {
+                required property var modelData
+                width: col.width
+                height: picker.implicitHeight
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    // "Prefer" needs the explanation; the rest read for
+                    // themselves and a paragraph each would bury them.
+                    text: modelData.field === "prefer"
+                          ? "Prefer  (which colour to take from the image)"
+                          : modelData.label
+                    color: Cfg.fg
+                    font.family: Cfg.fontFamily
+                    font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+                    font.hintingPreference: Font.PreferFullHinting
+                }
+
+                Picker {
+                    id: picker
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    // Explicit, because Picker sizes its own rectangle to
+                    // parent.width -- anchoring it without one leaves the value
+                    // hanging off the right edge of the window as "scheme-to".
+                    // Wide enough for the longest member of any of these lists
+                    // ("scheme-fruit-salad", "closest-to-fallback").
+                    width: Math.round(parent.width * 0.42)
+                    values: modelData.values
+                    // An empty --prefer is matugen's own default, and reads
+                    // better as a word than as a blank row.
+                    current: page.schemeValue(modelData.field) === ""
+                             ? "(default)"
+                             : page.schemeValue(modelData.field)
+                    onPicked: v => page.setSchemeValue(
+                        modelData.field, v === "(default)" ? "" : v)
+                }
+            }
+        }
+
+        Item { width: 1; height: Cfg.spacing }
+
+        Text {
+            width: parent.width
+            text: "Colours"
+            color: Cfg.fg
+            font.family: Cfg.fontFamily
+            font.pointSize: Cfg.fontSize
+            font.bold: true
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -203,17 +362,80 @@ Item {
 
         Item { width: 1; height: Cfg.spacing }
 
-        Row {
-            spacing: Cfg.spacing
+        // ── everything else matugen themes ──────────────────────────────────
+        //
+        // Listed because Apply always rewrote every one of these and the page
+        // never said so. A button that re-themes nine applications should look
+        // like it does.
+        Text {
+            width: parent.width
+            text: "Applications"
+            color: Cfg.fg
+            font.family: Cfg.fontFamily
+            font.pointSize: Cfg.fontSize
+            font.bold: true
+            font.hintingPreference: Font.PreferFullHinting
+        }
 
-            SmallButton {
-                label: Matugen.busy ? "Applying…" : "Apply palette"
-                active: page.dirty
-                onClicked: if (page.dirty && !Matugen.busy) page.applyAll()
-            }
-            SmallButton {
-                label: "Revert"
-                onClicked: { page.draft = ({}); page.dirty = false; }
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            visible: Matugen.templates.length > 0
+            text: "Templates in your matugen config. Turning one off leaves it "
+                  + "out of Apply only — it stays in matugen's own config, so a "
+                  + "wallpaper change still renders it."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            visible: Matugen.templates.length === 0
+            text: "No matugen config found, so nothing else is themed yet. "
+                  + "Apply will create one with the compositor's template in it."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Repeater {
+            model: Matugen.templates
+
+            delegate: Item {
+                required property var modelData
+                width: col.width
+                height: appToggle.implicitHeight
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.right: appToggle.left
+                    anchors.rightMargin: Cfg.spacing
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideMiddle
+                    // The output path, not just the name: two templates can
+                    // write the same application's colours from different files,
+                    // and the path is what tells them apart.
+                    text: modelData.name
+                          + (modelData.output ? "   " + modelData.output : "")
+                    color: page.templateOn(modelData.name)
+                           ? Cfg.fg
+                           : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+                    font.family: Cfg.fontFamily
+                    font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                    font.hintingPreference: Font.PreferFullHinting
+                }
+
+                Toggle {
+                    id: appToggle
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    on: page.templateOn(modelData.name)
+                    onToggled: v => page.setTemplateOn(modelData.name, v)
+                }
             }
         }
 

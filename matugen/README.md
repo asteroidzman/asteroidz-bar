@@ -5,6 +5,48 @@
 window's **Palette** page edits which Material role each of the nine colours comes
 from, and rewrites this file from that mapping.
 
+## The scheme settings are CLI-only, and that matters
+
+matugen's generation settings — `--type` (`scheme-vibrant`, `scheme-fidelity`, …),
+`--mode`, `--contrast`, `--prefer` — **cannot** be put in `config.toml`. Writing
+them under `[config]` is accepted without an error and then ignored; the output is
+byte-identical to the defaults. So every caller has to pass them, and a caller
+that forgets silently gets `scheme-tonal-spot`.
+
+That is not a subtle difference. On one seed, **39 of matugen's 50 roles** differ
+between `scheme-fidelity` and `scheme-tonal-spot`. And `matugen image` re-renders
+*every* template in the config, not just this one — so two callers disagreeing
+about the scheme means each one retones every themed application on the machine,
+and whichever ran last wins.
+
+The Palette page stores the four settings in `~/.config/asteroidz-bar/matugen.conf`
+alongside the role mapping:
+
+```
+scheme.type=scheme-fidelity
+scheme.mode=dark
+scheme.contrast=0
+scheme.prefer=saturation
+```
+
+**Anything else that runs matugen must read the same file.** A wallpaper script is
+the usual second caller; the shipped one parses those four keys and falls back to
+its own defaults when the file is absent. An empty `scheme.prefer` means "don't
+pass `--prefer`" — matugen rejects a blank one.
+
+## The other applications
+
+The Palette page lists every `[templates.*]` in your `config.toml` and lets you
+leave any of them out of Apply. It does this by rendering a filtered **copy** of
+the config to `$XDG_RUNTIME_DIR` and running `matugen -c` against it: matugen has
+no way to render a subset, and rewriting the real file to drop a section would put
+this page in charge of a file that themes your whole desktop.
+
+Disabling is per-Apply, not permanent. The template stays in `config.toml`, so a
+wallpaper change still renders it. If you want an application to stop being themed
+altogether, remove its section from `config.toml` by hand — that is the file that
+owns the question.
+
 The package installs it to `/usr/share/asteroidz-bar/matugen/`. Nothing under
 `~/.config` is written at install time — a package that wrote into your home
 directory would overwrite a template you had tuned — so the copy has to be made
