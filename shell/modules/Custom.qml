@@ -145,14 +145,36 @@ Pill {
             onRead: line => {
                 if (!line.trim())
                     return;
+                // Parsed and handled SEPARATELY, and this is not tidiness.
+                //
+                // Both used to sit in one try, so an exception thrown by
+                // handle() was reported as "bad JSON from <plugin>" -- blaming
+                // the plugin for the bar's own fault, with no way to tell the
+                // two apart. That cost a real hunt: a startup warning sent me
+                // through the plugin's every write path looking for a
+                // malformed line that was never there.
+                //
+                // The offending text goes in the message for the same reason.
+                // "Something was wrong somewhere" is not a diagnosis, and the
+                // line is right here.
+                let obj;
                 try {
-                    root.handle(JSON.parse(line));
+                    obj = JSON.parse(line);
                 } catch (e) {
                     // A malformed line is the plugin's problem. Dropping it
                     // beats tearing down a process that will very likely
                     // deliver a good line next time -- the native runtime made
                     // the same call.
-                    console.warn("asteroidz-bar: bad JSON from", root.name);
+                    console.warn("asteroidz-bar: bad JSON from", root.name + ":",
+                                 line.length > 200 ? line.slice(0, 200) + "…"
+                                                   : line);
+                    return;
+                }
+                try {
+                    root.handle(obj);
+                } catch (e) {
+                    console.warn("asteroidz-bar: failed to handle a line from",
+                                 root.name + ":", e);
                 }
             }
         }
@@ -175,13 +197,25 @@ Pill {
         stdout: StdioCollector {
             onStreamFinished: {
                 for (const line of text.split("\n")) {
-                    if (line.trim()) {
-                        try {
-                            root.handle(JSON.parse(line));
-                        } catch (e) {
-                            console.warn("asteroidz-bar: bad JSON from",
-                                         root.name);
-                        }
+                    if (!line.trim())
+                        continue;
+                    // Split the same way as the streaming transport above, and
+                    // for the reason given there.
+                    let obj;
+                    try {
+                        obj = JSON.parse(line);
+                    } catch (e) {
+                        console.warn("asteroidz-bar: bad JSON from",
+                                     root.name + ":",
+                                     line.length > 200 ? line.slice(0, 200) + "…"
+                                                       : line);
+                        continue;
+                    }
+                    try {
+                        root.handle(obj);
+                    } catch (e) {
+                        console.warn("asteroidz-bar: failed to handle a line from",
+                                     root.name + ":", e);
                     }
                 }
             }

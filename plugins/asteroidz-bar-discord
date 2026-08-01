@@ -364,6 +364,7 @@ def watch_stdin(on_event, on_eof):
     so each restart left two more behind, still holding an X connection. EOF on
     stdin is the bar being gone, and it is unambiguous.
     """
+    import gi
     from gi.repository import GLib
 
     buf = {"text": ""}
@@ -392,7 +393,18 @@ def watch_stdin(on_event, on_eof):
                 pass
         return True
 
-    GLib.unix_fd_add_full(
+    # GLibUnix where it exists, GLib where it does not. pygobject moved this and
+    # left the old spelling working but warning -- and a plugin's stderr is shown
+    # by the bar, so a deprecation notice per instance per start is noise in the
+    # one place errors are supposed to stand out.
+    try:
+        gi.require_version("GLibUnix", "2.0")
+        from gi.repository import GLibUnix
+        add_fd = GLibUnix.fd_add_full
+    except (ValueError, ImportError):
+        add_fd = GLib.unix_fd_add_full
+
+    add_fd(
         GLib.PRIORITY_DEFAULT,
         sys.stdin.fileno(),
         GLib.IOCondition.IN | GLib.IOCondition.HUP | GLib.IOCondition.ERR,
