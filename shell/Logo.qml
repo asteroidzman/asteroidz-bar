@@ -59,10 +59,29 @@ Singleton {
     // the bar uses.
     readonly property color accent: Cfg.focusBg
 
-    // Ready only once a recoloured copy exists; until then the pill draws the
-    // artwork as shipped rather than nothing at all.
-    property bool ready: false
-    readonly property string source: ready ? "file://" + outPath : sourcePath
+    // What the pill actually loads. Set from regenerate(), AFTER the write, and
+    // never derived from outPath.
+    //
+    // This is the third time the ship went missing, and the reason it kept
+    // coming back is that `source` used to read outPath directly. QML property
+    // notifications are SYNCHRONOUS: the instant regenerate() bumped
+    // `generation`, every binding on outPath re-evaluated -- including the
+    // Image's source -- and the Image went looking for a file whose write had
+    // not been issued yet, one statement later in the same function. It logged
+    //
+    //     QML Icon at Pill.qml: Cannot open: .../asteroidz-bar-logo-<key>-0.svg
+    //
+    // once, cached that failure against the URL, and never looked again, so the
+    // ship stayed gone for the whole session even though the file appeared
+    // milliseconds later. Publishing the path only once the bytes are on disk is
+    // the one ordering that has no window at all -- blockWrites is what makes
+    // "after setText" mean "after the write".
+    //
+    // Empty until the first copy exists; until then the pill draws the artwork
+    // as shipped rather than nothing at all.
+    property string published: ""
+    readonly property string source:
+        published !== "" ? "file://" + published : sourcePath
 
     function hex(c) {
         return "#"
@@ -117,14 +136,13 @@ Singleton {
             .replace("#f2603f", hex(Qt.darker(accent, 1.4)))
             .replace("#fff2cf", hex(Qt.lighter(accent, 1.8)));
 
-        // Bumped BEFORE the write, so setText lands on the path `source` is
-        // about to point at. Bumping it after would write the new colours to
-        // the name that is on its way out and publish the name of a file that
-        // does not exist -- the same failure this whole comment block is about,
-        // reintroduced from the other direction.
+        // Three steps, and the order is the whole fix. Bump so `out.path` is
+        // the name nothing is displaying; write it, which blockWrites makes
+        // synchronous; and only then hand that name to the Image. Nothing ever
+        // points at a file that has not been written.
         root.generation++;
         out.setText(recoloured);
-        root.ready = true;
+        root.published = root.outPath;
     }
 
     // The palette is rewritten by matugen on every wallpaper change, and the

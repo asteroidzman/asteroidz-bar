@@ -91,6 +91,107 @@ render "clock" "$WORK/without.png"
 render "media,clock" "$WORK/with.png"
 render "weather,idle" "$WORK/pinned.png"
 
+# ── 4. the ship ─────────────────────────────────────────────────────────────
+#
+# It has gone missing three times, and the last two were the same bug wearing
+# different clothes: Logo.qml writes a recoloured copy of the SVG to
+# XDG_RUNTIME_DIR and points the pill at it, and anything that lets the pill
+# see that path before the bytes are on disk loses the artwork for the whole
+# session. Image reports "Cannot open" ONCE, caches the failure against the
+# URL, and never retries -- so a file that appears milliseconds later is never
+# noticed. Nothing about it is visible in the QML, and it does not reproduce by
+# reading the code, which is how it survived two fixes.
+#
+# Two assertions, because either alone can pass while the ship is gone: the
+# warning must not be there, and the pill must actually be WIDER with the logo
+# turned on than with it off -- a chip that draws nothing still takes no width.
+render_tags() { # render_tags <show-logo> <outfile> <logfile>
+	cp "$PRISTINE" "$HL_CONFIG"
+	cat >> "$HL_CONFIG" <<EOF
+theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
+bar { enable false; height 48; position "top"; margin { x 8; y 9 }
+	show-logo $1
+	panel { enable true; radius 9; padding 12; blur true; shadow true }
+	modules-left ""; modules-center "tags"; modules-right "" }
+EOF
+	hl_dispatch "reload_config" 1
+	sleep 1
+	dbus-run-session -- \
+		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+		HOME="$HOME" PATH="$PATH" \
+		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
+		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
+		ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
+		ASTEROIDZ_BAR_QML="$QMLROOT" \
+		"$HERE/bin/asteroidz-bar" > "$3" 2>&1 &
+	local pid=$!
+	sleep 8
+	grim -o "$HL_MON" "$2" 2>/dev/null
+	kill "$pid" 2>/dev/null
+	wait "$pid" 2>/dev/null
+}
+
+render_tags true "$WORK/logo-on.png" "$WORK/logo-on.log"
+render_tags false "$WORK/logo-off.png" "$WORK/logo-off.log"
+
+# The RE-generate, which is the one that actually broke. Starting up writes the
+# copy before the pill has ever drawn; changing the palette rewrites it while
+# the pill is on screen holding the previous one, and that is the moment the
+# Image can be asked for a URL whose file is one statement away from existing.
+# Both of the shots above pass against the broken build -- this is the case
+# that fails -- so the accent is changed here with the bar RUNNING, exactly the
+# way matugen changes it when the wallpaper does.
+render_tags_recolour() { # render_tags_recolour <outfile> <logfile>
+	cp "$PRISTINE" "$HL_CONFIG"
+	cat >> "$HL_CONFIG" <<EOF
+theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 }
+	focus-bg-color 0x2a6fd6ff }
+bar { enable false; height 48; position "top"; margin { x 8; y 9 }
+	show-logo true
+	panel { enable true; radius 9; padding 12; blur true; shadow true }
+	modules-left ""; modules-center "tags"; modules-right "" }
+EOF
+	hl_dispatch "reload_config" 1
+	sleep 1
+	dbus-run-session -- \
+		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+		HOME="$HOME" PATH="$PATH" \
+		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
+		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
+		ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
+		ASTEROIDZ_BAR_QML="$QMLROOT" \
+		"$HERE/bin/asteroidz-bar" > "$2" 2>&1 &
+	local pid=$!
+	sleep 8
+
+	# Three, because the failure is a race and one roll of it proves little.
+	# Each is a different accent, so each forces a real rewrite.
+	local c
+	for c in 0xd62a6fff 0x2ad66fff 0xd6a52aff; do
+		sed -i "s/focus-bg-color 0x[0-9a-f]*/focus-bg-color $c/" "$HL_CONFIG"
+		hl_dispatch "reload_config" 0.5
+		sleep 2
+	done
+
+	grim -o "$HL_MON" "$1" 2>/dev/null
+	kill "$pid" 2>/dev/null
+	wait "$pid" 2>/dev/null
+}
+
+render_tags_recolour "$WORK/logo-recolour.png" "$WORK/logo-recolour.log"
+
+if grep -q "Cannot open.*asteroidz-bar-logo" "$WORK/logo-recolour.log"; then
+	bad "a palette change does not lose the ship ($(grep -m1 -o 'Cannot open.*' "$WORK/logo-recolour.log"))"
+else
+	ok "a palette change does not lose the ship"
+fi
+
+if grep -q "Cannot open.*asteroidz-bar-logo" "$WORK/logo-on.log"; then
+	bad "the ship's recoloured copy was published before it was written ($(grep -m1 -o 'Cannot open.*' "$WORK/logo-on.log"))"
+else
+	ok "the ship's recoloured copy is written before anything looks at it"
+fi
+
 python3 - "$WORK" > "$WORK/verdicts" 2>&1 <<'PY'
 import sys
 from PIL import Image
@@ -173,6 +274,50 @@ if sum(near) < sum(far) - 30:
     print("PASS the panel casts a shadow")
 else:
     print("FAIL the panel casts a shadow")
+
+# 4. the ship is PAINTED -- a presence check, not the race detector.
+#
+# Ink inside the panel, not the panel's width: a chip whose artwork failed to
+# load still takes its width (the pill sizes from the bar height, not from
+# whether the Image resolved), so width proves only that the chip was laid out.
+#
+# What this does NOT catch is the publish-before-write race itself. Measured
+# against a build with that bug reintroduced, these two still pass: the Image
+# holds the pixmap it already had, so the shot can look right in the very run
+# whose log records the failure -- and the ship then disappears later, or on
+# the next start, which is exactly why it took three attempts to pin down. The
+# "Cannot open" assertions above are the detector; these say the artwork
+# resolves and is drawn at all, which is a different way to lose it.
+def panel_ink(name):
+    im = Image.open(f"{work}/{name}")
+    p = im.convert("RGB").load()
+    span = panel_span(p, im.size[0])
+    if not span:
+        return None
+    return sum(1 for y in range(14, 50) for x in range(span[0], span[1])
+               if sum(p[x, y]) > 380)
+
+
+ink_on = panel_ink("logo-on.png")
+ink_off = panel_ink("logo-off.png")
+ink_rec = panel_ink("logo-recolour.png")
+print(f"panel ink -- with the ship: {ink_on}, without: {ink_off}, "
+      f"after three recolours: {ink_rec}")
+if ink_on is None or ink_off is None or ink_rec is None:
+    print("FAIL the tags panel was found in every shot")
+else:
+    # The ship is a wireframe triangle and a flame at 1.25 scale in a 48px
+    # bar: hundreds of lit pixels against tag chips that are identical in
+    # both shots. Half the difference is a wide margin either side of it.
+    margin = (ink_on - ink_off) // 2
+    if ink_on - ink_off > 100:
+        print("PASS the ship is painted in the tags panel")
+    else:
+        print("FAIL the ship is painted in the tags panel")
+    if ink_rec - ink_off > margin:
+        print("PASS the ship is still painted after a palette change")
+    else:
+        print("FAIL the ship is still painted after a palette change")
 PY
 
 # The measurements are printed by the python above; this turns them into the
