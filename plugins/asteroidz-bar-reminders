@@ -484,7 +484,7 @@ def menu():
         rows.append({"text": f"Postpone {POSTPONE_MINUTES} min",
                      "value": "snooze:" + d["key"]})
     rows.append({"separator": True})
-    rows.append({"text": "‹  All tasks", "value": "back",
+    rows.append({"text": "‹  All reminders", "value": "back",
                  "submenu": True})
     return {"menu": {"item": "", "rows": rows}}
 
