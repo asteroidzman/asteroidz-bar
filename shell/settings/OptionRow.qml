@@ -30,6 +30,15 @@ Item {
         numeric && option.min !== undefined && option.max !== undefined
     readonly property bool fractional: type === "float" || type === "double"
 
+    // The legal answers, when there is a fixed set of them.
+    //
+    // Read from `enum` regardless of TYPE. An option can be stored as a string
+    // and still have five legal values -- the animation types are, because
+    // there the name is the value rather than an index into a table -- and
+    // deciding the control from the type alone put a text box in front of a
+    // closed list and asked the reader to know the spellings.
+    readonly property var choices: option.enum || []
+
     // What the control should be showing: the staged edit if there is one, else
     // what the compositor reports.
     readonly property string shown: view.stagedValue(key)
@@ -101,7 +110,7 @@ Item {
                 width: root.controlWidth
                 sourceComponent: {
                     if (root.type === "bool") return boolControl;
-                    if (root.type === "enum") return enumControl;
+                    if (root.choices.length > 0) return enumControl;
                     if (root.type === "color") return colorControl;
                     if (root.bounded) return sliderControl;
                     return textControl;

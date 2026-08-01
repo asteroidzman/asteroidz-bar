@@ -13,6 +13,7 @@
 // panel, which is the one thing that reliably makes room.
 
 import QtQuick
+import Quickshell
 import "."
 
 Item {
@@ -69,11 +70,43 @@ Item {
         }
     }
 
+    // Clicking anywhere else closes the list.
+    //
+    // At the WINDOW's level, not inside this item: an open list has to be
+    // dismissable from the whole window, and anything parented here is clipped
+    // by the Flickable the settings pane scrolls in. Without it the list stayed
+    // open until it was used, which in the settings window -- where there is no
+    // surrounding popover to dismiss it -- meant it never closed at all.
+    //
+    // Below the list (z 9 against 11) so picking an entry still reaches the
+    // entry, and above the header, so clicking the header while open closes it
+    // through here rather than toggling twice.
+    Loader {
+        active: root.open && QsWindow.window !== null
+        parent: QsWindow.window ? QsWindow.window.contentItem : root
+        anchors.fill: parent
+        z: 9
+        sourceComponent: Item {
+            TapHandler { onTapped: root.open = false }
+        }
+    }
+
     Rectangle {
         id: listBox
-        anchors.top: header.bottom
-        anchors.topMargin: 4
-        width: parent.width
+        // Reparented to the window while open, for the same reason as the
+        // catcher above: inside the Flickable it is clipped to the visible
+        // pane, so a list opened near the bottom lost its last rows.
+        parent: root.open && QsWindow.window ? QsWindow.window.contentItem : root
+        z: 11
+
+        // Placed by mapping, since the parent is no longer the header's.
+        readonly property point at: root.open && QsWindow.window
+            ? root.mapToItem(QsWindow.window.contentItem, 0, root.rowHeight + 4)
+            : Qt.point(0, 0)
+        x: parent === root ? 0 : at.x
+        y: parent === root ? root.rowHeight + 4 : at.y
+
+        width: root.width
         height: Math.min(root.maxRows, Math.max(1, root.values.length))
                 * root.rowHeight + 4
         visible: root.open
