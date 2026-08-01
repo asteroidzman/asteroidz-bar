@@ -232,6 +232,7 @@ Pill {
                 anchors.right: parent.right
                 anchors.verticalCenter: tabs.verticalCenter
                 height: Math.max(28, Math.round(Cfg.fontPixelSize * 1.6))
+                icon: "asteroidz-bar/gear.svg"
                 label: "All settings…"
                 onClicked: {
                     Settings.open();

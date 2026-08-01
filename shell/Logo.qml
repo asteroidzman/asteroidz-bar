@@ -36,9 +36,22 @@ Singleton {
         return Paths.resolve(roots.map(r => r + "/" + sourceName));
     }
 
+    // The path ALTERNATES between two names, and that is load-bearing rather
+    // than tidy.
+    //
+    // Rewriting one fixed path did not repaint: Qt caches an Image by its URL,
+    // so a second regenerate() wrote a newly-coloured file that nothing looked
+    // at, and the ship kept the accent it was born with while the rest of the
+    // bar followed the wallpaper. A changing URL is what invalidates the cache.
+    //
+    // Two names rather than a counter, so a desktop that changes wallpaper on a
+    // timer leaves two files in XDG_RUNTIME_DIR instead of one per change.
+    property int generation: 0
     readonly property string outPath:
         (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
-        + "/asteroidz-bar-logo-" + key + ".svg"
+        + "/asteroidz-bar-logo-" + key + "-" + (generation % 2) + ".svg"
+    // Per bar process: two of them (a second monitor) must not write each
+    // other's file while one of them is reading it.
     readonly property string key: Math.random().toString(36).slice(2, 10)
 
     // The colour the exhaust burns in. The accent, because that is what the
@@ -69,6 +82,25 @@ Singleton {
     FileView {
         id: out
         path: root.outPath
+
+        // `ready` is a claim that the file EXISTS, and regenerate() sets it on
+        // the line after setText(). With an asynchronous write that claim was a
+        // race: the Image was pointed at the copy, the copy was not there yet,
+        // Image reported "Cannot open" once and never retried -- so the ship
+        // vanished from the bar for the rest of the session, and came back on
+        // whichever restart happened to win the race, which is exactly how it
+        // presented ("my logo is missing", again, intermittently).
+        //
+        // blockWrites makes the claim true. atomicWrites so a reader can never
+        // catch a half-written SVG, which fails to parse the same unrecoverable
+        // way.
+        blockWrites: true
+        atomicWrites: true
+
+        // Nothing to preload: this path is an OUTPUT. Reading it at startup
+        // found no file and warned about it on every single start -- about the
+        // file this object exists to create.
+        preload: false
     }
 
     // The flame is a three-stop gradient plus a pale core. Each is replaced by
@@ -85,6 +117,12 @@ Singleton {
             .replace("#f2603f", hex(Qt.darker(accent, 1.4)))
             .replace("#fff2cf", hex(Qt.lighter(accent, 1.8)));
 
+        // Bumped BEFORE the write, so setText lands on the path `source` is
+        // about to point at. Bumping it after would write the new colours to
+        // the name that is on its way out and publish the name of a file that
+        // does not exist -- the same failure this whole comment block is about,
+        // reintroduced from the other direction.
+        root.generation++;
         out.setText(recoloured);
         root.ready = true;
     }
