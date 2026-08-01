@@ -31,8 +31,27 @@ scheme.prefer=saturation
 
 **Anything else that runs matugen must read the same file.** A wallpaper script is
 the usual second caller; the shipped one parses those four keys and falls back to
-its own defaults when the file is absent. An empty `scheme.prefer` means "don't
-pass `--prefer`" — matugen rejects a blank one.
+its own defaults when the file is absent.
+
+### `--prefer` is not optional
+
+Three of those four are preferences. `scheme.prefer` is a requirement, and there
+is no "leave it unset" value for it.
+
+When an image yields more than one candidate source colour matugen **asks** which
+to use, and with nothing attached to a terminal it does not choose — it exits 1:
+
+```
+Multiple source colors found, no preference was inputted, and a terminal was not
+detected. Use --prefer=PREFERENCE to find suitable colors without needing user
+input.
+```
+
+Neither a settings window nor a wallpaper script run from a session has a
+terminal, so omitting the flag is not a default, it is a guaranteed failure. It is
+not limited to busy photographs either: a 64×64 single-colour PNG fails the same
+way. An empty `scheme.prefer` is therefore treated as `saturation` rather than
+dropped, in both the page and the script.
 
 ## The other applications
 

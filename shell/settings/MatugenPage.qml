@@ -181,7 +181,7 @@ Item {
                 { field: "contrast", label: "Contrast",
                   values: ["-1", "-0.5", "0", "0.5", "1"] },
                 { field: "prefer",   label: "Prefer",
-                  values: Matugen.preferModes.map(v => v === "" ? "(default)" : v) }
+                  values: Matugen.preferModes }
             ]
 
             delegate: Item {
@@ -214,13 +214,8 @@ Item {
                     // ("scheme-fruit-salad", "closest-to-fallback").
                     width: Math.round(parent.width * 0.42)
                     values: modelData.values
-                    // An empty --prefer is matugen's own default, and reads
-                    // better as a word than as a blank row.
-                    current: page.schemeValue(modelData.field) === ""
-                             ? "(default)"
-                             : page.schemeValue(modelData.field)
-                    onPicked: v => page.setSchemeValue(
-                        modelData.field, v === "(default)" ? "" : v)
+                    current: page.schemeValue(modelData.field)
+                    onPicked: v => page.setSchemeValue(modelData.field, v)
                 }
             }
         }

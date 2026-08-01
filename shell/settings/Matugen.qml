@@ -120,13 +120,22 @@ Singleton {
         "scheme-fruit-salad", "scheme-monochrome", "scheme-neutral",
         "scheme-rainbow", "scheme-tonal-spot", "scheme-vibrant"
     ]
+    // No "(default)" here, and no empty member, because there is no such thing
+    // for us. When an image yields more than one candidate source colour matugen
+    // ASKS which to use -- and with no terminal to ask in it exits 1 with
+    // "Multiple source colors found, no preference was inputted, and a terminal
+    // was not detected". A settings window never has a terminal, so omitting
+    // --prefer is not a default, it is a guaranteed failure. It is not even
+    // limited to busy images: a 64x64 single-colour PNG fails the same way.
     readonly property var preferModes: [
-        "", "darkness", "lightness", "saturation", "less-saturation", "value",
+        "saturation", "less-saturation", "lightness", "darkness", "value",
         "closest-to-fallback"
     ]
-    // matugen's own defaults, so an unset file behaves exactly like a bare run.
+    // matugen's own defaults, except `prefer` -- see above. `saturation` is what
+    // the wallpaper script here has always passed.
     property var scheme: ({
-        type: "scheme-tonal-spot", mode: "dark", contrast: "0", prefer: ""
+        type: "scheme-tonal-spot", mode: "dark", contrast: "0",
+        prefer: "saturation"
     })
 
     function setScheme(field, value) {
@@ -142,8 +151,10 @@ Singleton {
         const a = ["-t", scheme.type, "-m", scheme.mode];
         if (String(scheme.contrast) !== "")
             a.push("--contrast", String(scheme.contrast));
-        if (scheme.prefer !== "")
-            a.push("--prefer", scheme.prefer);
+        // Always, substituting a default rather than dropping the flag. An empty
+        // value can only reach here from a hand-edited matugen.conf, and both
+        // ways of honouring it -- `--prefer ""` or no --prefer at all -- exit 1.
+        a.push("--prefer", scheme.prefer || "saturation");
         return a;
     }
 

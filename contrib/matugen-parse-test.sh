@@ -79,6 +79,14 @@ const templateEnabled = n => !disabled.has(n);
 const parseTemplates = eval("(" + extract("parseTemplates") + ")");
 const filteredToml   = eval("(" + extract("filteredToml") + ")");
 
+// The default scheme, read out of the singleton rather than restated here, so
+// this checks what ships rather than what I remember writing.
+const schemeDefault = eval(
+  "(" + /property var scheme:\s*\(\{([\s\S]*?)\}\)/.exec(src)[0]
+          .replace(/^property var scheme:\s*/, "") + ")");
+let scheme = schemeDefault;
+const schemeArgs = eval("(" + extract("schemeArgs") + ")");
+
 const text = fs.readFileSync(cfgPath, "utf8");
 const t = parseTemplates(text);
 const r = {};
@@ -98,6 +106,13 @@ disabled = new Set(t.map(x => x.name));
 const none = filteredToml(text);
 fs.writeFileSync(work + "/none.toml", none);
 r.noneCount = (none.match(/^\s*\[templates\./gm) || []).length;
+
+// The flags, written out for the shell to hand to a real matugen.
+fs.writeFileSync(work + "/args", schemeArgs().join("\n") + "\n");
+// And with prefer emptied, which is what a hand-edited matugen.conf can produce.
+scheme = Object.assign({}, schemeDefault, { prefer: "" });
+fs.writeFileSync(work + "/args-noprefer", schemeArgs().join("\n") + "\n");
+scheme = schemeDefault;
 
 console.log(JSON.stringify(r));
 JS
@@ -177,6 +192,53 @@ if grep -q "off.length === templates.length" "$QML"; then
 	ok "Matugen.qml refuses to render when everything is off"
 else
 	bad "Matugen.qml refuses to render when everything is off"
+fi
+
+# ── the flags, against a real matugen ───────────────────────────────────────
+#
+# This is the check palette-test.sh structurally cannot make. It drives a STUB
+# matugen -- it has to, since a real one would re-theme the machine the test runs
+# on -- so it can assert which flags were passed and nothing about whether they
+# work. They did not: the page shipped with "(default)" in the Prefer dropdown,
+# meaning "omit --prefer", and matugen answers that by trying to ASK which source
+# colour to use. With no terminal it exits 1. Changing the scheme type and
+# pressing Apply reported `matugen failed (exit 1)` and nothing else.
+#
+# Run against a flat single-colour PNG on purpose. The obvious guess is that this
+# needs a busy photograph to reproduce; it does not, which is why the smallest
+# possible image is the right fixture.
+if command -v matugen >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+	python3 -c "
+from PIL import Image
+Image.new('RGB', (64, 64), (63, 109, 237)).save('$WORK/flat.png')
+" 2>/dev/null
+	if [ -f "$WORK/flat.png" ]; then
+		mapfile -t ARGS < "$WORK/args"
+		if matugen -c "$WORK/one.toml" --dry-run image "$WORK/flat.png" \
+				"${ARGS[@]}" >/dev/null 2>&1; then
+			ok "the flags the page builds are accepted by a real matugen"
+		else
+			bad "the flags the page builds are accepted by a real matugen"
+			printf '       args: %s\n' "${ARGS[*]}"
+			matugen -c "$WORK/one.toml" --dry-run image "$WORK/flat.png" \
+				"${ARGS[@]}" 2>&1 | sed 's/^/       /' | head -5
+		fi
+
+		# The other half: an empty prefer must not become an omitted flag. If it
+		# does this fails, which is the regression that shipped.
+		mapfile -t NOPREF < "$WORK/args-noprefer"
+		if matugen -c "$WORK/one.toml" --dry-run image "$WORK/flat.png" \
+				"${NOPREF[@]}" >/dev/null 2>&1; then
+			ok "...and an empty prefer falls back rather than dropping the flag"
+		else
+			bad "...and an empty prefer falls back rather than dropping the flag"
+			printf '       args: %s\n' "${NOPREF[*]}"
+		fi
+	else
+		echo "  --   no PIL; skipped the real-matugen flag checks"
+	fi
+else
+	echo "  --   matugen or python3 missing; skipped the real-matugen flag checks"
 fi
 
 echo

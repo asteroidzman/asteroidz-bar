@@ -470,7 +470,7 @@ fi
 # the next wallpaper change put them all back -- with nothing on screen, in
 # either direction, to say so.
 RENDER_CALL="$(grep "image $WORK/wall.png" "$MG_CALLS" | tail -1)"
-for flag in "-t" "-m" "--contrast"; do
+for flag in "-t" "-m" "--contrast" "--prefer"; do
 	if printf '%s ' "$RENDER_CALL" | grep -q -- " $flag "; then
 		ok "...carrying $flag, so the scheme is not silently the default"
 	else
@@ -478,6 +478,26 @@ for flag in "-t" "-m" "--contrast"; do
 		printf '       %s\n' "$RENDER_CALL"
 	fi
 done
+
+# --prefer is the one flag that is not a preference at all. Given an image with
+# several candidate source colours matugen ASKS which to use, and with nothing on
+# a terminal it exits 1 instead of choosing:
+#
+#   Multiple source colors found, no preference was inputted, and a terminal was
+#   not detected. Use --prefer=PREFERENCE to find suitable colors without needing
+#   user input.
+#
+# A settings window never has a terminal, so leaving it out is not a default, it
+# is a guaranteed failure -- and not only on busy photographs: a 64x64 flat PNG
+# fails identically. The page shipped with "(default)" in that dropdown, which
+# meant "omit the flag", so changing the scheme type and pressing Apply reported
+# `matugen failed (exit 1)`.
+if printf '%s ' "$RENDER_CALL" | grep -qE -- ' --prefer +[a-z]'; then
+	ok "...with a real --prefer value, never an omitted one"
+else
+	bad "...with a real --prefer value, never an omitted one"
+	printf '       %s\n' "$RENDER_CALL"
+fi
 
 # Recorded in the mapping file too, because the wallpaper script reads it to
 # pass the same values. Two callers, one source of truth.
