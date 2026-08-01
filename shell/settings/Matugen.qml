@@ -629,6 +629,18 @@ Singleton {
             // you asked for it.
             let cfg = [];
             const off = templates.filter(t => !templateEnabled(t.name));
+            // Everything switched off has to be caught here rather than left to
+            // matugen. A config with no templates in it does not fail to render
+            // -- it fails to PARSE, with `missing field templates` pointing at
+            // line 1, which is a TOML error about a file the user never edited
+            // and has nothing to do with the toggles they just moved.
+            if (templates.length > 0 && off.length === templates.length) {
+                busy = false;
+                status = "every application is switched off, so nothing was "
+                         + "rendered. The template and your choices are saved.";
+                statusBad = true;
+                return;
+            }
             if (off.length && tomlExists) {
                 filteredWriter.setText(filteredToml(tomlFile.text()));
                 cfg = ["-c", root.filteredTomlPath];
