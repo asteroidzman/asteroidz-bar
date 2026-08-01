@@ -790,6 +790,82 @@ else
 	bad "the plugin menu has its rows (found ${#ROWS[@]})"
 fi
 
+# ── the power menu ──────────────────────────────────────────────────────────
+#
+# Every entry here except Lock ends the session or the machine, so the claim
+# worth testing is the one that keeps a misclick from doing that: picking a
+# destructive entry must ASK rather than act.
+#
+# Asserted on the panel, because that is where the difference shows. Acting
+# would close it (and, in a test, reboot the machine); asking replaces the rows
+# and leaves it open. Nothing here ever clicks the confirmation itself -- there
+# is no safe way to assert "Yes, power off" works, and a test that found out
+# would be the last thing this suite ever ran.
+cp "$WORK/config.pristine.kdl" "$HL_CONFIG"
+cat >> "$HL_CONFIG" <<'EOF'
+theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
+bar { enable false; height 48; position "top"; margin { x 8; y 9 }
+	panel { enable true; radius 9; padding 12; blur true; shadow true }
+	modules-left ""; modules-center ""; modules-right "power" }
+EOF
+hl_dispatch "reload_config" 1
+sleep 4
+
+hl_move "$PILL_X" "$PILL_Y"; sleep 1
+hl_click "$PILL_X" "$PILL_Y"; sleep 3
+shot power
+POWER="$(panel_pixels power)"
+if [ "$POWER" -gt 400 ]; then
+	ok "the power pill opens its menu ($POWER px)"
+else
+	bad "the power pill opens its menu ($POWER px)"
+fi
+
+read -r WL _ WR _ <<<"$(panel_box power)"
+mapfile -t WROWS < <(text_lines power "$WL" "$WR")
+WROW_X=$(((WL + WR) / 2))
+
+# Rows are Lock, Log out, then the destructive four. Index 5 is Power off --
+# the last one, and the one whose confirmation matters most.
+if [ "${#WROWS[@]}" -ge 6 ]; then
+	ok "the power menu has its entries (${#WROWS[@]} rows)"
+	read -r WY0 WY1 <<<"${WROWS[5]}"
+	hl_click "$WROW_X" $(((WY0 + WY1) / 2))
+	sleep 3
+	shot pconfirm
+	PCONF="$(panel_pixels pconfirm)"
+	if [ "$PCONF" -gt 400 ]; then
+		ok "picking Power off asks instead of acting (panel still up, $PCONF px)"
+	else
+		bad "picking Power off closed the panel ($PCONF px) -- it acted"
+	fi
+
+	# Deliberately NOT clicking inside the confirmation.
+	#
+	# The rows there are "Yes, power off" and "Cancel", this suite locates rows
+	# by pixel analysis, and it cannot read them -- so clicking the one it
+	# believes is Cancel is a bet that, lost, powers the machine off in the
+	# middle of a test run. An earlier version of this case took that bet and
+	# hit the wrong row.
+	#
+	# What CAN be checked safely is that the menu rebuilds: close it from the
+	# pill and open it again, and the full list has to come back. That covers
+	# menuRows() being reusable, which is what Cancel depends on -- Cancel calls
+	# exactly this, from inside the confirmation.
+	hl_click "$PILL_X" "$PILL_Y"; sleep 2
+	hl_click "$PILL_X" "$PILL_Y"; sleep 3
+	shot pagain
+	read -r AL _ AR _ <<<"$(panel_box pagain)"
+	mapfile -t AROWS < <(text_lines pagain "$AL" "$AR")
+	if [ "${#AROWS[@]}" -ge "${#WROWS[@]}" ]; then
+		ok "the menu rebuilds in full after being dismissed (${#AROWS[@]} rows)"
+	else
+		bad "the menu came back short (${#AROWS[@]} of ${#WROWS[@]} rows)"
+	fi
+else
+	bad "the power menu has its entries (found ${#WROWS[@]})"
+fi
+
 kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
 

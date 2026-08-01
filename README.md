@@ -277,6 +277,30 @@ Shadows are the shell's own. asteroidz will put a layer shadow behind the whole
 surface, but the surface spans the output — that would be one shadow around all
 three sections including the gaps between them.
 
+## The power menu
+
+`power` in a module list. Lock, log out, suspend, hibernate, restart, power off.
+
+**The destructive entries take two clicks, and the second one is in the same
+panel.** Picking Restart replaces the list with the question, and the question is
+what runs it — Cancel goes *back* to the list rather than closing, so landing
+there by misclick costs one more click instead of the whole menu. A modal
+dialogue would have been a second mechanism for a question this popover can
+already ask, and a menu that closes and reopens elsewhere is how a misclick
+becomes a shutdown.
+
+Lock is one click: locking loses nothing, and a "really lock?" step would make
+the one safe entry the slowest one.
+
+**Log out is one click here too, and that is not an oversight** — it dispatches
+`quit`, which the compositor confirms with its own full-screen prompt. That
+prompt is not a duplicate of this one; it is the one that catches a `quit` from a
+keybind or a script as well, so this menu hands over rather than asking twice.
+
+The transitions are plain `systemctl`, without `--user`: they are system
+transitions and polkit decides whether this session may make them. Where it may
+not, systemctl says so rather than this module guessing.
+
 ## Plugins
 
 `custom "<name>" { exec "..."; continuous true }` in the compositor's `bar {}`
@@ -328,10 +352,30 @@ Three ways to change it, all writing the same file
 (`~/.config/asteroidz-bar/discord-ptt.conf`), which the bridge watches:
 
 - **the pill** — click it; "press a key to rebind" hands over to asteroidz's
-  own interactive picker.
+  own interactive picker, and the injected key opens a submenu of keys this
+  keyboard actually has.
 - **the settings window** — the *Push-to-talk* page, which also explains the
   distinction above at the point of use.
 - **an editor** — it is a documented `key = value` file and stays one.
+
+Neither UI asks you to *type* a key. What belongs in `key` is an X keysym name —
+`Scroll_Lock`, not "scroll lock" — and there was no way to discover the spelling
+from inside a text box: a wrong one resolves to nothing, is injected as keycode
+0, is discarded by the server, and looks exactly like Discord ignoring
+push-to-talk. So the pill offers a list and the settings page captures a real
+press.
+
+The list is filtered against the live keymap, which is not belt-and-braces:
+F13–F24 are the obvious choices for a key you never otherwise use, and most
+keyboards do not map them. On this machine F13–F18 and F20–F22 are absent while
+F19, F23, F24, `Pause`, `Scroll_Lock`, `Break` and `Sys_Req` are present.
+
+The settings page goes through the compositor's `capture-chord` rather than Qt
+key events, for the reason the bind editor does: the compositor takes bindings
+*before* the focused surface sees them, so a window reading its own keys would
+receive everything except the combinations already bound. It refuses a chord —
+XTEST sends one keycode with no modifier state, so `Super+V` would reach Discord
+as a bare `V`, which is worse than refusing because it would appear to work.
 
 An edit applies where it lands: a new `key` is retargeted in place, a new
 `trigger` rebinds through the portal. Nothing restarts.

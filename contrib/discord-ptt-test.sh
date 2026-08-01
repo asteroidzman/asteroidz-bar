@@ -176,11 +176,7 @@ check("org.asteroidzman.DiscordPTT" not in left,
 rows = m.menu_rows("Super+V", "F12", leader=True)["menu"]["rows"]
 vals = [r.get("value") for r in rows]
 check("ptt:pick" in vals, "the menu offers a rebind")
-check("ptt:save" in vals, "the menu offers a save")
-inputs = [r for r in rows if r.get("input")]
-check(len(inputs) == 1 and inputs[0]["value"] == "key",
-      "the injected key is the one editable field")
-check(inputs[0]["edit"] == "F12", "the field is prefilled with the current key")
+check("ptt:keys" in vals, "the menu offers the injected key")
 check(any("Super+V" in (r.get("text") or "") for r in rows),
       "the menu names the binding in force")
 check(any(r.get("enabled") is False for r in rows),
@@ -190,30 +186,81 @@ check(any(r.get("enabled") is False for r in rows),
 mrows = m.menu_rows("F12", "F12", leader=False)["menu"]["rows"]
 check(len(mrows) > len(rows), "a mirror's menu says it is a mirror")
 
+# ── the injected key is PICKED, not typed ───────────────────────────────────
+#
+# A text box asked for an X keysym name and gave no way to learn the spelling.
+# `Scroll_Lock` is not "scroll lock", and a wrong name resolves to nothing, gets
+# injected as keycode 0, is discarded by the server, and looks exactly like
+# Discord ignoring push-to-talk. So the list is offered, and the list is
+# filtered against the real keymap -- F13-F24 are the obvious choices and most
+# keyboards do not map them.
+m.publish_keys(["F24", "Pause", "F12"])
+check(m.read_keys() == ["F24", "Pause", "F12"],
+      "the usable key list round-trips through the runtime dir")
+
+krows = m.key_menu_rows("Pause")["menu"]["rows"]
+kvals = [r.get("value") for r in krows if r.get("value")]
+check("ptt:key:F24" in kvals and "ptt:key:Pause" in kvals,
+      "the key submenu offers what the keyboard has")
+check(any(r.get("selected") and r.get("text") == "Pause" for r in krows),
+      "...with the one in force ticked")
+check("ptt:menu" in kvals, "...and a way back to the main menu")
+check(any("Discord" in (r.get("text") or "") and r.get("enabled") is False
+          for r in krows),
+      "...and it says Discord has to be set to match")
+
+# The top-level row is a submenu now, and says which key is in force. A plain
+# row here would close the panel on the way in.
+top = m.menu_rows("F12", "Pause", leader=True)["menu"]["rows"]
+sub = [r for r in top if r.get("value") == "ptt:keys"]
+check(len(sub) == 1 and sub[0].get("submenu") is True,
+      "the injected key opens a submenu rather than closing the panel")
+check("Pause" in sub[0]["text"], "...and the row names the key in force")
+check(not any(r.get("input") for r in top),
+      "...and nothing is typed any more")
+
 # ── handle_menu ─────────────────────────────────────────────────────────────
 # The whole point of routing both entry points through the conf: a pick asks,
 # a save writes, and neither needs to know which instance it is running in.
 asked = []
 
 def pick(obj):
-    # handle_menu answers on stdout -- an empty row set, which is how a plugin
-    # closes its own menu. Swallowed here so the protocol does not land in the
-    # middle of the test output.
+    # handle_menu answers on stdout -- rows to step into, or an empty set to
+    # close. Captured here so the protocol does not land in the middle of the
+    # test output, and so the answer itself can be asserted on.
     import contextlib, io
-    with contextlib.redirect_stdout(io.StringIO()):
-        m.handle_menu(obj, lambda: asked.append(1))
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        m.handle_menu(obj, lambda: asked.append(1), "F12", leader=True)
+    lines = [ln for ln in buf.getvalue().splitlines() if ln.strip()]
+    return json.loads(lines[-1]) if lines else None
 
 pick({"event": "menu", "value": "ptt:pick"})
 check(asked == [1], "picking 'rebind' requests the picker")
 
 m.save_conf({"key": "F12"})
-pick({"event": "menu", "value": "ptt:save", "fields": {"key": "Pause"}})
-check(m.load_conf()["key"] == "Pause", "saving the field writes the conf")
-check(asked == [1], "saving does not also trigger a rebind prompt")
+pick({"event": "menu", "value": "ptt:key:Pause"})
+check(m.load_conf()["key"] == "Pause", "picking a key from the list writes it")
+check(asked == [1], "...and does not also trigger a rebind prompt")
 
-# An empty field is a person clearing a box, not a request to inject nothing.
-pick({"event": "menu", "value": "ptt:save", "fields": {"key": "  "}})
-check(m.load_conf()["key"] == "Pause", "an empty field is ignored, not written")
+# Only from the list. The rows come back as the bar received them, and treating
+# an arbitrary string as a keysym is how a typo becomes keycode 0.
+pick({"event": "menu", "value": "ptt:key:Notakey"})
+check(m.load_conf()["key"] == "Pause",
+      "a key that is not on the offered list is refused")
+
+# Navigation answers with ROWS. An empty set here would close the panel on the
+# way INTO the submenu, which is the one thing a submenu must not do.
+r = pick({"event": "menu", "value": "ptt:keys"})
+check(bool(r and r["menu"]["rows"]), "stepping into the key list opens it")
+r = pick({"event": "menu", "value": "ptt:menu"})
+check(bool(r and any(row.get("value") == "ptt:pick"
+                     for row in r["menu"]["rows"])),
+      "...and 'back' returns the main menu, not an empty one")
+
+# Anything else closes, which is how a plugin says it is done.
+r = pick({"event": "menu", "value": "ptt:nonsense"})
+check(r == {"menu": {"rows": []}}, "an unknown action closes the menu")
 
 # ── stdout is the protocol, and only the protocol ───────────────────────────
 #

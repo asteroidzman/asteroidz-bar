@@ -115,6 +115,8 @@ Row {
                 return trayComponent;
             case "display":
                 return displayComponent;
+            case "power":
+                return powerComponent;
             default:
                 return null;
             }
@@ -179,6 +181,11 @@ Row {
     Component {
         id: trayComponent
         Tray { bar: root.bar }
+    }
+
+    Component {
+        id: powerComponent
+        Power { bar: root.bar }
     }
 
     Component {

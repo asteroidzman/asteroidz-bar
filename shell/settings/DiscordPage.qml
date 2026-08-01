@@ -152,6 +152,46 @@ Item {
         preload: false
     }
 
+    // ── capturing the injected key ──────────────────────────────────────────
+
+    property bool capturing: false
+    property string captureNote: ""
+
+    function captureKey() {
+        capturing = true;
+        captureNote = "";
+        Ipc.request("capture-chord", reply => {
+            page.capturing = false;
+            if (!reply || reply.ok !== true) {
+                // Escape is the documented way out and is not a failure.
+                if (!(reply && reply.error === "cancelled"))
+                    page.captureNote = (reply && reply.detail) || "capture failed";
+                return;
+            }
+            const chord = reply.chord || "";
+
+            // A chord is not injectable. XTEST sends ONE keycode with no
+            // modifier state, so `Super+V` would arrive at Discord as a bare V
+            // -- which is worse than refusing, because it would appear to work
+            // and then type into whatever had focus.
+            if (chord.indexOf("+") >= 0) {
+                page.captureNote = "Modifiers cannot be injected — press the "
+                    + "key on its own. (Hold them for the key you PRESS "
+                    + "instead; that one is grabbed, not replayed.)";
+                return;
+            }
+            // `code:N` is a key the layout gives no name to. The injector looks
+            // its target up BY NAME, so there is nothing it could do with this.
+            if (chord.startsWith("code:")) {
+                page.captureNote = "That key has no name under this layout, so "
+                    + "it cannot be named to Discord either.";
+                return;
+            }
+            if (chord && chord !== page.conf.key)
+                page.write("key", chord);
+        });
+    }
+
     function requestPick() {
         page.picking = true;
         // Non-empty on purpose. The bridge only tests for the file's existence,
@@ -296,15 +336,54 @@ Item {
             font.hintingPreference: Font.PreferFullHinting
         }
 
-        Field {
-            width: Math.round(Cfg.fontPixelSize * 10)
-            value: page.conf.key || "F12"
-            placeholder: "F12"
-            onCommitted: v => {
-                const k = (v || "").trim();
-                if (k && k !== page.conf.key)
-                    page.write("key", k);
+        Row {
+            spacing: Cfg.spacing
+
+            Rectangle {
+                width: Math.round(currentKey.implicitWidth + Cfg.fontPixelSize * 1.4)
+                height: Math.max(26, Math.round(Cfg.fontPixelSize * 1.5))
+                radius: Cfg.themeRadius
+                color: Qt.rgba(1, 1, 1, 0.08)
+
+                Text {
+                    id: currentKey
+                    anchors.centerIn: parent
+                    text: page.capturing ? "press a key…"
+                                         : (page.conf.key || "F12")
+                    color: page.capturing ? Cfg.focusBg : Cfg.fg
+                    font.family: Cfg.fontFamily
+                    font.pointSize: Cfg.fontSize
+                    font.hintingPreference: Font.PreferFullHinting
+                }
             }
+
+            // Captured, not typed. What belongs here is an X keysym NAME --
+            // `Scroll_Lock`, not "scroll lock" -- and a text box gave no way to
+            // learn the spelling: a wrong one resolved to nothing, was injected,
+            // discarded by the server, and looked exactly like Discord ignoring
+            // push-to-talk.
+            //
+            // Through the COMPOSITOR's capture-chord, not Qt key events, for the
+            // reason BindCard gives: the compositor takes bindings before the
+            // focused surface sees them, so a window reading its own keys gets
+            // everything except the combinations already bound.
+            SmallButton {
+                anchors.verticalCenter: parent.verticalCenter
+                label: page.capturing ? "waiting…" : "Capture…"
+                active: page.capturing
+                onClicked: if (!page.capturing) page.captureKey()
+            }
+        }
+
+        Text {
+            width: parent.width
+            visible: page.captureNote !== ""
+            wrapMode: Text.WordWrap
+            text: page.captureNote
+            color: Cfg.urgent
+            font.family: Cfg.fontFamily
+            font.pointSize: Cfg.fontSize * 0.9
+            font.hintingPreference: Font.PreferFullHinting
         }
 
         Item { width: 1; height: Cfg.spacing }

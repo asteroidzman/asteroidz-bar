@@ -195,6 +195,19 @@ PanelWindow {
 
         onActivated: index => {
             const row = rows[index];
+            // A row carrying its own callback: the power menu's, where the
+            // destructive entries answer with a CONFIRMATION rather than acting.
+            //
+            // The return value decides what happens to the panel, because the
+            // two cases are genuinely different and no single default suits
+            // both: `true` closes it (the action ran), anything else leaves it
+            // open (a question was asked, and closing would dismiss the question
+            // along with it).
+            if (row && typeof row.act === "function") {
+                if (row.act() === true)
+                    visible = false;
+                return;
+            }
             // A PipeWire sink, picked from the volume menu. Setting the
             // preferred default is what "output" means to a person: it moves
             // where new streams go and what the volume pill controls, which is

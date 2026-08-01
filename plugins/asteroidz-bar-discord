@@ -69,7 +69,11 @@ CONFIG  ~/.config/asteroidz-bar/discord-ptt.conf, `key = value` per line:
     process, so there is one path to get right instead of three.
 
     Clicking the pill opens that menu; "press a key to rebind" hands over to
-    asteroidz's own interactive picker and stores whatever is pressed.
+    asteroidz's own interactive picker and stores whatever is pressed, and the
+    injected key is chosen from a submenu of keys THIS keyboard has rather than
+    typed. Typing it meant spelling an X keysym name with nothing to check it
+    against, and a wrong one resolves to keycode 0: injected, discarded by the
+    server, and indistinguishable from Discord ignoring push-to-talk.
 
 Run as a continuous bar plugin, one JSON object per state change:
 
@@ -325,6 +329,88 @@ LOCK = STATE + ".lock"
 # was clicked, and half the time that is a mirror. The mirror creates this file
 # and the holder, watching for it, does the work and deletes it.
 PICK = STATE + ".pick"
+KEYS_FILE = STATE + ".keys"
+
+
+"""Keys worth offering for the INJECTED half.
+
+Not "keys that exist" -- X has thousands and almost all of them are letters.
+These are the ones that are safe to send into a focused X window: they type
+nothing, move nothing, and are not bound to anything by default. Which is the
+requirement, because XTEST injection is not aimed at Discord, it goes to the
+server and whatever has focus there sees it too.
+
+Offered in preference order rather than alphabetically. The high F-keys come
+first because a keyboard that HAS them almost certainly does not use them.
+
+The list is filtered against the real keymap before it is shown, and that is
+not belt-and-braces: F13-F24 are the obvious choices and most keyboards do not
+map them. Injecting an unmapped keysym produces keycode 0, which the server
+discards -- push-to-talk that looks configured and transmits nothing.
+"""
+CANDIDATE_KEYS = [
+    "F24", "F23", "F22", "F21", "F20", "F19", "F18", "F17", "F16", "F15",
+    "F14", "F13",
+    "Pause", "Scroll_Lock", "Break", "Sys_Req", "Cancel", "Help", "Menu",
+    "Print", "F12", "F11", "F10", "F9",
+]
+
+# Which of the above this keyboard actually has is written to KEYS_FILE (below,
+# beside STATE) by the lock holder -- the only instance with an X connection --
+# and read by the mirrors. The same arrangement as the state file, for the same
+# reason: one X connection per session rather than one per monitor.
+
+
+def usable_keys(disp):
+    """CANDIDATE_KEYS filtered to what this keymap can actually deliver."""
+    from Xlib import XK
+
+    out = []
+    for name in CANDIDATE_KEYS:
+        sym = XK.string_to_keysym(name)
+        if sym and disp.keysym_to_keycode(sym):
+            out.append(name)
+    return out
+
+
+def publish_keys(names):
+    try:
+        tmp = KEYS_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(names, fh)
+        os.replace(tmp, KEYS_FILE)
+    except OSError:
+        pass
+
+
+def read_keys():
+    try:
+        with open(KEYS_FILE, encoding="utf-8") as fh:
+            names = json.load(fh)
+        return [n for n in names if isinstance(n, str)]
+    except (OSError, ValueError):
+        return []
+
+
+def key_menu_rows(current):
+    """The submenu: pick the injected key from what this keyboard has.
+
+    A list rather than a text box, because the text box asked for an X keysym
+    NAME -- `Scroll_Lock`, not "scroll lock" -- and there is no way to discover
+    the spelling from inside the menu. Getting it wrong left the pill saying
+    push-to-talk while nothing was injected.
+    """
+    keys = read_keys() or [current]
+    rows = [
+        {"text": "Discord must be set to the same key", "enabled": False},
+        {"separator": True},
+    ]
+    for name in keys:
+        rows.append({"text": name, "value": "ptt:key:" + name,
+                     "selected": name == current})
+    rows.append({"separator": True})
+    rows.append({"text": "← back", "value": "ptt:menu"})
+    return {"menu": {"rows": rows}}
 
 
 def menu_rows(bound, key, leader):
@@ -351,9 +437,11 @@ def menu_rows(bound, key, leader):
                 {"separator": True},
                 {"text": "Press a key to rebind…", "value": "ptt:pick"},
                 {"separator": True},
-                {"text": "Key sent to Discord", "input": True,
-                 "value": "key", "edit": key},
-                {"text": "Save", "value": "ptt:save"},
+                # A submenu, not a text box. What belongs here is an X keysym
+                # NAME and there is nowhere in a menu to learn the spelling, so
+                # typing it was a guess that failed silently.
+                {"text": f"Key sent to Discord: {key}",
+                 "value": "ptt:keys", "submenu": True},
             ] + ([] if leader else [
                 {"separator": True},
                 {"text": "(mirror — the bridge runs on another screen)",
@@ -488,7 +576,7 @@ def follow_state():
         if obj.get("event") == "click":
             emit_raw(menu_rows(bound, load_conf()["key"], leader=False))
         elif obj.get("event") == "menu":
-            handle_menu(obj, touch_pick)
+            handle_menu(obj, touch_pick, bound, leader=False)
 
     watch_stdin(event, loop.quit)
     loop.run()
@@ -503,7 +591,7 @@ def touch_pick():
         pass
 
 
-def handle_menu(obj, request_pick):
+def handle_menu(obj, request_pick, bound, leader):
     """One menu pick, from either kind of instance.
 
     Writing the conf is all a save has to do: the holder watches that file, so
@@ -512,13 +600,28 @@ def handle_menu(obj, request_pick):
     copy of its logic.
     """
     action = obj.get("value") or ""
-    fields = obj.get("fields") or {}
+    cfg = load_conf()
+
+    # Navigation first: these ANSWER WITH ROWS rather than closing. The bar
+    # reads a menu arriving while one is open as stepping into it, not as a
+    # second click on the pill, so a submenu replaces the list in place.
+    if action == "ptt:keys":
+        emit_raw(key_menu_rows(cfg["key"]))
+        return
+    if action == "ptt:menu":
+        emit_raw(menu_rows(bound, cfg["key"], leader))
+        return
+
     if action == "ptt:pick":
         request_pick()
-    elif action == "ptt:save":
-        key = (fields.get("key") or "").strip()
-        if key and key != load_conf()["key"]:
-            save_conf({"key": key})
+    elif action.startswith("ptt:key:"):
+        name = action[len("ptt:key:"):]
+        # Only from the list this instance offered. The rows come back as the
+        # bar received them, but treating an arbitrary string as a keysym is how
+        # a typo becomes keycode 0 -- injected, discarded by the server, and
+        # indistinguishable from Discord ignoring it.
+        if name in (read_keys() or [cfg["key"]]) and name != cfg["key"]:
+            save_conf({"key": name})
     # Anything else closes the menu, and an empty set is how that is said.
     emit_raw({"menu": {"rows": []}})
 
@@ -540,6 +643,11 @@ def main():
         # Nothing to retry: a missing DISPLAY or an unmapped keysym does not fix
         # itself, and a loop here would just spin.
         return 1
+
+    # What this keyboard can actually deliver, for the menu on every monitor.
+    # Published rather than recomputed per instance: it takes an X connection to
+    # answer and the mirrors deliberately do not have one.
+    publish_keys(usable_keys(injector.disp))
 
     import gi
 
@@ -825,7 +933,7 @@ def main():
         if obj.get("event") == "click":
             emit_raw(menu_rows(state["bound"], cfg["key"], leader=True))
         elif obj.get("event") == "menu":
-            handle_menu(obj, start_pick)
+            handle_menu(obj, start_pick, state["bound"], leader=True)
 
     watch_stdin(event, loop.quit)
 

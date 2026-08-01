@@ -669,8 +669,8 @@ BINDS_ROW=$((2 + NGROUPS))
 # The lowest small control in the content area. On an empty rules page that is
 # "New rule": the intro paragraph is above it and a status line may appear
 # between the two, so "lowest" is the stable description and "first" is not.
-lowest_button() { # lowest_button <shot>  ->  "x y"
-	python3 - "$WORK/$1.png" "$WX" "$WY" "$WW" "$WH" <<'PY'
+lowest_button() { # lowest_button <shot> [row index, default -1]  ->  "x y"
+	python3 - "$WORK/$1.png" "$WX" "$WY" "$WW" "$WH" "${2:--1}" <<'PY'
 import sys
 from collections import Counter
 from PIL import Image
@@ -710,7 +710,12 @@ for y, cx in found:
         rows[-1].append((y, cx))
     else:
         rows.append([(y, cx)])
-grp = rows[-1]
+# WHICH run of controls to report. "Lowest" was the whole answer while every
+# page had exactly one button; the push-to-talk page has two (Rebind... above,
+# Capture... below) and taking the lowest silently clicked the wrong one -- and
+# passed, because both are buttons and both do something.
+idx = int(sys.argv[6]) if len(sys.argv) > 6 else -1
+grp = rows[idx]
 mid = grp[len(grp) // 2]
 print(mid[1], mid[0])
 PY
@@ -847,7 +852,10 @@ shot ptt
 PICK_FILE="$XDG_RUNTIME_DIR/asteroidz-discord-ptt.state.pick"
 rm -f "$PICK_FILE"
 
-read -r PTT_X PTT_BY <<<"$(lowest_button ptt)"
+# Index 0: Rebind... is the FIRST run of controls on this page, Capture...
+# the last. Addressed rather than assumed, since "the only button" stopped
+# being true the moment the page grew a second one.
+read -r PTT_X PTT_BY <<<"$(lowest_button ptt 0)"
 if [ "${PTT_X:-0}" -gt 0 ]; then
 	ok "the push-to-talk page is showing, with its Rebind button (${PTT_X},${PTT_BY})"
 else
@@ -862,6 +870,36 @@ else
 	bad "Rebind… asks the bridge for the interactive picker (no $PICK_FILE)"
 fi
 rm -f "$PICK_FILE"
+
+# Capture… for the INJECTED key. Not the same mechanism as Rebind…, and it
+# cannot be: that one goes through the portal's picker, this one through the
+# compositor's capture-chord, because a keysym name is what the injector needs
+# and only the compositor can name the key that was pressed.
+#
+# Asserted through the compositor rather than by looking at the page: while a
+# capture is running the compositor swallows keys wholesale, so `capture-chord`
+# being in flight is observable as a keypress NOT doing its usual job.
+read -r CAP_X CAP_Y <<<"$(lowest_button ptt -1)"
+hl_move "$CAP_X" "$CAP_Y"; sleep 1
+hl_click "$CAP_X" "$CAP_Y"; sleep 1
+
+if command -v wtype >/dev/null 2>&1; then
+	# Escape is capture-chord's documented way out, so this both proves a
+	# capture was running and leaves nothing behind.
+	CAP_TAG_BEFORE="$(hl_current_tag_index)"
+	WAYLAND_DISPLAY="$HL_SOCK" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+		wtype -k Escape 2>/dev/null
+	sleep 1
+	hl_dispatch "view,2" 0.4
+	if [ "$(hl_current_tag_index)" = "2" ]; then
+		ok "Capture… runs a capture and Escape ends it (tag $CAP_TAG_BEFORE -> 2)"
+	else
+		bad "Capture… left the compositor swallowing keys"
+	fi
+	hl_dispatch "view,1" 0.3
+else
+	echo "  --   wtype not installed; skipped the capture case"
+fi
 
 # ── reopening it ────────────────────────────────────────────────────────────
 #

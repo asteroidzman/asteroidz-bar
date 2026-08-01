@@ -75,6 +75,7 @@ install_data(
 		'shell/modules/Tray.qml',
 		'shell/modules/Display.qml',
 		'shell/modules/Custom.qml',
+		'shell/modules/Power.qml',
 	],
 	install_dir: qmldir / 'modules',
 )
