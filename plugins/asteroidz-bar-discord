@@ -121,6 +121,20 @@ def emit(text, cls, tooltip):
     _last = line
     sys.stdout.write(line + "\n")
     sys.stdout.flush()
+    if _publish:
+        # Written for the other monitors' instances to mirror. Via a temp file
+        # and rename so a reader never sees half a line -- they are woken by the
+        # file monitor the instant this lands.
+        try:
+            tmp = STATE + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                fh.write(line)
+            os.replace(tmp, STATE)
+        except OSError:
+            pass
+
+
+_publish = False
 
 
 class Injector:
@@ -158,8 +172,72 @@ class Injector:
         self._fake(False)
 
 
+STATE = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "asteroidz-discord-ptt.state"
+)
+LOCK = STATE + ".lock"
+
+
+def claim_lock():
+    """Exactly one instance may register and inject.
+
+    The bar runs a continuous plugin once per bar, and there is one bar per
+    monitor -- so on two outputs this starts twice. Both instances registered the
+    same shortcut and both injected, which put two RawKeyPress and two
+    RawKeyRelease into the X server per press. Harmless-looking, and not: the
+    FIRST release ends transmission, so with any skew between the two the
+    microphone can close while the key is still held.
+
+    An flock rather than a pidfile: it is released by the kernel when the process
+    dies, so a killed bar does not leave a stale claim that blocks the next one.
+    """
+    import fcntl
+
+    fh = open(LOCK, "w")  # noqa: SIM115 -- must outlive this function
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
+
+
+def follow_state():
+    """The instances that did not get the lock still have a pill to draw.
+
+    They mirror the holder's state file instead of registering anything, so every
+    monitor shows the same thing and only one of them talks to the portal.
+    """
+    import gi
+
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio, GLib
+
+    def show():
+        try:
+            with open(STATE, encoding="utf-8") as fh:
+                obj = json.loads(fh.read())
+        except (OSError, ValueError):
+            return
+        emit(obj.get("text", "PTT"), obj.get("class", "idle"), obj.get("tooltip", ""))
+
+    show()
+    gfile = Gio.File.new_for_path(STATE)
+    monitor = gfile.monitor_file(Gio.FileMonitorFlags.NONE, None)
+    monitor.connect("changed", lambda *_: show())
+    GLib.MainLoop().run()
+    return 0
+
+
 def main():
     cfg = load_conf()
+
+    global _publish
+
+    lock = claim_lock()
+    if lock is None:
+        return follow_state()
+    _publish = True
 
     try:
         injector = Injector(cfg["key"])
