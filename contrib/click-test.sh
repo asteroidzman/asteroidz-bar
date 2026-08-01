@@ -666,11 +666,11 @@ sleep 2
 #
 # Plugin rows did nothing at all. The popover raised `activated`, the bar
 # checked the row for a PipeWire node and a tray entry, found neither, and fell
-# through to closing the panel -- so every row in the medication, discord and
+# through to closing the panel -- so every row in the reminders, discord and
 # nordvpn menus looked live, dismissed itself and told the plugin nothing.
 #
 # Driven by a stub rather than by a real plugin: this is the bar's half of the
-# protocol, and a test needing a medication schedule on disk to exercise it
+# protocol, and a test needing a reminder schedule on disk to exercise it
 # would be testing the wrong thing -- and would answer differently on a machine
 # that has one.
 
@@ -690,6 +690,7 @@ TOP = {"menu": {"item": "", "rows": [
 SUB = {"menu": {"item": "", "rows": [
     {"text": "Beta", "value": "b"},
     {"text": "Name", "value": "name", "input": True, "edit": "prefilled"},
+    {"text": "Dose", "value": "dose", "input": True, "edit": ""},
     {"text": "Save", "value": "save"},
 ]}}
 
@@ -774,14 +775,36 @@ if [ "${#ROWS[@]}" -ge 2 ]; then
 	# has no other way to see what is in the form above it.
 	read -r SL _ SR _ <<<"$(panel_box psub)"
 	mapfile -t SROWS < <(text_lines psub "$SL" "$SR")
-	if [ "${#SROWS[@]}" -ge 3 ]; then
-		read -r SY0 SY1 <<<"${SROWS[2]}"
+	if [ "${#SROWS[@]}" -ge 4 ]; then
+		# The SECOND field, typed into after clicking it. Every keystroke
+		# rebuilds the rows array (that is how a row's text changes), and
+		# the popover used to re-aim at the first field whenever that
+		# happened -- so a character went into field two and the caret
+		# jumped back to field one, and only the first field of any form
+		# could be filled in at all. Reported on the reminders form.
+		read -r DY0 DY1 <<<"${SROWS[2]}"
+		hl_click $(((SL + SR) / 2)) $(((DY0 + DY1) / 2))
+		sleep 1
+		for k in A B C; do "$HL_WLVKBD" press "$k" >/dev/null 2>&1; sleep 0.4; done
+		sleep 1
+
+		read -r SY0 SY1 <<<"${SROWS[3]}"
 		hl_click $(((SL + SR) / 2)) $(((SY0 + SY1) / 2))
 		sleep 3
+		# Exact, closing quote included: this is also what says the typing
+		# above did not leak into field one. The broken build reported
+		# "prefilledbc" -- the first character reached field two and the
+		# caret snapped back for the rest.
 		if grep -q '"name": "prefilled"' "$PLOG"; then
 			ok "a form row carries the plugin's prefill back as a field"
 		else
 			bad "a form row carries the plugin's prefill back as a field (log: $(tr '\n' ' ' < "$PLOG"))"
+		fi
+		# Lowercase: the keyboard sends the keys unshifted.
+		if grep -q '"dose": "abc"' "$PLOG"; then
+			ok "the second field of a form takes text too"
+		else
+			bad "the second field of a form takes text too (log: $(tr '\n' ' ' < "$PLOG"))"
 		fi
 	else
 		bad "the submenu form has its rows (found ${#SROWS[@]})"

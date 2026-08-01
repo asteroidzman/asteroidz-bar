@@ -353,14 +353,47 @@ PopupWindow {
     }
 
     // Which field the keyboard is aimed at, or -1.
-    //
-    // A form opened in order to be filled in should be typeable the moment it
-    // appears, so the first field is aimed automatically -- a panel with no
-    // caret shows nothing about where text would land and swallows nothing,
-    // which reads as broken.
     property int focusedRow: -1
 
+    // The same aim, remembered by FIELD NAME, so it survives the rows array
+    // being rebuilt.
+    //
+    // Every keystroke rebuilds it: `edited` hands the new text to Bar.qml,
+    // which replaces the whole array to change one row's value. That fires
+    // onRowsChanged, and the version of this that unconditionally aimed at the
+    // first field therefore snapped the caret back to field one after every
+    // single character. Only the first field of a form could be typed into at
+    // all -- reported on the reminders form, where the name accepted text and
+    // the three rows under it looked dead.
+    property string focusedField: ""
+
+    onFocusedRowChanged: {
+        const r = focusedRow >= 0 && focusedRow < rows.length
+            ? rows[focusedRow] : null;
+        focusedField = r && r.input ? (r.field || "") : "";
+    }
+
     onRowsChanged: {
+        // Still the same field, under whatever index it now has.
+        if (focusedField !== "") {
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i] && rows[i].input && rows[i].field === focusedField) {
+                    focusedRow = i;
+                    return;
+                }
+            }
+        }
+        // Unnamed fields (a menu that is not a plugin's) have no name to match
+        // on, so hold the index instead, and only while the form is plainly
+        // still the same one: the row at that index is editable.
+        if (focusedField === "" && focusedRow >= 0 && focusedRow < rows.length
+                && rows[focusedRow] && rows[focusedRow].input)
+            return;
+
+        // A different set of rows. Aim at its first field: a form opened in
+        // order to be filled in should be typeable the moment it appears --
+        // a panel with no caret shows nothing about where text would land and
+        // swallows nothing, which reads as broken.
         focusedRow = -1;
         for (let i = 0; i < rows.length; i++) {
             if (rows[i] && rows[i].input) {

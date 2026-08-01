@@ -82,7 +82,7 @@ check_plugin() { # check_plugin <name>
 }
 
 echo "=== a plugin dies with the bar that started it ==="
-for p in nordvpn discord medication; do
+for p in nordvpn discord reminders; do
 	check_plugin "$p"
 done
 

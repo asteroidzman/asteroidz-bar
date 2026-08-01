@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Medication reminders as an asteroidz bar plugin.
+"""Reminders as an asteroidz bar plugin: scheduled doses, taken or skipped.
 
 Replaces the compositor's built-in `medication` module, reading and writing the
 same store the waybar plugin used:
 
     $XDG_STATE_HOME/waybar-medication/medications.json
+
+That path keeps its old name deliberately. It is DATA -- an existing schedule
+and its history -- and renaming the module is not a reason to make somebody's
+reminders disappear. The same goes for the icon directory the ICON below names,
+which is installed by the asteroidz package and not by this one.
 
 The store is the reason this belongs outside the compositor. Reading it means a
 stat() on every arrange and a JSON parse whenever it changes, and WRITING it --
@@ -13,13 +18,13 @@ the screen. None of that is compositor work, and the file is small enough that
 a plugin polling it costs nothing.
 
     bar {
-        modules-right "custom/medication,volume,clock"
-        custom "medication" { exec "asteroidz-bar-medication"
-                              continuous true }
+        modules-right "custom/reminders,volume,clock"
+        custom "reminders" { exec "asteroidz-bar-reminders"
+                             continuous true }
     }
 
 Left-click lists today's doses; picking one offers Take, Skip and Postpone.
-The same menu adds, edits and removes the medications themselves.
+The same menu adds, edits and removes the reminders themselves.
 
 TEXT ENTRY happens in the popover. A menu row marked `input` is an editable
 field: the compositor already sees every keystroke while a menu is up, so a
@@ -38,7 +43,10 @@ from datetime import datetime, timedelta, timezone
 
 ICON = "waybar-medication/pill.svg"
 POLL_SECONDS = 20
-POSTPONE_MINUTES = int(os.environ.get("ASTEROIDZ_MED_POSTPONE", "15"))
+# ASTEROIDZ_MED_POSTPONE is the name this shipped under; still read, so a
+# rename does not quietly reset somebody's postpone interval.
+POSTPONE_MINUTES = int(os.environ.get("ASTEROIDZ_REMINDER_POSTPONE")
+                       or os.environ.get("ASTEROIDZ_MED_POSTPONE") or "15")
 # How long after its time a dose still counts as due rather than missed. Matches
 # the built-in module's window.
 DUE_WINDOW_HOURS = 12
@@ -88,7 +96,7 @@ def save_doc(doc):
 
 
 def scheduled_today(med, day):
-    """Is this medication scheduled on `day`?"""
+    """Is this reminder scheduled on `day`?"""
     start = med.get("startDate")
     if start:
         try:
@@ -241,7 +249,7 @@ def form_rows(med=None):
 
 
 def save_from_fields(fields, med_id=None):
-    """Turn a submitted form into a medication. Rejects rather than saves
+    """Turn a submitted form into a reminder. Rejects rather than saves
     something unusable -- a dose with no time would never fire."""
     name = (fields.get("name") or "").strip()
     times = [t.strip() for t in (fields.get("times") or "").split(",")
@@ -284,7 +292,7 @@ def delete_medication(med_id):
         return
     doc["medications"] = [m for m in (doc.get("medications") or [])
                           if m.get("id") != med_id]
-    # its dose state goes too, or a deleted medication keeps ticking
+    # its dose state goes too, or a deleted reminder keeps ticking
     doc["doseState"] = {k: v for k, v in (doc.get("doseState") or {}).items()
                         if not k.startswith(med_id + "@")}
     save_doc(doc)
@@ -309,15 +317,15 @@ def menu():
             rows.append({"text": f"{mark_ch}  {d['time']}  {d['name']}",
                          "value": "d:" + d["key"], "submenu": True})
         rows.append({"separator": True})
-        rows.append({"text": "Add medication…", "value": "add",
+        rows.append({"text": "Add reminder…", "value": "add",
                      "submenu": True})
         if medications():
-            rows.append({"text": "Manage medications", "value": "manage",
+            rows.append({"text": "Manage reminders", "value": "manage",
                          "submenu": True})
         return {"menu": {"item": "", "rows": rows}}
 
     if level == "add":
-        rows.append({"text": "New medication", "value": "", "enabled": False})
+        rows.append({"text": "New reminder", "value": "", "enabled": False})
         rows.append({"separator": True})
         rows += form_rows()
         rows.append({"separator": True})
@@ -326,7 +334,7 @@ def menu():
         return {"menu": {"item": "", "rows": rows}}
 
     if level == "manage":
-        rows.append({"text": "Medications", "value": "", "enabled": False})
+        rows.append({"text": "Reminders", "value": "", "enabled": False})
         rows.append({"separator": True})
         for m in medications():
             rows.append({"text": f"{m.get('name','')}  "

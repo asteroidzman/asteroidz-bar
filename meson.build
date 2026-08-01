@@ -178,7 +178,7 @@ install_data(
 	[
 		'plugins/asteroidz-bar-nordvpn',
 		'plugins/asteroidz-bar-discord',
-		'plugins/asteroidz-bar-medication',
+		'plugins/asteroidz-bar-reminders',
 	],
 	install_dir: get_option('bindir'),
 	install_mode: 'rwxr-xr-x',

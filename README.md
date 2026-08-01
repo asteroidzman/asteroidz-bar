@@ -313,7 +313,7 @@ the compositor's own: one JSON object per line on stdout, events back on stdin.
 ```
 
 Three ship with this package — `asteroidz-bar-nordvpn`, `-discord`,
-`-medication` — and they run untouched, which was the test that mattered: a
+`-reminders` — and they run untouched, which was the test that mattered: a
 better schema would have bought nothing and broken all of them.
 
 ### Push-to-talk for Discord
@@ -626,7 +626,7 @@ the bar's half of that protocol was never wired up: the popover raised
 `activated`, the bar looked the row up as a PipeWire node and as a tray entry,
 found neither, and closed the panel. Every row in every plugin menu looked
 live, dismissed itself and told the plugin nothing. A stub rather than a real
-plugin, so the test does not depend on a medication schedule existing on the
+plugin, so the test does not depend on a reminder schedule existing on the
 machine running it.
 
 `media-test.sh` exists because the media module draws nothing at all without

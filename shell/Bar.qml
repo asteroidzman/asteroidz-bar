@@ -229,7 +229,7 @@ PanelWindow {
             }
             // A plugin's row. Nothing happened here at all before this: the
             // popover fell through to `visible = false`, so every row in the
-            // medication, discord and nordvpn menus looked live, closed the
+            // reminders, discord and nordvpn menus looked live, closed the
             // panel and told the plugin nothing.
             //
             // The whole form goes back with the row, not just the row: a plugin
