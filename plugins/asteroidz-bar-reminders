@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reminders as an asteroidz bar plugin: scheduled doses, taken or skipped.
+"""Reminders as an asteroidz bar plugin: scheduled tasks, done or skipped.
 
 Replaces the compositor's built-in `medication` module, reading and writing the
 same store the waybar plugin used:
@@ -23,7 +23,7 @@ a plugin polling it costs nothing.
                              continuous true }
     }
 
-Left-click lists today's doses; picking one offers Take, Skip and Postpone.
+Left-click lists today's tasks; picking one offers Done, Skip and Postpone.
 The same menu adds, edits and removes the reminders themselves.
 
 TEXT ENTRY happens in the popover. A menu row marked `input` is an editable
@@ -42,6 +42,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 ICON = "asteroidz-bar/reminders.svg"
+
+# What a finished task is CALLED, which is not what the store calls it. On disk
+# a task is "taken" and its timestamp is `takenAt`, because that is the schema
+# the waybar plugin wrote and there are existing files full of it; renaming a
+# stored value to improve a menu label would be trading somebody's history for
+# a word. The menu says "done".
+STATUS_WORD = {"taken": "done", "skipped": "skipped"}
 POLL_SECONDS = 20
 # ASTEROIDZ_MED_POSTPONE is the name this shipped under; still read, so a
 # rename does not quietly reset somebody's postpone interval.
@@ -168,11 +175,11 @@ def render():
     if ndue:
         text = due_one["name"] if ndue == 1 else f"{ndue} due"
         return {"icon": ICON, "text": text, "class": "urgent", "tint": "urgent",
-                "tooltip": f"{ndue} dose(s) due now"}
+                "tooltip": f"{ndue} task(s) due now"}
     if nxt:
         return {"icon": ICON, "text": nxt["time"], "tint": "fg",
-                "tooltip": f"next dose at {nxt['time']}: {nxt['name']}"}
-    return {"icon": ICON, "tint": "dim", "tooltip": "all doses done today"}
+                "tooltip": f"next task at {nxt['time']}: {nxt['name']}"}
+    return {"icon": ICON, "tint": "dim", "tooltip": "all tasks done today"}
 
 
 def iso_utc(dt):
@@ -467,16 +474,17 @@ def menu():
                  "enabled": False})
     rows.append({"separator": True})
     if d["status"]:
-        rows.append({"text": f"marked {d['status']}", "value": "",
-                     "enabled": False})
+        rows.append({"text": "marked " + STATUS_WORD.get(d["status"],
+                                                        d["status"]),
+                     "value": "", "enabled": False})
         rows.append({"text": "Undo", "value": "undo:" + d["key"]})
     else:
-        rows.append({"text": "Take", "value": "take:" + d["key"]})
+        rows.append({"text": "Done", "value": "take:" + d["key"]})
         rows.append({"text": "Skip", "value": "skip:" + d["key"]})
         rows.append({"text": f"Postpone {POSTPONE_MINUTES} min",
                      "value": "snooze:" + d["key"]})
     rows.append({"separator": True})
-    rows.append({"text": "‹  All doses", "value": "back",
+    rows.append({"text": "‹  All tasks", "value": "back",
                  "submenu": True})
     return {"menu": {"item": "", "rows": rows}}
 
