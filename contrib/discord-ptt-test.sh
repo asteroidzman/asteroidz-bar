@@ -215,6 +215,19 @@ check(asked == [1], "saving does not also trigger a rebind prompt")
 pick({"event": "menu", "value": "ptt:save", "fields": {"key": "  "}})
 check(m.load_conf()["key"] == "Pause", "an empty field is ignored, not written")
 
+# ── stdout is the protocol, and only the protocol ───────────────────────────
+#
+# python-xlib print()s "Xlib.xauth: warning, no xauthority details available" to
+# STDOUT when it cannot read ~/.Xauthority. That is this plugin's protocol
+# channel, so the line reached the bar as a status object and was rejected --
+# one unexplained "bad JSON from discord" per bar start, from a library, about
+# something that does not stop XTEST working. Asserted on the source rather than
+# by running it, because reproducing it needs an X server with no xauth.
+src = open(plugin_path).read()
+disp = src[src.index("class Injector"):src.index("def _fake")]
+check("redirect_stdout" in disp,
+      "the X connection is opened with stdout redirected away from the protocol")
+
 # ── stdin ───────────────────────────────────────────────────────────────────
 # The leak this closes was observed, not theorised: these bridges sat in a GLib
 # loop with nothing watching the pipe, so every bar restart left two more behind

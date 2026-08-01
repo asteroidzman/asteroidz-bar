@@ -79,6 +79,7 @@ Run as a continuous bar plugin, one JSON object per state change:
     }
 """
 
+import contextlib
 import json
 import os
 import sys
@@ -271,7 +272,17 @@ class Injector:
 
         self._XK = XK
         self._xtest = xtest
-        self.disp = display.Display()  # honours DISPLAY
+        # python-xlib writes "Xlib.xauth: warning, no xauthority details
+        # available" to STDOUT, with print(), when it cannot read
+        # ~/.Xauthority. Stdout is this plugin's protocol channel, so that line
+        # arrives at the bar as a status object and is rejected as malformed --
+        # one unexplained "bad JSON from discord" per bar start, from a library,
+        # about something that does not stop XTEST working at all.
+        #
+        # Redirected rather than swallowed: it is still worth seeing, it just
+        # belongs on the stream the bar treats as diagnostics.
+        with contextlib.redirect_stdout(sys.stderr):
+            self.disp = display.Display()  # honours DISPLAY
         self.lock = threading.Lock()
         self.keycode = 0
         self.set_key(keysym_name)
