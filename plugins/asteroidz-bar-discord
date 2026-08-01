@@ -1,432 +1,381 @@
 #!/usr/bin/env python3
-"""Discord voice state as an asteroidz bar plugin.
+"""Push-to-talk for the official Discord client, on Wayland.
 
-This is the reference plugin, and it exists because it is a fair test: the
-compositor already ships `discord` as a built-in module, so what a plugin can
-and cannot reproduce is checkable rather than arguable.
+Discord's push-to-talk does not work under a Wayland compositor, and the reason
+is specific enough to be worth writing down, because every obvious fix is the
+wrong one.
 
-It is a good plugin candidate for one reason -- ALL the real work already lives
-somewhere else. songbird, DAVE, the audio thread and the gateway connection are
-`discord-voiced`'s; the compositor's built-in module is only an IPC client that
-reads newline-JSON off a socket and draws a pill. Moving that client out of the
-compositor moves no work, it just stops the compositor from being the process
-that has to survive it.
+Discord does not use Electron's `globalShortcut` API, and it does not use the
+XDG GlobalShortcuts portal. Its keybinds live in its own native module,
+`modules/discord_utils-1/discord_utils/discord_utils.node`, which exports
+KeybindFired / KeybindServiceReady, links libX11, and uses XOpenDisplay and
+XInput2. There is not one portal, GlobalShortcut or zwp_ string in it. So
+`--enable-features=GlobalShortcutsPortal` does nothing for Discord: that feature
+belongs to the bundled Chromium, which carries it whether Discord calls it or
+not.
 
-Run it as a continuous plugin -- one long-lived process, one JSON object per
-update, no polling:
+Two consequences:
+
+  * Run Discord as a native Wayland client and it has no DISPLAY at all -- its
+    keybind service has no X server to talk to and is simply inert. Nothing can
+    deliver push-to-talk to it, including Discord's own UI.
+
+  * Run it under XWayland and the service connects, but XWayland only receives
+    key events while an X surface has focus. Press the key over a Wayland window
+    and the X server never hears it.
+
+What DOES work, measured rather than assumed: XTEST injection happens INSIDE the
+X server, so an XInput2 raw-event listener sees it regardless of which Wayland
+surface holds focus. Verified with `xinput test-xi2 --root` while a native
+Wayland window was focused -- RawKeyPress and RawKeyRelease both arrived -- and
+then end to end against Discord itself, transmitting in a voice channel with the
+focus on a terminal.
+
+So this bridges the two halves:
+
+    asteroidz global shortcut  --(portal Activated/Deactivated)-->  this
+    this  --(XTEST fake key into XWayland)-->  Discord's keybind service
+
+Nothing here touches Discord's API. There is no token, no gateway, no voice
+code, and no account credential anywhere in this process -- which is the point,
+because the daemon this replaces needed all four and that put it against
+Discord's terms of service.
+
+REQUIREMENTS
+    Discord must run under XWayland, or its keybind service is not listening at
+    all. `~/.local/bin/discord-xwayland` does that with --ozone-platform=x11.
+
+    The key Discord is configured to use for push-to-talk must match KEY below,
+    and it should be a key you do not otherwise use -- it is injected into the X
+    server, so anything focused there sees it too.
+
+CONFIG  ~/.config/asteroidz-bar/discord-ptt.conf, `key = value` per line:
+    key       X keysym to inject           (default F12)
+    shortcut  portal shortcut id           (default push-to-talk)
+    app_id    portal application id        (default org.asteroidzman.DiscordPTT)
+
+Run as a continuous bar plugin, one JSON object per state change:
 
     bar {
         modules-right "custom/discord,volume,clock"
-        custom "discord" {
-            exec       "asteroidz-bar-discord"
-            continuous true
-        }
+        custom "discord" { exec "asteroidz-bar-discord"; continuous true }
     }
-
-Daemon protocol consumed (the same events bar-discord.h reads):
-
-    status    state=idle|connecting|connected, channel=<id>, muted=<bool>
-    channels  guilds[] + channels[], used here only to name the current channel
-    ready     username
-    ptt       active=<bool>, push-to-talk held
-    error     text
-
-A left click opens the same menu the built-in module drew -- mute, disconnect,
-the push-to-talk key, daemon start/stop, then voice channels grouped by server.
-The compositor renders the rows and owns the panel; this script only decides
-what the rows are and what activating one means.
-
-The one thing it cannot reproduce is the PTT key CHANGE dialog, which is a
-compositor facility (it grabs the next keypress through the global-shortcuts
-portal, of which the compositor is the backend). The row shows the current key
-and is inert here.
 """
 
 import json
 import os
-import shutil
-import socket
-import subprocess
 import sys
 import threading
-import time
 
-SOCKET = os.path.join(
-    os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "discord-voiced.sock"
+CONF = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+    "asteroidz-bar",
+    "discord-ptt.conf",
 )
-def _find_daemon():
-    """Where discord-voiced actually is, not where I guessed it would be.
 
-    This was hardcoded to ~/.local/bin/discord-voiced -- one plausible install
-    location out of several, and wrong for a packaged daemon in /usr/bin. The
-    plugin then saw no daemon and no socket, correctly concluded there was
-    nothing to act on, and hid itself: "missing totally" is what a wrong
-    hardcoded path looks like from the outside. PATH is the answer; guessing
-    directories is the bug.
+DEFAULTS = {
+    # What gets INJECTED into the X server. This must match the key Discord is
+    # configured to use for push-to-talk.
+    "key": "F12",
+    # What you actually PRESS. asteroidz grabs this and consumes it, so it never
+    # reaches any application directly. Separate from `key` because they answer
+    # different questions -- keeping them equal is fine and is the default.
+    "trigger": "F12",
+    "shortcut": "push-to-talk",
+    "app_id": "org.asteroidzman.DiscordPTT",
+}
 
-    The realpath check costs nothing and keeps the rule uniform with the
-    nordvpn wrapper: a plugin never execs itself, whatever PATH says.
+
+def load_conf():
+    cfg = dict(DEFAULTS)
+    try:
+        with open(CONF, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k, v = k.strip(), v.strip()
+                if k in cfg and v:
+                    cfg[k] = v
+    except OSError:
+        pass
+    return cfg
+
+
+_last = None
+
+
+def emit(text, cls, tooltip):
+    """One line of JSON, and only when something changed.
+
+    The bar redraws on every line it reads, and a redraw is a recomposite on
+    every monitor -- which is what made an earlier module cost real CPU while
+    displaying nothing new.
     """
-    override = os.environ.get("ASTEROIDZ_DISCORD_DAEMON")
-    if override is not None:
-        return override  # empty string means "never spawn"
-    me = os.path.realpath(__file__)
-    found = shutil.which("discord-voiced")
-    return found if found and os.path.realpath(found) != me else ""
-
-
-DAEMON = _find_daemon()
-
-LOGO = "waybar-discord-voice/discord.svg"
-MIC_MUTED = "waybar-volume/mic-mute.svg"
-
-
-class State:
-    def __init__(self):
-        self.sock = None
-        self.reset()
-
-    def reset(self):
-        self.state = "offline"
-        self.channel_id = ""
-        self.channel_name = ""
-        self.username = ""
-        self.error = ""
-        self.muted = False
-        self.ptt = False
-        self.channels = {}      # id -> {name, guild, guild_name, people}
-        self.guilds = {}        # id -> name
-        self.linked = False
-
-    def label(self):
-        if self.error:
-            return "Error"
-        if self.state == "connected":
-            return self.channel_name or "Connected"
-        if self.state == "connecting":
-            return "Connecting"
-        if self.state == "idle":
-            return "Idle"
-        return "Offline"
-
-    def render(self):
-        """The bar object for the current state.
-
-        Mirrors bar_module_refresh_discord: the logo tinted by state, plus the
-        mic-mute glyph as a SECOND icon while muted. Push-to-talk held reads as
-        the active look because it is the one thing worth seeing at a glance
-        mid-conversation; an error outranks it.
-        """
-        # Hidden only when there is nothing to act on: no daemon running and
-        # none installed. Installed-but-stopped keeps the pill, because
-        # otherwise stopping the daemon is a one-way door -- no pill, nothing
-        # to start it from. Same reasoning the built-in spells out.
-        if (
-            self.state == "offline"
-            and not self.error
-            and not self.linked
-            and not (DAEMON and os.access(DAEMON, os.X_OK))
-        ):
-            return {"hidden": True}
-
-        if self.ptt:
-            tint = "accent"
-        elif self.error:
-            tint = "urgent"
-        elif self.muted:
-            tint = "dim"
-        else:
-            tint = "fg"
-
-        tip = []
-        if self.username:
-            tip.append(self.username)
-        if self.state == "connected" and self.channel_name:
-            tip.append("in " + self.channel_name)
-        if self.muted:
-            tip.append("muted")
-        if self.error:
-            tip.append(self.error)
-
-        return {
-            "text": self.label(),
-            "icon": [LOGO, MIC_MUTED] if self.muted else LOGO,
-            "tint": tint,
-            "class": "urgent" if self.error else ("active" if self.ptt else "flat"),
-            "tooltip": " · ".join(tip),
-        }
-
-
-def emit(obj, last=[None], menu_ok=False):
-    """Print one update, but only when something actually changed.
-
-    The compositor gates its own redraw on a digest of everything the bar
-    shows, so a repeated identical line costs nothing on that side either --
-    but a plugin that chatters still wakes the event loop to parse JSON it
-    will then discard. Cheaper to not send it.
-
-    Menus are exempt: sending the same menu twice is two deliberate opens, not
-    a repeat, and deduplicating them would make the second right-click do
-    nothing.
-    """
+    global _last
+    obj = {"text": text, "class": cls, "tooltip": tooltip}
     line = json.dumps(obj, sort_keys=True)
-    if not menu_ok:
-        if line == last[0]:
-            return
-        last[0] = line
+    if line == _last:
+        return
+    _last = line
     sys.stdout.write(line + "\n")
-    sys.stdout.flush()  # unbuffered or the bar sees nothing until we exit
+    sys.stdout.flush()
 
 
-def apply_event(st, ev):
-    kind = ev.get("event")
-    if kind == "status":
-        st.state = ev.get("state") or "offline"
-        st.channel_id = ev.get("channel") or ""
-        st.muted = bool(ev.get("muted")) and st.state == "connected"
-        if st.state == "offline":
-            # Logged out but still running: the channel list belonged to that
-            # session, so naming a channel from it would be a lie.
-            st.channels.clear()
-            st.guilds.clear()
-            st.username = ""
-        st.error = ""
-        st.channel_name = (st.channels.get(st.channel_id) or {}).get("name", "")
-    elif kind == "channels":
-        st.guilds = {g["id"]: g.get("name", "") for g in ev.get("guilds") or []
-                     if g.get("id")}
-        st.channels = {}
-        for c in ev.get("channels") or []:
-            if not c.get("id"):
-                continue
-            st.channels[c["id"]] = {
-                "name": c.get("name", ""),
-                "guild": c.get("guild", ""),
-                "people": len(c.get("participants") or []),
-            }
-        st.channel_name = (st.channels.get(st.channel_id) or {}).get("name", "")
-    elif kind == "ready":
-        st.username = ev.get("username") or ""
-        st.error = ""
-    elif kind == "ptt":
-        st.ptt = bool(ev.get("active"))
-    elif kind == "error":
-        st.error = ev.get("text") or ""
+class Injector:
+    """XTEST key injection into XWayland.
 
-
-def menu(st):
-    """The rows the built-in module drew, in the same order.
-
-    Grouped by server rather than listed flat: the daemon emits channels sorted
-    by position across ALL servers, so a flat list interleaves them and reads as
-    noise. The built-in module groups for the same reason.
+    The display is opened ONCE and held. Shelling out to xdotool per event would
+    fork twice and re-open the X connection each time, on the press that starts
+    somebody's sentence.
     """
-    rows = []
-    if st.error:
-        rows.append({"text": st.error, "value": "", "enabled": False})
-    elif st.username:
-        rows.append({"text": f"{st.username}  ·  {st.label()}", "value": "",
-                     "enabled": False})
-    else:
-        rows.append({"text": st.label(), "value": "", "enabled": False})
 
-    if st.state == "connected":
-        rows.append({"separator": True})
-        rows.append({"text": "Unmute" if st.muted else "Mute",
-                     "value": "do:mute", "selected": st.muted})
-        rows.append({"text": "Disconnect", "value": "do:leave"})
+    def __init__(self, keysym_name):
+        from Xlib import XK, display
+        from Xlib.ext import xtest
 
-    rows.append({"separator": True})
-    if st.linked:
-        if st.state == "offline":
-            rows.append({"text": "Connect to Discord", "value": "do:connect"})
-        else:
-            rows.append({"text": "Disconnect from Discord",
-                         "value": "do:disconnect"})
-        rows.append({"text": "Shut down daemon", "value": "do:dstop"})
-    elif DAEMON and os.access(DAEMON, os.X_OK):
-        # Installed but not running: the one state you can actually act on, and
-        # the reason the pill stays visible while offline.
-        rows.append({"text": "Start daemon", "value": "do:dstart"})
+        self._xtest = xtest
+        self.disp = display.Display()  # honours DISPLAY
+        keysym = XK.string_to_keysym(keysym_name)
+        if keysym == 0:
+            raise ValueError(f"unknown keysym: {keysym_name}")
+        self.keycode = self.disp.keysym_to_keycode(keysym)
+        if not self.keycode:
+            raise ValueError(f"keysym {keysym_name} is not in the X keymap")
+        self.lock = threading.Lock()
 
-    if st.channels:
-        by_guild = {}
-        for cid, c in st.channels.items():
-            by_guild.setdefault(c.get("guild", ""), []).append((cid, c))
-        for gid in sorted(by_guild, key=lambda g: st.guilds.get(g, "")):
-            rows.append({"separator": True})
-            rows.append({"text": st.guilds.get(gid, "Server"), "value": "",
-                         "enabled": False})
-            for cid, c in by_guild[gid]:
-                people = c.get("people", 0)
-                label = c.get("name", "")
-                if people:
-                    label += f"  ({people})"
-                rows.append({"text": "    " + label, "value": "j:" + cid,
-                             "selected": cid == st.channel_id})
-    return {"menu": {"item": "", "rows": rows}}
+    def _fake(self, press):
+        # X.KeyPress = 2, X.KeyRelease = 3
+        with self.lock:
+            self._xtest.fake_input(self.disp, 2 if press else 3, self.keycode)
+            self.disp.sync()
 
+    def press(self):
+        self._fake(True)
 
-def send(st, obj):
-    """One command to the daemon, on the socket it already streams events on."""
-    if not st.sock:
-        return
-    try:
-        st.sock.sendall((json.dumps(obj) + "\n").encode())
-    except OSError:
-        pass
-
-
-def act(st, value):
-    if value == "do:mute":
-        send(st, {"cmd": "mute"})
-    elif value == "do:leave":
-        send(st, {"cmd": "disconnect"})
-    elif value == "do:connect":
-        send(st, {"cmd": "connect"})
-    elif value == "do:disconnect":
-        send(st, {"cmd": "logout"})
-    elif value == "do:dstop":
-        send(st, {"cmd": "quit"})
-    elif value == "do:dstart":
-        spawn_daemon(force=True)
-    elif value.startswith("j:"):
-        send(st, {"cmd": "join", "channel": value[2:]})
-
-
-def reader(st):
-    """Events from the compositor, on stdin.
-
-    Its own thread because the socket read loop below blocks: the two are
-    independent streams and neither may starve the other.
-    """
-    for line in sys.stdin:
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        kind = ev.get("event")
-        if kind == "click":
-            emit(menu(st), menu_ok=True)
-        elif kind == "menu":
-            v = ev.get("value") or ""
-            if not v:
-                continue
-            act(st, v)
-            # Close the panel; the daemon's next status event redraws the pill.
-            emit({"menu": {"item": "", "rows": []}}, menu_ok=True)
-    exit_with_the_bar()
-
-
-def exit_with_the_bar():
-    """stdin closed: the bar is gone, so stop.
-
-    A continuous plugin's stdin is a pipe from the bar, so EOF is unambiguous.
-    Without this the process runs for ever -- 27 plugin processes were found
-    from five previous bar sessions, the oldest a day old.
-
-    Nothing notices on its own: the obvious backstop, BrokenPipeError from a
-    write to the closed stdout, never fires because emit() DEDUPLICATES and a
-    plugin whose state has not changed writes nothing at all.
-
-    os._exit, not sys.exit: this runs on a daemon thread and sys.exit only
-    raises SystemExit in the calling thread, while main() blocks on its socket
-    read regardless.
-
-    The daemon is deliberately NOT killed here. It holds a live voice
-    connection, is started with start_new_session=True precisely so it outlives
-    the plugin, and can be stopped from the menu. Taking someone off a call
-    because their bar restarted would be much worse than a stray process, and
-    the plugin has no way to know whether the daemon it finds is the one it
-    started.
-    """
-    os._exit(0)
-
-
-def spawn_daemon(spawned=[False], force=False):
-    """Start the daemon once per plugin lifetime, never in a loop.
-
-    A retry every few seconds would fork a process forever on a machine that
-    does not have it installed. Once is enough: if it dies later the pill goes
-    offline and stays there, which is at least predictable and visible.
-
-    Do NOT add "and not when a socket file already exists".
-    ------------------------------------------------------
-    That was tried, on the strength of finding 16 discord-voiced processes with
-    the socket file dated to the first of them. The reasoning was that a second
-    daemon cannot bind a path that is taken, so it must be sitting there doing
-    nothing.
-
-    Both halves were wrong. Thirteen of those 16 were bound to
-    /tmp/asteroidz-hl-*/xdg/discord-voiced.sock -- litter from headless test
-    runs, each with its own XDG_RUNTIME_DIR, nothing to do with this plugin
-    leaking. And discord-voiced UNLINKS a stale socket and rebinds it: the one
-    remaining stray was listening on exactly the path a test had bind()ed and
-    abandoned.
-
-    So a socket file present with nothing behind it is the case where spawning
-    is the correct recovery, and refusing to spawn leaves the pill offline until
-    someone forces it from the menu. main() already only reaches here after a
-    connect FAILED, which is the right condition on its own.
-    """
-    if (spawned[0] and not force) or not DAEMON or not os.access(DAEMON, os.X_OK):
-        return
-    spawned[0] = True
-    try:
-        subprocess.Popen(
-            [DAEMON],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    except OSError:
-        pass
+    def release(self):
+        self._fake(False)
 
 
 def main():
-    st = State()
-    threading.Thread(target=reader, args=(st,), daemon=True).start()
-    backoff = 1.0
-    while True:
+    cfg = load_conf()
+
+    try:
+        injector = Injector(cfg["key"])
+    except Exception as exc:  # noqa: BLE001 -- reported, not raised
+        emit("PTT", "error", f"cannot inject keys: {exc}")
+        # Nothing to retry: a missing DISPLAY or an unmapped keysym does not fix
+        # itself, and a loop here would just spin.
+        return 1
+
+    import gi
+
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio, GLib
+
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+
+    # Own a bus name matching app_id BEFORE talking to the portal.
+    #
+    # GlobalShortcuts refuses a caller it cannot identify -- "An app id is
+    # required" -- and for a host process (not flatpak, not snap) the portal
+    # works the app id out from a well-known name the caller owns. A bare script
+    # owns nothing, so the very first CreateSession is rejected.
+    # Claim an app id, BEFORE any other portal request.
+    #
+    # Host (non-sandboxed) processes have no app id and GlobalShortcuts refuses
+    # them outright -- "An app id is required". Owning a matching D-Bus name does
+    # not help, and neither does a systemd app-*.scope; both were tried. The
+    # mechanism is org.freedesktop.host.portal.Registry.Register, and it has to
+    # come first.
+    #
+    # The id must resolve to a .desktop file glib can load, and that file's Exec
+    # binary must EXIST -- glib returns NULL for a dangling one, after which the
+    # portal answers "App info not found" and refuses to bind. That failure costs
+    # push-to-talk entirely and shows no other symptom, so the .desktop shipped
+    # alongside this points at the real bridge.
+    #
+    # Re-registering after a portal restart can fail with "already registered".
+    # That is not an error worth reporting: the bind below is the real test.
+    try:
+        bus.call_sync(
+            "org.freedesktop.portal.Desktop",
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.host.portal.Registry",
+            "Register",
+            GLib.Variant("(sa{sv})", (cfg["app_id"], {})),
+            None,
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
+        )
+    except GLib.Error as exc:
+        if "already" not in (exc.message or "").lower():
+            emit("PTT", "error", f"could not register app id: {exc.message}")
+
+    state = {"held": False, "bound": None}
+
+    def show():
+        if state["bound"] is None:
+            emit("PTT", "error", "push-to-talk is not bound")
+        elif state["held"]:
+            emit("PTT", "active", f"transmitting — {state['bound']}")
+        else:
+            emit("PTT", "idle", f"push-to-talk — {state['bound']}")
+
+    def on_signal(_conn, _sender, _path, _iface, signal, params):
+        # (o session, s shortcut_id, t timestamp, a{sv} options)
         try:
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.connect(SOCKET)
+            shortcut = params.unpack()[1]
+        except (IndexError, TypeError, AttributeError):
+            return
+        if shortcut != cfg["shortcut"]:
+            return
+        if signal == "Activated":
+            state["held"] = True
+            injector.press()
+        elif signal == "Deactivated":
+            state["held"] = False
+            injector.release()
+        else:
+            return
+        show()
+
+    # The FRONTEND interface, not org.freedesktop.impl.portal.*. The impl one is
+    # the contract between xdg-desktop-portal and the compositor; a client that
+    # listens there is reading someone else's mail and gets nothing routed to it.
+    PORTAL = "org.freedesktop.portal.Desktop"
+    OBJ = "/org/freedesktop/portal/desktop"
+    IFACE = "org.freedesktop.portal.GlobalShortcuts"
+
+    for sig in ("Activated", "Deactivated"):
+        bus.signal_subscribe(
+            PORTAL, IFACE, sig, OBJ, None, Gio.DBusSignalFlags.NONE, on_signal
+        )
+
+    # ── register the shortcut ───────────────────────────────────────────────
+    #
+    # Both calls are asynchronous in the portal sense: they return a Request
+    # object path immediately and deliver the real answer as a Response signal on
+    # it. Subscribing AFTER the call would race, so each subscription goes up
+    # first.
+    token = "asteroidz_ptt_%d" % os.getpid()
+
+    def call(method, args, on_response):
+        req = None
+
+        def handler(_c, _s, path, _i, _sig, params):
+            if path != req:
+                return
+            # .unpack() -- the callback hands over a GLib.Variant tuple, and
+            # indexing it yields Variants, not the dict this needs.
+            code, results = params.unpack()
+            if code != 0:
+                emit("PTT", "error", f"{method} refused by the portal (code {code})")
+                return
+            on_response(results)
+
+        sub = bus.signal_subscribe(
+            None,
+            "org.freedesktop.portal.Request",
+            "Response",
+            None,
+            None,
+            Gio.DBusSignalFlags.NONE,
+            handler,
+        )
+        try:
+            ret = bus.call_sync(
+                PORTAL, OBJ, IFACE, method, args, GLib.VariantType("(o)"),
+                Gio.DBusCallFlags.NONE, -1, None,
+            )
+            req = ret.unpack()[0]
+        except GLib.Error as exc:
+            bus.signal_unsubscribe(sub)
+            emit("PTT", "error", f"{method} failed: {exc.message}")
+
+    def bound(_results):
+        state["bound"] = read_binding() or cfg["trigger"]
+        show()
+
+    def session_ready(results):
+        session = results.get("session_handle")
+        if not session:
+            emit("PTT", "error", "portal gave no session handle")
+            return
+        # A plain tuple, NOT a pre-built GLib.Variant. PyGObject constructs the
+        # whole nested signature from native Python types, and handing it a
+        # Variant where it expects the raw value fails inside its own builder
+        # with "Expected GLib.Variant, but got str" -- pointing at the innermost
+        # string rather than at the wrapper that caused it. Only the a{sv} values
+        # are Variants, because `v` genuinely means variant.
+        shortcut = (
+            cfg["shortcut"],
+            {
+                "description": GLib.Variant("s", "Discord push-to-talk"),
+                "preferred_trigger": GLib.Variant("s", cfg["trigger"]),
+            },
+        )
+        call(
+            "BindShortcuts",
+            GLib.Variant("(oa(sa{sv})sa{sv})", (session, [shortcut], "", {})),
+            bound,
+        )
+
+    call(
+        "CreateSession",
+        GLib.Variant(
+            "(a{sv})",
+            (
+                {
+                    "handle_token": GLib.Variant("s", token),
+                    "session_handle_token": GLib.Variant("s", token),
+                },
+            ),
+        ),
+        session_ready,
+    )
+
+    # Which key the compositor has bound, read from its own record rather than
+    # guessed. Absent means nothing is bound yet and the pill should say so
+    # instead of claiming to be ready.
+    def read_binding():
+        path = os.path.join(
+            os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+            "asteroidz",
+            "global-shortcuts",
+        )
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    parts = line.rstrip("\n").split("\t")
+                    if len(parts) >= 3 and parts[0] == cfg["app_id"]:
+                        return parts[2]
         except OSError:
-            # No daemon. Say so, offer to have started one, and back off --
-            # a tight reconnect loop against a socket that is not there is
-            # the one way a plugin can actually cost the machine something.
-            st.linked = False
-            emit(st.render())
-            spawn_daemon()
-            time.sleep(backoff)
-            backoff = min(backoff * 2, 30.0)
-            continue
+            pass
+        return None
 
-        backoff = 1.0
-        st.linked = True
-        st.sock = s
-        emit(st.render())
-        with s, s.makefile("r", encoding="utf-8", errors="replace") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    ev = json.loads(line)
-                except ValueError:
-                    continue  # a partial or malformed line is not fatal
-                apply_event(st, ev)
-                emit(st.render())
+    show()
 
-        # The daemon went away: everything we knew is stale, and showing the
-        # last channel would claim a voice connection that no longer exists.
-        st.sock = None
-        st.reset()
-        emit(st.render())
+    # A release we never see would leave the key latched down in the X server,
+    # which is a stuck microphone. Belt and braces on the way out.
+    def cleanup():
+        if state["held"]:
+            try:
+                injector.release()
+            except Exception:  # noqa: BLE001
+                pass
+
+    loop = GLib.MainLoop()
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        cleanup()
+    return 0
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        pass
+    sys.exit(main())

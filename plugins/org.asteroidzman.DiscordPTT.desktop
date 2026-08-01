@@ -1,0 +1,24 @@
+[Desktop Entry]
+# This file exists so the push-to-talk bridge can have an app id. It is not
+# something to launch.
+#
+# Host (non-sandboxed) processes have no app id, and xdg-desktop-portal refuses
+# GlobalShortcuts without one -- "An app id is required". Owning a matching
+# D-Bus name does not satisfy it, and neither does a systemd app-*.scope; both
+# were tried. The mechanism is org.freedesktop.host.portal.Registry.Register,
+# called before any other portal request, and the id passed there must resolve
+# to a .desktop file glib can load.
+#
+# The Exec binary must EXIST. glib returns NULL for a .desktop whose Exec is
+# missing, the portal then answers "App info not found", and the bind is refused
+# -- which costs push-to-talk entirely and produces no other symptom. So Exec
+# names the installed bridge rather than a placeholder, and the name here must
+# stay in step with the `app_id` default in asteroidz-bar-discord.
+Type=Application
+Name=Discord Push-to-Talk
+Comment=Registers the global push-to-talk shortcut and forwards it to Discord
+Exec=/usr/bin/asteroidz-bar-discord
+Icon=discord
+Terminal=false
+NoDisplay=true
+Categories=Network;InstantMessaging;

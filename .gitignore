@@ -4,3 +4,4 @@ pkg/
 asteroidz-bar/
 *.pkg.tar.zst
 *.log
+__pycache__/

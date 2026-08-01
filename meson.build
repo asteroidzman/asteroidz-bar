@@ -182,6 +182,19 @@ install_data(
 	install_mode: 'rwxr-xr-x',
 )
 
+# Not a launcher -- an identity.
+#
+# asteroidz-bar-discord registers a global shortcut through the portal, and
+# xdg-desktop-portal refuses GlobalShortcuts to a caller with no app id ("An app
+# id is required"). The id it claims must resolve to a .desktop glib can load,
+# whose Exec binary EXISTS -- glib returns NULL for a dangling one and the portal
+# then answers "App info not found", so push-to-talk never binds and nothing else
+# looks wrong. Installed beside the bridge so the two cannot drift apart.
+install_data(
+	'plugins/org.asteroidzman.DiscordPTT.desktop',
+	install_dir: get_option('datadir') / 'applications',
+)
+
 # The launcher exists to pin Qt's DPI handling to the compositor's; see the
 # script itself. The installed copy needs to know where the QML landed.
 conf = configuration_data()
