@@ -58,17 +58,12 @@ Row {
             paddingX: Cfg.tagPadding
             chip: true
 
-            // Rec.709 luminance against the midpoint, the same rule
-            // bar_readable_fg applies: an urgent colour is chosen to read
-            // against the BAR, so it cannot also be constrained to contrast
-            // with its own label -- the label gives.
-            function readableOn(c) {
-                const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-                return lum < 0.5 ? Cfg.fg : Qt.rgba(0.08, 0.08, 0.08, Cfg.fg.a);
-            }
-
+            // An urgent colour is chosen to read against the BAR, so it
+            // cannot also be constrained to contrast with its own label --
+            // the label gives. Cfg.readableOn is that rule, shared now with
+            // the plugin pills, which had no version of it at all.
             fg: modelData.active ? Cfg.focusFg
-              : modelData.urgent ? readableOn(Cfg.urgent)
+              : modelData.urgent ? Cfg.readableOn(Cfg.urgent)
               : modelData.occupied ? Cfg.fg
               : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.35)
 

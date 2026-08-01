@@ -113,6 +113,46 @@ Singleton {
     readonly property int borderWidth: num(theme, "border_width", 4)
     readonly property int themePaddingY: num(theme, "padding_y", 0)
 
+    // ── legibility ──────────────────────────────────────────────────────────
+    //
+    // The palette has no partner for `urgent`. `focus_bg` has `focus_fg`, and
+    // matugen sets both from a Material pair, but urgent is a single colour
+    // chosen to read against the BAR -- so anything that paints it as a
+    // BACKGROUND has to work out its own foreground. On this desktop urgent
+    // comes out as a light salmon (matugen's error container), and the theme
+    // foreground is near-white: a pill that went urgent was white on pale
+    // pink, which is how a reminder coming due announced itself illegibly.
+    //
+    // Rec.709 luminance against the midpoint, the same rule the compositor's
+    // own bar_readable_fg applies, so a chip on the bar and a chip drawn here
+    // pick the same side.
+
+    function luminance(c) {
+        return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    }
+
+    // The theme foreground, or near-black when the background is too light for
+    // it. Near-black rather than pure: the palette is never pure black either,
+    // and it keeps the alpha the theme asked for.
+    function readableOn(c) {
+        return luminance(c) < 0.5 ? fg : Qt.rgba(0.08, 0.08, 0.08, fg.a);
+    }
+
+    // `want` if it can be read on `over`, else whatever can be.
+    //
+    // A ratio rather than a luminance test, because the failure is not always
+    // light-on-light: an icon tinted `urgent` on a pill whose background is
+    // also urgent has no contrast at all whatever the luminance says, and that
+    // is exactly what a plugin sends when something is due.
+    function legibleOn(want, over) {
+        if (!over || over === "transparent" || over.a === 0)
+            return want;
+        const a = luminance(want) + 0.05;
+        const b = luminance(over) + 0.05;
+        const ratio = a > b ? a / b : b / a;
+        return ratio >= 2.2 ? want : readableOn(over);
+    }
+
     // A Pango descriptor is "FAMILY [STYLE-OPTIONS] SIZE", and the style
     // options are the part that bites: "monospace Bold 16" is a BOLD monospace
     // at 16pt, not a family called "monospace Bold". Treating the whole

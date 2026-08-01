@@ -50,25 +50,34 @@ Pill {
         return Array.isArray(i) ? i : [i];
     }
 
-    // Named tints resolve against the theme; anything else is passed to Qt,
-    // so a plugin can send "#e5a50a" for a state the theme has no word for.
-    iconTint: {
-        const t = state.tint || "";
-        switch (t) {
-        case "": return "transparent";
-        case "fg": return Cfg.fg;
-        case "accent": return Cfg.focusBg;
-        case "urgent": return Cfg.urgent;
-        case "dim": return Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45);
-        default: return t;
-        }
-    }
-
+    // The pill's own background, resolved first: everything drawn ON it has to
+    // be legible against it, and only this line knows what it is.
     bg: state.class === "urgent" ? Cfg.urgent
       : state.class === "active" ? Cfg.focusBg
       : "transparent"
 
-    fg: state.class === "active" ? Cfg.focusFg : Cfg.fg
+    // Named tints resolve against the theme; anything else is passed to Qt,
+    // so a plugin can send "#e5a50a" for a state the theme has no word for.
+    iconTint: {
+        const t = state.tint || "";
+        let c;
+        switch (t) {
+        case "": return "transparent";
+        case "fg": c = Cfg.fg; break;
+        case "accent": c = Cfg.focusBg; break;
+        case "urgent": c = Cfg.urgent; break;
+        case "dim":
+            c = Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45);
+            break;
+        default: c = t; break;
+        }
+        // A tint names a colour for a pill with no background of its own.
+        // The same plugin usually asks for `urgent` in both places at once --
+        // "this is due" -- and an urgent icon on an urgent pill is invisible.
+        return Cfg.legibleOn(c, bg);
+    }
+
+    fg: state.class === "active" ? Cfg.focusFg : Cfg.legibleOn(Cfg.fg, bg)
 
     // Icon-only plugins join the tight run of status artwork; one with a label
     // is padded like any other labelled pill.

@@ -180,6 +180,58 @@ EOF
 
 render_tags_recolour "$WORK/logo-recolour.png" "$WORK/logo-recolour.log"
 
+# ── 5. an urgent pill has to be READABLE ────────────────────────────────────
+#
+# `urgent` is the one palette entry with no partner. focus_bg has focus_fg from
+# a Material pair; urgent is a single colour chosen to read against the BAR, so
+# anything painting it as a BACKGROUND has to work out its own foreground. On
+# this desktop matugen makes it a light salmon while the theme foreground is
+# near-white, so a plugin pill going urgent drew white on pale pink at 1.15:1 --
+# a reminder coming due announced itself illegibly. An icon tinted `urgent` on
+# the same pill was worse still, 1.00:1, and plugins send both together because
+# both mean "this is due".
+#
+# The theme here sets a LIGHT urgent deliberately. With the built-in red
+# (luminance 0.48) the old code picks white and is perfectly readable, so a
+# test on the default would pass against the bug.
+cat > "$WORK/urgent-stub.py" <<'STUB'
+import sys, time
+while True:
+    sys.stdout.write('{"text":"Due","icon":"asteroidz-bar/reminders.svg",'
+                     '"class":"urgent","tint":"urgent"}\n')
+    sys.stdout.flush()
+    time.sleep(5)
+STUB
+
+render_urgent() { # render_urgent <outfile>
+	cp "$PRISTINE" "$HL_CONFIG"
+	cat >> "$HL_CONFIG" <<EOF
+theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 }
+	urgent-color 0xffb4abff }
+bar { enable false; height 48; position "top"; margin { x 8; y 9 }
+	panel { enable true; radius 9; padding 12; blur true; shadow true }
+	modules-left ""; modules-center "custom/due"; modules-right ""
+	custom "due" { exec "python3 $WORK/urgent-stub.py"; continuous true } }
+EOF
+	hl_dispatch "reload_config" 1
+	sleep 1
+	dbus-run-session -- \
+		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+		HOME="$HOME" PATH="$PATH" \
+		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
+		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
+		ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
+		ASTEROIDZ_BAR_QML="$QMLROOT" \
+		"$HERE/bin/asteroidz-bar" > "$WORK/urgent.log" 2>&1 &
+	local pid=$!
+	sleep 8
+	grim -o "$HL_MON" "$1" 2>/dev/null
+	kill "$pid" 2>/dev/null
+	wait "$pid" 2>/dev/null
+}
+
+render_urgent "$WORK/urgent.png"
+
 if grep -q "Cannot open.*asteroidz-bar-logo" "$WORK/logo-recolour.log"; then
 	bad "a palette change does not lose the ship ($(grep -m1 -o 'Cannot open.*' "$WORK/logo-recolour.log"))"
 else
@@ -297,6 +349,42 @@ def panel_ink(name):
     return sum(1 for y in range(14, 50) for x in range(span[0], span[1])
                if sum(p[x, y]) > 380)
 
+
+# 5. the urgent pill: ink ON it, against its own background.
+#
+# The pill is the only thing on that bar and the only salmon-coloured region,
+# so it finds itself: take the colour filling it, then count the pixels inside
+# that differ from it by a lot. Text and an icon are hundreds; a pill drawn in
+# one flat colour with invisible contents is single digits.
+try:
+    up = Image.open(f"{work}/urgent.png")
+except OSError as e:
+    print(f"FAIL the urgent pill was rendered at all ({e})")
+    up = None
+upx = up.convert("RGB").load() if up else None
+uw, uh = up.size if up else (0, 0)
+hits = [] if up is None else [
+        (x, y) for y in range(10, min(uh, 70))
+        for x in range(0, uw, 2)
+        if upx[x, y][0] > 200 and 140 < upx[x, y][1] < 210
+        and 130 < upx[x, y][2] < 200]
+if up is None:
+    pass
+elif len(hits) < 200:
+    print(f"FAIL the urgent pill is on screen (found {len(hits)} px of it)")
+else:
+    xs = [p[0] for p in hits]
+    ys = [p[1] for p in hits]
+    bx0, bx1, by0, by1 = min(xs), max(xs), min(ys), max(ys)
+    base = upx[(bx0 + bx1) // 2, by0 + 2]
+    ink = sum(1 for y in range(by0, by1 + 1) for x in range(bx0, bx1 + 1)
+              if abs(upx[x, y][0] - base[0]) + abs(upx[x, y][1] - base[1])
+                 + abs(upx[x, y][2] - base[2]) > 150)
+    print(f"urgent pill {bx1 - bx0}x{by1 - by0}px, contrasting pixels: {ink}")
+    if ink > 150:
+        print("PASS an urgent pill's text and icon are legible on it")
+    else:
+        print("FAIL an urgent pill's text and icon are legible on it")
 
 ink_on = panel_ink("logo-on.png")
 ink_off = panel_ink("logo-off.png")
