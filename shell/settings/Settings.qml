@@ -19,6 +19,9 @@ pragma Singleton
 import Quickshell
 import QtQuick
 import "."
+// For Ipc: fetching an already-open window is the compositor's job, not a
+// client's, so this singleton needs the socket as well as the window.
+import ".."
 
 Singleton {
     id: root
@@ -31,16 +34,57 @@ Singleton {
     }
 
     function open() {
-        if (window === null)
+        const existed = window !== null;
+        if (!existed)
             window = windowComponent.createObject(root);
-        if (window !== null) {
-            window.visible = true;
-            // Un-minimise, for the case where it is already open and iconified.
-            // A client cannot raise itself on Wayland -- there is no protocol for
-            // it -- so this is the extent of what a second "open settings" can
-            // do about a window that is already there.
-            window.minimized = false;
-        }
+        if (window === null)
+            return;
+        window.visible = true;
+        window.minimized = false;
+        // An already-open window has to be fetched by the COMPOSITOR.
+        //
+        // This is what made a second "All settings…" look broken. The window was
+        // still there, on whichever tag it was opened from, and a client cannot
+        // raise itself on Wayland -- there is no protocol for it. So the press
+        // reused the existing window, correctly, and from the far side of a tag
+        // switch that is indistinguishable from nothing happening.
+        //
+        // The bar is not limited to what a client can do: it has the
+        // compositor's IPC. focus_id runs client_active(), which switches to the
+        // window's tag, un-minimises it and focuses it.
+        if (existed)
+            summon();
+    }
+
+    // Ask the compositor to bring the settings window here.
+    //
+    // Matched on title, not app-id: every window this shell owns shares one
+    // app-id, so matching that could summon the bar itself.
+    function summon() {
+        Ipc.request("get all-clients", function (d) {
+            const cs = (d && d.clients) || [];
+            for (let i = 0; i < cs.length; i++) {
+                if (cs[i].title === "asteroidz settings") {
+                    // Three things here are easy to get wrong and every one of
+                    // them fails silently, because the reply is {"success":true}
+                    // whenever the action NAME parsed -- it says nothing about
+                    // whether the action did anything.
+                    //
+                    //   - `dispatch ` is part of the string Ipc.dispatch sends
+                    //     verbatim; it is not added for you.
+                    //   - the id is a `client,<id>` PREFIX, not focus_id's own
+                    //     argument. `focus_id,<id>` leaves arg->tc NULL and
+                    //     focusid() returns immediately.
+                    //   - the prefix must be terminated by a COMMA. The parser
+                    //     accepts the id only when the next character is ',' or
+                    //     end-of-string, so `client,<id> focus_id` -- with a
+                    //     space, as modules/Title.qml writes it -- never sets
+                    //     the client at all.
+                    Ipc.dispatch("dispatch client," + cs[i].id + ",focus_id");
+                    return;
+                }
+            }
+        });
     }
 
     function toggle() {

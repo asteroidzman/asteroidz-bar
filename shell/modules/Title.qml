@@ -40,6 +40,13 @@ Pill {
         // `client,<id>` is a prefix the dispatcher strips out of the command
         // and turns into the target, not an argument to focus_id -- the
         // function itself takes none.
-        Ipc.dispatch("dispatch client," + client.id + " focus_id");
+        //
+        // It must end in a COMMA. The parser accepts the id only when the next
+        // character is ',' or end-of-string, so the space this used to have meant
+        // the prefix was never recognised at all: client_id stayed unset,
+        // arg->tc stayed NULL, focusid() returned immediately, and clicking the
+        // title did nothing. The reply was still {"success":true}, because
+        // success only ever meant the action NAME parsed.
+        Ipc.dispatch("dispatch client," + client.id + ",focus_id");
     }
 }

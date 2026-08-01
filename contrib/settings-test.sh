@@ -825,6 +825,35 @@ else
 	"$REPO/build/asteroidz" -p -c "$HL_CONFIG" 2>&1 | head -4 | sed 's/^/       /'
 fi
 
+# ── reopening it ────────────────────────────────────────────────────────────
+#
+# Pressing "All settings…" a second time did nothing, and the reason was not a
+# bug in the window: it was still open, on the tag it was opened from. A client
+# cannot raise itself on Wayland -- there is no protocol for it -- so the press
+# correctly reused the existing window, from the far side of a tag switch, which
+# is indistinguishable from nothing happening.
+#
+# The bar has the compositor's IPC and can ask for it back. Asserted on
+# active_tags rather than on focus: the window never lost focus in the compositor
+# sense, so `is_focused` was already true and an assertion on it passed against
+# the broken build.
+acttags() { hl_get "get all-monitors" | python3 -c '
+import json, sys
+print(json.load(sys.stdin)["monitors"][0]["active_tags"])'; }
+
+hl_dispatch "view,2" 1
+T_AWAY="$(acttags)"
+hl_move "$PILL_X" "$PILL_Y"; sleep 1
+hl_click "$PILL_X" "$PILL_Y"; sleep 2
+hl_move "$SET_X" "$SET_Y"; sleep 1
+hl_click "$SET_X" "$SET_Y"; sleep 3
+T_BACK="$(acttags)"
+if [ "$T_AWAY" = "[2]" ] && [ "$T_BACK" = "[1]" ]; then
+	ok "a second \"All settings…\" summons the window back from another tag"
+else
+	bad "a second \"All settings…\" summons the window back (away=$T_AWAY back=$T_BACK)"
+fi
+
 kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
 
