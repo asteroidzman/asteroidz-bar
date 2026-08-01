@@ -289,20 +289,27 @@ PopupWindow {
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
+                    // The label, and the typed text, as SEPARATE items -- the
+                    // label is what gives way when there is not enough room.
+                    //
+                    // They used to be one string, `label + ": " + value`, with
+                    // ElideRight on the lot. A popover latches its width at
+                    // open (see lockedWidth), so stepping from a short menu
+                    // into a form makes every row too long, and eliding a
+                    // "Times (HH:MM, comma separated): 20:00▌" from the right
+                    // takes away the 20:00 and the caret and leaves the label.
+                    // Typing worked perfectly and showed nothing, on exactly
+                    // the fields whose labels were longest -- reported as
+                    // "can't input time, start date" while Name, whose label
+                    // is short, was fine.
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        // A field shows what has been typed, with a caret --
-                        // the label alone gives no clue where the keystrokes
-                        // are going.
-                        //
                         // `|| ""` on the label, not a bare read: a row is a
                         // plain object built by whichever module opened the
                         // menu, and the ones that carry no label at all (every
                         // separator) were binding `undefined` to a QString.
                         text: row.modelData.input
                             ? (row.modelData.text || "") + ": "
-                              + (row.modelData.value || "")
-                              + (root.focusedRow === row.index ? "▌" : "")
                             : (row.modelData.text || "")
                         color: row.modelData.enabled === false
                             ? Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.4)
@@ -312,7 +319,77 @@ PopupWindow {
                         font.weight: Cfg.fontWeight
                         font.hintingPreference: Font.PreferFullHinting
                         elide: Text.ElideRight
-                        width: Math.min(implicitWidth, content.width - 32)
+                        // Whatever the value does not need. A field's own text
+                        // is never the part that gets cut.
+                        width: Math.min(implicitWidth,
+                                        Math.max(0, content.width - 32 - value.width))
+                    }
+
+                    Text {
+                        id: value
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: row.modelData.input === true
+                        // The caret belongs to the value, so an empty field
+                        // still shows where the keystrokes are going.
+                        text: visible
+                            ? (row.modelData.value || "")
+                              + (root.focusedRow === row.index ? "▌" : "")
+                            : ""
+                        color: Cfg.fg
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Cfg.fontSize
+                        font.weight: Cfg.fontWeight
+                        font.hintingPreference: Font.PreferFullHinting
+                    }
+                }
+
+                // A number, chosen rather than typed: ‹ 08 ›
+                //
+                // A menu row is a poor text field -- there is no selection, no
+                // cursor to move, and a mistyped "8:0" is only found when the
+                // form is submitted and refused. For a bounded number there is
+                // nothing to type: the arrows cover the whole range, wrap at
+                // the ends, and cannot produce a value the plugin has to
+                // reject. `spin` on a row is what asks for this.
+                Row {
+                    id: spin
+                    visible: row.modelData.separator !== true
+                        && root.spinOf(row.modelData) !== null
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 12
+
+                    Text {
+                        text: "‹"
+                        color: Cfg.fg
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Cfg.fontSize
+                        // Its own handler, so the arrow is the target rather
+                        // than the row: the row's handler only focuses.
+                        TapHandler { onTapped: root.spinBy(row.index, -1) }
+                    }
+
+                    Text {
+                        text: root.spinLabel(row.modelData)
+                        color: Cfg.fg
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Cfg.fontSize
+                        font.weight: Cfg.fontWeight
+                        font.hintingPreference: Font.PreferFullHinting
+                        // Wide enough for the widest value in range, so the
+                        // arrows do not shuffle sideways as the number changes
+                        // -- a moving target is miserable to click repeatedly.
+                        horizontalAlignment: Text.AlignHCenter
+                        width: root.spinWidth(row.modelData, font)
+                    }
+
+                    Text {
+                        text: "›"
+                        color: Cfg.fg
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Cfg.fontSize
+                        TapHandler { onTapped: root.spinBy(row.index, 1) }
                     }
                 }
 
@@ -341,7 +418,12 @@ PopupWindow {
                     enabled: !row.modelData.separator
                         && row.modelData.enabled !== false
                     onTapped: {
-                        if (row.modelData.input) {
+                        // A field takes the keyboard; it does not act. That
+                        // includes a stepper, whose arrows are handled above
+                        // and whose row body is just a way to aim the arrow
+                        // keys at it.
+                        if (row.modelData.input
+                                || root.spinOf(row.modelData) !== null) {
                             root.focusedRow = row.index;
                             return;
                         }
@@ -352,7 +434,92 @@ PopupWindow {
         }
     }
 
-    // Which field the keyboard is aimed at, or -1.
+    // ── steppers ────────────────────────────────────────────────────────────
+    //
+    // A row is a stepper when it carries `spin`: {min, max, step, wrap, pad}.
+    // Its value travels in `value` exactly like a text field's, so it comes
+    // back to the plugin in `fields` with everything else and neither side
+    // needs a second channel.
+
+    function spinOf(r) {
+        return r && r.spin ? r.spin : null;
+    }
+
+    function spinNum(r) {
+        const s = spinOf(r);
+        if (!s)
+            return 0;
+        const v = parseInt(r.value, 10);
+        // A field that has never been set reads as its minimum, not as NaN --
+        // which would print "NaN" in the row and travel back as "NaN".
+        return isNaN(v) ? (s.min !== undefined ? s.min : 0) : v;
+    }
+
+    function spinLabel(r) {
+        const s = spinOf(r);
+        if (!s)
+            return "";
+        const pad = s.pad || 0;
+        return String(spinNum(r)).padStart(pad, "0");
+    }
+
+    // Room for the widest value the range allows, measured rather than
+    // guessed: the font is the theme's and its digits are not always the same
+    // width as any other font's.
+    function spinWidth(r, font) {
+        const s = spinOf(r);
+        if (!s)
+            return 0;
+        const pad = s.pad || 0;
+        const lo = String(s.min !== undefined ? s.min : 0).padStart(pad, "0");
+        const hi = String(s.max !== undefined ? s.max : 59).padStart(pad, "0");
+        const m = Qt.createQmlObject(
+            'import QtQuick; TextMetrics {}', root, "spinWidth");
+        m.font = font;
+        m.text = lo.length >= hi.length ? lo : hi;
+        const w = m.advanceWidth;
+        m.destroy();
+        return Math.ceil(w) + 2;
+    }
+
+    function spinBy(index, direction) {
+        const r = rows[index];
+        const s = spinOf(r);
+        if (!s)
+            return;
+        const min = s.min !== undefined ? s.min : 0;
+        const max = s.max !== undefined ? s.max : 59;
+        const step = s.step || 1;
+        let v = spinNum(r) + direction * step;
+        // Wrapping is the default: hours run into days and minutes into
+        // hours, and a person spinning past 23 means 0. `wrap: false` clamps,
+        // which is what a year wants.
+        if (v > max)
+            v = s.wrap === false ? max : min;
+        if (v < min)
+            v = s.wrap === false ? min : max;
+        focusedRow = index;
+        edited(index, String(v));
+    }
+
+    // Which field the keyboard is aimed at, or -1. A stepper counts: it is a
+    // field, it just has no letters in it.
+    function isField(r) {
+        return r && (r.input === true || spinOf(r) !== null);
+    }
+
+    // Enter advances rather than submitting: a form is filled top to bottom
+    // and ends in an explicit Save row.
+    function focusNextField() {
+        for (let i = focusedRow + 1; i < rows.length; i++) {
+            if (isField(rows[i])) {
+                focusedRow = i;
+                return true;
+            }
+        }
+        return false;
+    }
+
     property int focusedRow: -1
 
     // The same aim, remembered by FIELD NAME, so it survives the rows array
@@ -370,14 +537,14 @@ PopupWindow {
     onFocusedRowChanged: {
         const r = focusedRow >= 0 && focusedRow < rows.length
             ? rows[focusedRow] : null;
-        focusedField = r && r.input ? (r.field || "") : "";
+        focusedField = isField(r) ? (r.field || "") : "";
     }
 
     onRowsChanged: {
         // Still the same field, under whatever index it now has.
         if (focusedField !== "") {
             for (let i = 0; i < rows.length; i++) {
-                if (rows[i] && rows[i].input && rows[i].field === focusedField) {
+                if (isField(rows[i]) && rows[i].field === focusedField) {
                     focusedRow = i;
                     return;
                 }
@@ -387,7 +554,7 @@ PopupWindow {
         // on, so hold the index instead, and only while the form is plainly
         // still the same one: the row at that index is editable.
         if (focusedField === "" && focusedRow >= 0 && focusedRow < rows.length
-                && rows[focusedRow] && rows[focusedRow].input)
+                && isField(rows[focusedRow]))
             return;
 
         // A different set of rows. Aim at its first field: a form opened in
@@ -396,7 +563,7 @@ PopupWindow {
         // swallows nothing, which reads as broken.
         focusedRow = -1;
         for (let i = 0; i < rows.length; i++) {
-            if (rows[i] && rows[i].input) {
+            if (isField(rows[i])) {
                 focusedRow = i;
                 break;
             }
@@ -417,20 +584,33 @@ PopupWindow {
                 return;
 
             const cur = root.rows[root.focusedRow];
+
+            // A stepper has no text to edit. Left/Down go back, Right/Up go
+            // on, and a stray letter does nothing rather than being appended
+            // to a number.
+            if (root.spinOf(cur) !== null) {
+                if (event.key === Qt.Key_Left || event.key === Qt.Key_Down) {
+                    root.spinBy(root.focusedRow, -1);
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Right
+                           || event.key === Qt.Key_Up) {
+                    root.spinBy(root.focusedRow, 1);
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Return
+                           || event.key === Qt.Key_Enter) {
+                    root.focusNextField();
+                    event.accepted = true;
+                }
+                return;
+            }
+
             if (event.key === Qt.Key_Backspace) {
                 const v = cur.value || "";
                 root.edited(root.focusedRow, v.slice(0, -1));
                 event.accepted = true;
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                // Enter advances rather than submitting: a form is filled top
-                // to bottom and ends in an explicit Save row.
-                for (let i = root.focusedRow + 1; i < root.rows.length; i++) {
-                    if (root.rows[i].input) {
-                        root.focusedRow = i;
-                        event.accepted = true;
-                        return;
-                    }
-                }
+                if (root.focusNextField())
+                    event.accepted = true;
             } else if (event.text && event.text.length > 0
                        && event.text.charCodeAt(0) >= 0x20) {
                 root.edited(root.focusedRow, (cur.value || "") + event.text);

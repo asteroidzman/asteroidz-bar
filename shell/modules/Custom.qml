@@ -97,9 +97,15 @@ Pill {
                 submenu: r.submenu === true,
                 checked: r.selected === true,
                 input: r.input === true,
+                // A bounded number, chosen with arrows rather than typed:
+                // {min, max, step, wrap, pad}. It carries its value in the
+                // same two places a text field does -- `field` names it and
+                // `value` holds it -- so it comes back in `fields` with
+                // everything else and the plugin reads it the same way.
+                spin: (r.spin && typeof r.spin === "object") ? r.spin : null,
                 action: r.value || "",
-                field: r.input === true ? (r.value || "") : "",
-                value: r.input === true ? (r.edit || "") : "",
+                field: (r.input === true || r.spin) ? (r.value || "") : "",
+                value: (r.input === true || r.spin) ? (r.edit || "") : "",
                 plugin: root
             }));
             // An empty menu is a plugin saying "nothing to offer", which is

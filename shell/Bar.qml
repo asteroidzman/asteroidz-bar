@@ -239,7 +239,9 @@ PanelWindow {
             if (row && row.plugin) {
                 const fields = {};
                 for (const r of rows) {
-                    if (r && r.input && r.field)
+                    // Steppers as well as text fields: to a plugin the two are
+                    // the same thing, a named value the form carries.
+                    if (r && (r.input || r.spin) && r.field)
                         fields[r.field] = r.value || "";
                 }
                 row.plugin.send({

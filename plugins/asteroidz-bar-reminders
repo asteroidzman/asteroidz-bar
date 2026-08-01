@@ -41,7 +41,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-ICON = "waybar-medication/pill.svg"
+ICON = "asteroidz-bar/reminders.svg"
 POLL_SECONDS = 20
 # ASTEROIDZ_MED_POSTPONE is the name this shipped under; still read, so a
 # rename does not quietly reset somebody's postpone interval.
@@ -232,42 +232,139 @@ def medications():
     return (load_doc() or {}).get("medications") or []
 
 
+# The form's draft, held HERE rather than in the bar.
+#
+# Adding a time rebuilds the whole form, and a rebuild is the only way the bar
+# can show a list that grew. So the draft has to survive it, and the plugin is
+# the side that can hold it: the bar's rows are rebuilt from whatever this
+# sends. `draft["times"]` is the list being assembled; everything else is read
+# back out of `fields` on submit, because the bar carries those for us.
+draft = {"times": [], "id": None, "fields": {}}
+
+
+def days_in_month(year, month):
+    if month == 2:
+        leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+        return 29 if leap else 28
+    return 30 if month in (4, 6, 9, 11) else 31
+
+
 def form_rows(med=None):
-    """A schedule as editable rows. `edit` prefills them, which is the whole
-    difference between adding and editing."""
+    """A schedule as rows: a name to type, and numbers to choose.
+
+    Times and dates are STEPPERS, not text. A menu row is a poor text field --
+    no selection, no cursor -- and "8:0" or "2026-8-1" is only found to be
+    wrong once the form is submitted and refused, with nothing to say which of
+    the four fields was at fault. A bounded number cannot be entered wrongly.
+
+    Labels stay short: a popover latches its width when it opens, so a form
+    stepped into from a short menu has no more room than that menu had.
+    """
     m = med or {}
-    return [
+    now = datetime.now()
+    start = m.get("startDate") or now.strftime("%Y-%m-%d")
+    try:
+        sy, sm, sd = (int(x) for x in start.split("-"))
+    except ValueError:
+        sy, sm, sd = now.year, now.month, now.day
+
+    # Whatever the form last held wins over the stored reminder.
+    #
+    # Adding a time rebuilds every row, and a rebuild without this puts the
+    # name back to what it was and the steppers back to 08:00 -- so entering a
+    # second time would silently undo the first thing you typed. The bar hands
+    # the whole form back with every pick, so keeping the last one is all this
+    # takes.
+    f = draft["fields"]
+
+    def pre(key, fallback):
+        v = f.get(key)
+        return str(v) if v not in (None, "") else str(fallback)
+
+    rows = [
         {"text": "Name", "value": "name", "input": True,
-         "edit": m.get("name", "")},
-        {"text": "Times (HH:MM, comma separated)", "value": "times",
-         "input": True, "edit": ",".join(m.get("times") or [])},
-        {"text": "Every N days", "value": "freq", "input": True,
-         "edit": str(m.get("frequencyValue", 1) or 1)},
-        {"text": "Start (YYYY-MM-DD)", "value": "start", "input": True,
-         "edit": m.get("startDate", datetime.now().strftime("%Y-%m-%d"))},
+         "edit": pre("name", m.get("name", ""))},
+        {"text": "Hour", "value": "hour",
+         "spin": {"min": 0, "max": 23, "pad": 2}, "edit": pre("hour", 8)},
+        {"text": "Minute", "value": "minute",
+         "spin": {"min": 0, "max": 55, "step": 5, "pad": 2},
+         "edit": pre("minute", 0)},
+        {"text": "+ add this time", "value": "addtime"},
     ]
+
+    # The times already on the draft, each one its own row so each can go
+    # again. Shown even when empty is not worth a row: an empty list says
+    # itself by the absence of any.
+    for t in draft["times"]:
+        rows.append({"text": "   " + t + "   \u00d7", "value": "rmtime:" + t})
+
+    rows += [
+        {"separator": True},
+        {"text": "Year", "value": "year",
+         "spin": {"min": 2020, "max": 2100, "wrap": False},
+         "edit": pre("year", sy)},
+        {"text": "Month", "value": "month",
+         "spin": {"min": 1, "max": 12, "pad": 2}, "edit": pre("month", sm)},
+        # Always 1..31, and clamped on save to what the month really has.
+        # The bar cannot know the month while the day is being spun -- it
+        # sends nothing until a row is picked -- so 31 February is refused
+        # where it is understood rather than prevented where it is not.
+        {"text": "Day", "value": "day",
+         "spin": {"min": 1, "max": 31, "pad": 2}, "edit": pre("day", sd)},
+        {"text": "Every N days", "value": "freq",
+         "spin": {"min": 1, "max": 60, "wrap": False},
+         "edit": pre("freq", m.get("frequencyValue", 1) or 1)},
+    ]
+    return rows
+
+
+def draft_load(med):
+    """Start a draft from an existing reminder, or empty for a new one."""
+    draft["times"] = list((med or {}).get("times") or [])
+    draft["id"] = (med or {}).get("id")
+    draft["fields"] = {}
+
+
+def add_time(fields):
+    """The hour and minute currently on the steppers, onto the list."""
+    try:
+        h = int(fields.get("hour") or 0)
+        mi = int(fields.get("minute") or 0)
+    except ValueError:
+        return
+    t = "%02d:%02d" % (max(0, min(23, h)), max(0, min(59, mi)))
+    if t not in draft["times"]:
+        draft["times"].append(t)
+        draft["times"].sort()
 
 
 def save_from_fields(fields, med_id=None):
     """Turn a submitted form into a reminder. Rejects rather than saves
-    something unusable -- a dose with no time would never fire."""
+    something unusable -- a reminder with no time would never fire."""
     name = (fields.get("name") or "").strip()
-    times = [t.strip() for t in (fields.get("times") or "").split(",")
-             if t.strip()]
-    times = [t for t in times
-             if len(t) == 5 and t[2] == ":" and t[:2].isdigit()
-             and t[3:].isdigit() and int(t[:2]) < 24 and int(t[3:]) < 60]
+
+    # The list, plus whatever is on the steppers right now: adding one time
+    # and pressing Save without pressing "+ add this time" first is the
+    # obvious way to enter a once-a-day reminder, and refusing it would be
+    # pedantry.
+    times = list(draft["times"])
+    if not times:
+        add_time(fields)
+        times = list(draft["times"])
     if not name or not times:
         return False
-    try:
-        freq = max(1, int((fields.get("freq") or "1").strip()))
-    except ValueError:
-        freq = 1
-    start = (fields.get("start") or "").strip()
-    try:
-        datetime.strptime(start, "%Y-%m-%d")
-    except ValueError:
-        start = datetime.now().strftime("%Y-%m-%d")
+
+    def num(key, default, lo, hi):
+        try:
+            return max(lo, min(hi, int(fields.get(key) or default)))
+        except ValueError:
+            return default
+
+    freq = num("freq", 1, 1, 60)
+    year = num("year", datetime.now().year, 2020, 2100)
+    month = num("month", datetime.now().month, 1, 12)
+    day = num("day", datetime.now().day, 1, days_in_month(year, month))
+    start = "%04d-%02d-%02d" % (year, month, day)
 
     doc = load_doc() or {"version": 1, "medications": [], "doseState": {},
                          "history": [], "snoozeMinutes": POSTPONE_MINUTES}
@@ -430,12 +527,33 @@ def reader():
             if v == "back":
                 menu_level = None
                 emit(menu())
-            elif v in ("add", "manage") or v.startswith("m:"):
+            elif v == "manage":
                 menu_level = v
+                emit(menu())
+            elif v == "add":
+                draft_load(None)
+                menu_level = v
+                emit(menu())
+            elif v.startswith("m:"):
+                draft_load(next((m for m in medications()
+                                 if m.get("id") == v[2:]), None))
+                menu_level = v
+                emit(menu())
+            elif v == "addtime":
+                # Keep the form as it stands before rebuilding it around the
+                # longer list -- see the note in form_rows().
+                draft["fields"] = dict(fields)
+                add_time(fields)
+                emit(menu())
+            elif v.startswith("rmtime:"):
+                draft["fields"] = dict(fields)
+                t = v[len("rmtime:"):]
+                draft["times"] = [x for x in draft["times"] if x != t]
                 emit(menu())
             elif v.startswith("save:"):
                 mid = v[5:] or None
                 if save_from_fields(fields, mid):
+                    draft_load(None)
                     reload_doses()
                     emit(render())
                     menu_level = "manage" if mid else None

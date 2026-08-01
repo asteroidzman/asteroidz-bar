@@ -316,6 +316,33 @@ Three ship with this package — `asteroidz-bar-nordvpn`, `-discord`,
 `-reminders` — and they run untouched, which was the test that mattered: a
 better schema would have bought nothing and broken all of them.
 
+### Rows that take input
+
+A menu row is normally a thing to pick. Two kinds of row are things to fill in
+instead, and both hand their contents back in `fields` — keyed by the row's
+`value` — with every pick, so a `Save` row is an ordinary row that happens to
+receive the whole form:
+
+```json
+{"text":"Name",  "value":"name",  "input":true, "edit":"Vitamin D"}
+{"text":"Hour",  "value":"hour",  "spin":{"min":0,"max":23,"pad":2}, "edit":"8"}
+{"text":"Minute","value":"minute","spin":{"min":0,"max":55,"step":5,"pad":2}}
+```
+
+`input` is a text field: the row shows what has been typed, with a caret.
+`spin` is a bounded number chosen with `‹ ›` arrows, by clicking them or with
+Left/Right while the row is focused — `{min, max, step, wrap, pad}`, wrapping
+unless `wrap: false`, `pad` zero-filling the display. A number that can only be
+chosen cannot be entered wrongly, which matters here because a menu row is a
+poor text field: no selection, no cursor, and a mistyped `8:0` is only found
+when the form is submitted and refused.
+
+`edit` prefills either kind. Anything the form must survive — a list being
+built up, a name typed before a row was picked — belongs to the PLUGIN: picking
+a row rebuilds every row from whatever the plugin sends next, so the plugin
+holds the draft and prefills from it. `asteroidz-bar-reminders` does exactly
+that for the times it collects.
+
 ### Push-to-talk for Discord
 
 `asteroidz-bar-discord` is not a status pill that happens to mention Discord; it

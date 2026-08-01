@@ -68,6 +68,48 @@ shot() { grim -o "$HL_MON" "$WORK/$1.png" 2>/dev/null; }
 
 # How much of the screen below the bar is not wallpaper? A popover is the only
 # thing that can be there, so this is "is a panel open", as a number.
+right_glyph_x() { # right_glyph_x <shot> <x0> <x1> <y0> <y1> -> centre x of the
+	# rightmost run of lit pixels in that band. Used to find a stepper's "âº"
+	# rather than guessing at it from the panel edge: the arrow is small, the
+	# margin is a theme value, and a click aimed by arithmetic landed just
+	# beside it and silently did nothing.
+	python3 - "$WORK/$1.png" "$2" "$3" "$4" "$5" <<'GLYPHPY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+x0, x1, y0, y1 = (int(v) for v in sys.argv[2:6])
+x1 = min(x1, im.size[0] - 1)
+y1 = min(y1, im.size[1] - 1)
+runs, start = [], None
+for x in range(x0, x1 + 1):
+    lit = any(sum(px[x, y]) > 450 for y in range(y0, y1 + 1))
+    if lit and start is None:
+        start = x
+    elif not lit and start is not None:
+        runs.append((start, x - 1))
+        start = None
+if start is not None:
+    runs.append((start, x1))
+print((runs[-1][0] + runs[-1][1]) // 2 if runs else 0)
+GLYPHPY
+}
+
+row_ink() { # row_ink <shot> <x0> <x1> <y0> <y1> -- lit pixels in one row band
+	python3 - "$WORK/$1.png" "$2" "$3" "$4" "$5" <<'ROWPY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+x0, x1, y0, y1 = (int(v) for v in sys.argv[2:6])
+x1 = min(x1, im.size[0] - 1)
+y1 = min(y1, im.size[1] - 1)
+# Glyphs on a dark panel: bright, and nothing else in this band is.
+print(sum(1 for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)
+          if sum(px[x, y]) > 450))
+ROWPY
+}
+
 panel_pixels() { # panel_pixels <shot>
 	python3 - "$WORK/$1.png" <<'PY'
 import sys
@@ -691,6 +733,14 @@ SUB = {"menu": {"item": "", "rows": [
     {"text": "Beta", "value": "b"},
     {"text": "Name", "value": "name", "input": True, "edit": "prefilled"},
     {"text": "Dose", "value": "dose", "input": True, "edit": ""},
+    # A label longer than the menu that opened this form. A popover latches
+    # its width when it opens, so this row cannot fit -- and what does not fit
+    # is cut from the RIGHT, which is where the typed text is.
+    {"text": "Times (HH:MM, comma separated)", "value": "times",
+     "input": True, "edit": ""},
+    # A stepper: chosen with arrows, never typed.
+    {"text": "Hour", "value": "hour",
+     "spin": {"min": 0, "max": 23, "pad": 2}, "edit": "8"},
     {"text": "Save", "value": "save"},
 ]}}
 
@@ -775,7 +825,7 @@ if [ "${#ROWS[@]}" -ge 2 ]; then
 	# has no other way to see what is in the form above it.
 	read -r SL _ SR _ <<<"$(panel_box psub)"
 	mapfile -t SROWS < <(text_lines psub "$SL" "$SR")
-	if [ "${#SROWS[@]}" -ge 4 ]; then
+	if [ "${#SROWS[@]}" -ge 6 ]; then
 		# The SECOND field, typed into after clicking it. Every keystroke
 		# rebuilds the rows array (that is how a row's text changes), and
 		# the popover used to re-aim at the first field whenever that
@@ -788,7 +838,55 @@ if [ "${#ROWS[@]}" -ge 2 ]; then
 		for k in A B C; do "$HL_WLVKBD" press "$k" >/dev/null 2>&1; sleep 0.4; done
 		sleep 1
 
-		read -r SY0 SY1 <<<"${SROWS[3]}"
+		# The long-labelled field: typing into it has to CHANGE THE PIXELS.
+		# It did not. The label and the value were one string with
+		# ElideRight over the lot, so a row too wide for the latched popover
+		# lost its value and its caret and kept its label: the keystrokes
+		# arrived, the plugin got them, and the screen showed nothing at all.
+		# Reported as "can't input time, start date" -- the two fields whose
+		# labels are longest -- while Name, which is short, was fine.
+		read -r TY0 TY1 <<<"${SROWS[3]}"
+		hl_click $(((SL + SR) / 2)) $(((TY0 + TY1) / 2))
+		sleep 1
+		shot ptimes_before
+		for k in 2 0 8 8; do "$HL_WLVKBD" press "$k" >/dev/null 2>&1; sleep 0.3; done
+		sleep 1
+		shot ptimes_after
+		# Ink in the RIGHT-HAND third of that row, which is where a value
+		# goes -- not the whole row and not the panel.
+		#
+		# Two earlier versions of this measured the wrong thing and said the
+		# fix had failed while a screenshot showed it working. The panel's
+		# pixel count moves by ~4 for four digits, which is noise; and the
+		# whole row's ink goes DOWN, because the label eliding away sheds more
+		# glyphs than the value adds. Only the part of the row the value lives
+		# in answers the question being asked.
+		TVX=$(( SL + (SR - SL) * 2 / 3 ))
+		TBEFORE="$(row_ink ptimes_before "$TVX" "$SR" "$TY0" "$TY1")"
+		TAFTER="$(row_ink ptimes_after "$TVX" "$SR" "$TY0" "$TY1")"
+		if [ "$TAFTER" -gt "$((TBEFORE + 15))" ]; then
+			ok "a field with a long label still shows what is typed ($TBEFORE -> $TAFTER ink)"
+		else
+			bad "a field with a long label shows nothing typed ($TBEFORE -> $TAFTER ink)"
+		fi
+
+		# The stepper. Focused by clicking its row, moved with the arrow
+		# keys, and moved once more by clicking the ‹ › arrow itself -- the
+		# two ways it can be driven, and the arrows are their own hit
+		# targets rather than part of the row.
+		read -r HY0 HY1 <<<"${SROWS[4]}"
+		hl_click $(((SL + SR) / 2)) $(((HY0 + HY1) / 2))
+		sleep 1
+		for _ in 1 2; do "$HL_WLVKBD" press RIGHT >/dev/null 2>&1; sleep 0.3; done
+		sleep 0.5
+		# The right arrow, found rather than guessed: it is the rightmost
+		# lit thing in that row.
+		shot phour
+		AX="$(right_glyph_x phour "$SL" "$SR" "$HY0" "$HY1")"
+		hl_click "$AX" $(((HY0 + HY1) / 2))
+		sleep 1
+
+		read -r SY0 SY1 <<<"${SROWS[5]}"
 		hl_click $(((SL + SR) / 2)) $(((SY0 + SY1) / 2))
 		sleep 3
 		# Exact, closing quote included: this is also what says the typing
@@ -805,6 +903,13 @@ if [ "${#ROWS[@]}" -ge 2 ]; then
 			ok "the second field of a form takes text too"
 		else
 			bad "the second field of a form takes text too (log: $(tr '\n' ' ' < "$PLOG"))"
+		fi
+		# 8, two arrow keys and one arrow click: 11. A stepper's value
+		# travels back in `fields` exactly like a typed one.
+		if grep -q '"hour": "11"' "$PLOG"; then
+			ok "a stepper answers to the arrow keys and to its own arrows"
+		else
+			bad "a stepper answers to the arrow keys and to its own arrows (log: $(tr '\n' ' ' < "$PLOG"))"
 		fi
 	else
 		bad "the submenu form has its rows (found ${#SROWS[@]})"
