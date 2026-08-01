@@ -50,9 +50,26 @@ REQUIREMENTS
     server, so anything focused there sees it too.
 
 CONFIG  ~/.config/asteroidz-bar/discord-ptt.conf, `key = value` per line:
-    key       X keysym to inject           (default F12)
+    trigger   what you PRESS               (default F12)
+    key       X keysym to INJECT           (default F12)
     shortcut  portal shortcut id           (default push-to-talk)
     app_id    portal application id        (default org.asteroidzman.DiscordPTT)
+
+    The two keys are separate on purpose, and the separation is what makes the
+    binding cheap to change. `key` must match what Discord itself is set to, so
+    changing it means changing Discord's own keybind as well -- leave it at the
+    default and set Discord once. `trigger` is grabbed by asteroidz and consumed
+    before any application sees it, so it can be anything, including a chord
+    (`Super+V`), and nothing else needs to know.
+
+    The file is watched. An edit takes effect where it lands: a new `key` is
+    retargeted in place, a new `trigger` rebinds through the portal. Nothing
+    needs restarting, which is also how the pill's menu and the settings window
+    make their changes -- both write this file rather than talking to this
+    process, so there is one path to get right instead of three.
+
+    Clicking the pill opens that menu; "press a key to rebind" hands over to
+    asteroidz's own interactive picker and stores whatever is pressed.
 
 Run as a continuous bar plugin, one JSON object per state change:
 
@@ -103,6 +120,96 @@ def load_conf():
     return cfg
 
 
+def save_conf(updates):
+    """Rewrite the conf, keeping every line that is not being changed.
+
+    Comments and unrecognised keys survive: this file is hand-editable and
+    documented as such, so a menu pick must not silently discard somebody's
+    notes to themselves. Keys already present are rewritten in place, which
+    keeps the file's order rather than reshuffling it on every save.
+    """
+    updates = {k: v for k, v in updates.items() if k in DEFAULTS}
+    if not updates:
+        return
+    lines, seen = [], set()
+    try:
+        with open(CONF, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.rstrip("\n")
+                bare = line.strip()
+                k = bare.partition("=")[0].strip()
+                if bare and not bare.startswith("#") and "=" in bare \
+                        and k in updates:
+                    lines.append(f"{k} = {updates[k]}")
+                    seen.add(k)
+                else:
+                    lines.append(line)
+    except OSError:
+        pass
+    for k, v in updates.items():
+        if k not in seen:
+            lines.append(f"{k} = {v}")
+    try:
+        os.makedirs(os.path.dirname(CONF), exist_ok=True)
+        tmp = CONF + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines).rstrip("\n") + "\n")
+        os.replace(tmp, CONF)
+    except OSError:
+        pass
+
+
+SHORTCUTS = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+    "asteroidz",
+    "global-shortcuts",
+)
+
+
+def forget_saved(app_id):
+    """Drop our line from the compositor's record of picked bindings.
+
+    asteroidz lets a persisted pick OVERRIDE the preferred_trigger an app asks
+    for -- deliberately, so that a key the user chose is not undone by the next
+    app release. The consequence is that once anything has been picked, writing
+    a new `trigger` into our own conf has no effect whatsoever, silently.
+
+    So a trigger set from the conf clears the pick first, and the two can never
+    disagree about which one is in force.
+    """
+    try:
+        with open(SHORTCUTS, encoding="utf-8") as fh:
+            keep = [ln for ln in fh
+                    if ln.split("\t")[0].strip() != app_id]
+    except OSError:
+        return
+    try:
+        tmp = SHORTCUTS + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.writelines(keep)
+        os.replace(tmp, SHORTCUTS)
+    except OSError:
+        pass
+
+
+def read_saved(app_id, shortcut):
+    """The trigger the compositor currently has recorded, or None.
+
+    Read from its file rather than guessed from ours: an interactive pick lands
+    there and nowhere else, so this is the only way to learn what was chosen.
+    """
+    try:
+        with open(SHORTCUTS, encoding="utf-8") as fh:
+            for line in fh:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 3 and parts[0] == app_id \
+                        and parts[1] == shortcut:
+                    return parts[2]
+    except OSError:
+        pass
+    return None
+
+
 _last = None
 
 
@@ -134,6 +241,19 @@ def emit(text, cls, tooltip):
             pass
 
 
+def emit_raw(obj):
+    """A line that is NOT state: a menu.
+
+    Separate from emit() for two reasons. emit() deduplicates, so a menu sent
+    twice in a row -- which is exactly what opening the same menu again is --
+    would be swallowed and the second click would do nothing. And a menu must
+    never reach the state file, or the other monitors' instances would mirror it
+    and every screen would open a menu because one of them was clicked.
+    """
+    sys.stdout.write(json.dumps(obj, sort_keys=True) + "\n")
+    sys.stdout.flush()
+
+
 _publish = False
 
 
@@ -149,15 +269,28 @@ class Injector:
         from Xlib import XK, display
         from Xlib.ext import xtest
 
+        self._XK = XK
         self._xtest = xtest
         self.disp = display.Display()  # honours DISPLAY
-        keysym = XK.string_to_keysym(keysym_name)
+        self.lock = threading.Lock()
+        self.keycode = 0
+        self.set_key(keysym_name)
+
+    def set_key(self, keysym_name):
+        """Retarget without reconnecting.
+
+        Raises rather than half-applying: a name X does not know would otherwise
+        leave keycode 0, and injecting that is a keypress the server discards --
+        push-to-talk that looks configured and transmits nothing.
+        """
+        keysym = self._XK.string_to_keysym(keysym_name)
         if keysym == 0:
             raise ValueError(f"unknown keysym: {keysym_name}")
-        self.keycode = self.disp.keysym_to_keycode(keysym)
-        if not self.keycode:
+        code = self.disp.keysym_to_keycode(keysym)
+        if not code:
             raise ValueError(f"keysym {keysym_name} is not in the X keymap")
-        self.lock = threading.Lock()
+        with self.lock:
+            self.keycode = code
 
     def _fake(self, press):
         # X.KeyPress = 2, X.KeyRelease = 3
@@ -176,6 +309,95 @@ STATE = os.path.join(
     os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "asteroidz-discord-ptt.state"
 )
 LOCK = STATE + ".lock"
+# "Please run the interactive key picker." Only the lock holder has a portal
+# session, so only it can ask for one -- but the menu opens on whichever monitor
+# was clicked, and half the time that is a mirror. The mirror creates this file
+# and the holder, watching for it, does the work and deletes it.
+PICK = STATE + ".pick"
+
+
+def menu_rows(bound, key, leader):
+    """The pill's menu: what you press, and what Discord hears.
+
+    Two keys, and keeping them straight is the whole reason this menu exists.
+
+      `trigger` is what YOU press. asteroidz grabs it through the portal and
+      consumes it, so no application ever sees it. Change it freely.
+
+      `key` is what gets INJECTED into the X server for Discord's own keybind
+      service to hear. It has to equal the key configured inside Discord, so
+      changing it means changing Discord's setting too -- which is why it is not
+      the one offered first.
+
+    Keeping them separate is what makes the trigger cheap to change: leave `key`
+    at the obscure default, set Discord once, and never touch either again.
+    """
+    return {
+        "menu": {
+            "rows": [
+                {"text": f"Push-to-talk: {bound or 'not bound'}",
+                 "enabled": False},
+                {"separator": True},
+                {"text": "Press a key to rebind…", "value": "ptt:pick"},
+                {"separator": True},
+                {"text": "Key sent to Discord", "input": True,
+                 "value": "key", "edit": key},
+                {"text": "Save", "value": "ptt:save"},
+            ] + ([] if leader else [
+                {"separator": True},
+                {"text": "(mirror — the bridge runs on another screen)",
+                 "enabled": False},
+            ]),
+        }
+    }
+
+
+def watch_stdin(on_event, on_eof):
+    """The bar's event channel, as a GLib source.
+
+    A blocking `for line in sys.stdin` is what the other plugins use and it
+    cannot be used here: this process is a GLib main loop, and a read that parks
+    the thread would stop the portal signals that push-to-talk is made of.
+
+    HUP is not decoration. These bridges outlived the bar every time it was
+    restarted -- they sit in a main loop and nothing told them the pipe was gone,
+    so each restart left two more behind, still holding an X connection. EOF on
+    stdin is the bar being gone, and it is unambiguous.
+    """
+    from gi.repository import GLib
+
+    buf = {"text": ""}
+
+    def ready(fd, condition):
+        if condition & (GLib.IOCondition.HUP | GLib.IOCondition.ERR):
+            on_eof()
+            return False
+        try:
+            chunk = os.read(fd, 65536)
+        except OSError:
+            on_eof()
+            return False
+        if not chunk:
+            on_eof()
+            return False
+        buf["text"] += chunk.decode("utf-8", "replace")
+        while "\n" in buf["text"]:
+            line, _, buf["text"] = buf["text"].partition("\n")
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                on_event(json.loads(line))
+            except ValueError:
+                pass
+        return True
+
+    GLib.unix_fd_add_full(
+        GLib.PRIORITY_DEFAULT,
+        sys.stdin.fileno(),
+        GLib.IOCondition.IN | GLib.IOCondition.HUP | GLib.IOCondition.ERR,
+        ready,
+    )
 
 
 def claim_lock():
@@ -207,11 +429,18 @@ def follow_state():
 
     They mirror the holder's state file instead of registering anything, so every
     monitor shows the same thing and only one of them talks to the portal.
+
+    They are still clickable, though, and must be: the menu opens on the monitor
+    the pointer is on. A mirror edits the same two files the holder watches --
+    the conf, and the pick request -- so the holder does the work either way and
+    there is no second path to keep in step.
     """
     import gi
 
     gi.require_version("Gio", "2.0")
     from gi.repository import Gio, GLib
+
+    tip = {"text": ""}
 
     def show():
         try:
@@ -219,14 +448,56 @@ def follow_state():
                 obj = json.loads(fh.read())
         except (OSError, ValueError):
             return
-        emit(obj.get("text", "PTT"), obj.get("class", "idle"), obj.get("tooltip", ""))
+        tip["text"] = obj.get("tooltip", "")
+        emit(obj.get("text", "PTT"), obj.get("class", "idle"), tip["text"])
 
     show()
     gfile = Gio.File.new_for_path(STATE)
     monitor = gfile.monitor_file(Gio.FileMonitorFlags.NONE, None)
     monitor.connect("changed", lambda *_: show())
-    GLib.MainLoop().run()
+
+    loop = GLib.MainLoop()
+
+    def event(obj):
+        # The tooltip the holder published is the only view a mirror has of
+        # what is bound; it reads "push-to-talk — F12".
+        bound = tip["text"].rpartition("—")[2].strip() or None
+        if obj.get("event") == "click":
+            emit_raw(menu_rows(bound, load_conf()["key"], leader=False))
+        elif obj.get("event") == "menu":
+            handle_menu(obj, touch_pick)
+
+    watch_stdin(event, loop.quit)
+    loop.run()
     return 0
+
+
+def touch_pick():
+    try:
+        with open(PICK, "w", encoding="utf-8"):
+            pass
+    except OSError:
+        pass
+
+
+def handle_menu(obj, request_pick):
+    """One menu pick, from either kind of instance.
+
+    Writing the conf is all a save has to do: the holder watches that file, so
+    what happens next follows from the write, not from who made it. That is what
+    lets a mirror carry the same menu as the bridge without carrying a second
+    copy of its logic.
+    """
+    action = obj.get("value") or ""
+    fields = obj.get("fields") or {}
+    if action == "ptt:pick":
+        request_pick()
+    elif action == "ptt:save":
+        key = (fields.get("key") or "").strip()
+        if key and key != load_conf()["key"]:
+            save_conf({"key": key})
+    # Anything else closes the menu, and an empty set is how that is said.
+    emit_raw({"menu": {"rows": []}})
 
 
 def main():
@@ -292,7 +563,8 @@ def main():
         if "already" not in (exc.message or "").lower():
             emit("PTT", "error", f"could not register app id: {exc.message}")
 
-    state = {"held": False, "bound": None}
+    state = {"held": False, "bound": None, "session": None,
+             "want": cfg["trigger"], "seq": 0}
 
     def show():
         if state["bound"] is None:
@@ -338,8 +610,6 @@ def main():
     # object path immediately and deliver the real answer as a Response signal on
     # it. Subscribing AFTER the call would race, so each subscription goes up
     # first.
-    token = "asteroidz_ptt_%d" % os.getpid()
-
     def call(method, args, on_response):
         req = None
 
@@ -374,7 +644,8 @@ def main():
             emit("PTT", "error", f"{method} failed: {exc.message}")
 
     def bound(_results):
-        state["bound"] = read_binding() or cfg["trigger"]
+        state["bound"] = read_saved(cfg["app_id"], cfg["shortcut"]) \
+            or cfg["trigger"]
         show()
 
     def session_ready(results):
@@ -382,6 +653,7 @@ def main():
         if not session:
             emit("PTT", "error", "portal gave no session handle")
             return
+        state["session"] = session
         # A plain tuple, NOT a pre-built GLib.Variant. PyGObject constructs the
         # whole nested signature from native Python types, and handing it a
         # Variant where it expects the raw value fails inside its own builder
@@ -392,7 +664,7 @@ def main():
             cfg["shortcut"],
             {
                 "description": GLib.Variant("s", "Discord push-to-talk"),
-                "preferred_trigger": GLib.Variant("s", cfg["trigger"]),
+                "preferred_trigger": GLib.Variant("s", state["want"]),
             },
         )
         call(
@@ -401,39 +673,68 @@ def main():
             bound,
         )
 
-    call(
-        "CreateSession",
-        GLib.Variant(
-            "(a{sv})",
-            (
-                {
-                    "handle_token": GLib.Variant("s", token),
-                    "session_handle_token": GLib.Variant("s", token),
-                },
+    def register(trigger):
+        """(Re)bind, with `trigger` as the preference.
+
+        An empty string is the documented way to ask asteroidz for its
+        interactive picker: it skips any saved binding and prompts for a key,
+        which is what "press a key to rebind" is.
+
+        A fresh session each time. BindShortcuts replaces the session's whole
+        shortcut list, but the portal identifies a session by its handle token
+        and reusing one across a rebind left the old grab in place on every
+        implementation worth worrying about -- closing first is a line of code
+        and removes the question.
+        """
+        state["want"] = trigger
+        old = state.pop("session", None)
+        if old:
+            try:
+                bus.call_sync(PORTAL, old, "org.freedesktop.portal.Session",
+                              "Close", None, None, Gio.DBusCallFlags.NONE,
+                              -1, None)
+            except GLib.Error:
+                pass
+        tok = "asteroidz_ptt_%d_%d" % (os.getpid(), state["seq"])
+        state["seq"] += 1
+        call(
+            "CreateSession",
+            GLib.Variant(
+                "(a{sv})",
+                (
+                    {
+                        "handle_token": GLib.Variant("s", tok),
+                        "session_handle_token": GLib.Variant("s", tok),
+                    },
+                ),
             ),
-        ),
-        session_ready,
-    )
-
-    # Which key the compositor has bound, read from its own record rather than
-    # guessed. Absent means nothing is bound yet and the pill should say so
-    # instead of claiming to be ready.
-    def read_binding():
-        path = os.path.join(
-            os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
-            "asteroidz",
-            "global-shortcuts",
+            session_ready,
         )
-        try:
-            with open(path, encoding="utf-8") as fh:
-                for line in fh:
-                    parts = line.rstrip("\n").split("\t")
-                    if len(parts) >= 3 and parts[0] == cfg["app_id"]:
-                        return parts[2]
-        except OSError:
-            pass
-        return None
 
+    # The picker's answer arrives here, not as a reply to BindShortcuts: the
+    # compositor replies to the bind immediately and only then puts the overlay
+    # up, so the chosen key comes back as ShortcutsChanged. Waiting on the bind
+    # reply instead would report the old binding every time.
+    def on_changed(_c, _s, _p, _i, _sig, _params):
+        picked = read_saved(cfg["app_id"], cfg["shortcut"])
+        if picked:
+            state["bound"] = picked
+            if picked != cfg["trigger"]:
+                # In this order. The write below wakes the conf watcher, which
+                # rebinds when it finds a trigger it has not seen -- so updating
+                # cfg FIRST is what stops a pick from immediately tearing down
+                # the session it just created and clearing the record it just
+                # made. Written back at all so the two files agree: they are read
+                # by different code at different times, and a pick living in only
+                # one of them gets undone by whatever reads the other.
+                cfg["trigger"] = picked
+                save_conf({"trigger": picked})
+        show()
+
+    bus.signal_subscribe(PORTAL, IFACE, "ShortcutsChanged", OBJ, None,
+                         Gio.DBusSignalFlags.NONE, on_changed)
+
+    register(cfg["trigger"])
     show()
 
     # A release we never see would leave the key latched down in the X server,
@@ -446,6 +747,65 @@ def main():
                 pass
 
     loop = GLib.MainLoop()
+
+    # ── reacting to edits ───────────────────────────────────────────────────
+    #
+    # The conf is the single channel. The settings window writes it, the pill
+    # menu writes it, a text editor writes it, and all three arrive here as the
+    # same event -- so there is one path to get right rather than three, and
+    # hand-editing keeps working exactly as the docstring promises.
+    def conf_changed(*_):
+        new = load_conf()
+        if new["key"] != cfg["key"]:
+            try:
+                injector.set_key(new["key"])
+                cfg["key"] = new["key"]
+            except Exception as exc:  # noqa: BLE001 -- shown, not raised
+                # Keep injecting the old key. A bad name in the file is a typo,
+                # and a silent switch to injecting nothing would look like
+                # Discord had broken.
+                emit("PTT", "error", f"cannot use key '{new['key']}': {exc}")
+                return
+        if new["trigger"] != cfg["trigger"]:
+            cfg["trigger"] = new["trigger"]
+            # A picked binding outranks preferred_trigger, so a trigger set here
+            # would be ignored while one is on record. Clear it: an explicit
+            # write is the more recent intent.
+            forget_saved(cfg["app_id"])
+            register(cfg["trigger"])
+        show()
+
+    conf_file = Gio.File.new_for_path(CONF)
+    conf_monitor = conf_file.monitor_file(Gio.FileMonitorFlags.NONE, None)
+    conf_monitor.connect("changed", conf_changed)
+
+    # A mirror asking for the picker. Only this instance has a portal session,
+    # so the request travels as a file and is consumed here.
+    def pick_requested(*_):
+        if not os.path.exists(PICK):
+            return
+        try:
+            os.unlink(PICK)
+        except OSError:
+            pass
+        start_pick()
+
+    def start_pick():
+        forget_saved(cfg["app_id"])
+        register("")  # empty preferred_trigger == "prompt me"
+
+    pick_file = Gio.File.new_for_path(PICK)
+    pick_monitor = pick_file.monitor_file(Gio.FileMonitorFlags.NONE, None)
+    pick_monitor.connect("changed", pick_requested)
+
+    def event(obj):
+        if obj.get("event") == "click":
+            emit_raw(menu_rows(state["bound"], cfg["key"], leader=True))
+        elif obj.get("event") == "menu":
+            handle_menu(obj, start_pick)
+
+    watch_stdin(event, loop.quit)
+
     try:
         loop.run()
     except KeyboardInterrupt:

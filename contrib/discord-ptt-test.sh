@@ -88,6 +88,171 @@ else
 	bad "it listens on the portal frontend, not the backend impl"
 fi
 
+# ── the rebind path, in a sandbox ───────────────────────────────────────────
+#
+# Everything below runs against temporary XDG directories, so it touches neither
+# the real conf nor the compositor's record of picked bindings. The plugin is
+# imported rather than executed: main() needs a portal, a bus and an X server,
+# but the parts that decide WHAT gets written need none of them, and those are
+# the parts that can silently do nothing.
+SANDBOX="$(mktemp -d)"
+trap 'rm -rf "$SANDBOX"' EXIT
+export PTT_TALLY="$SANDBOX/tally"
+
+python3 - "$PLUGIN" "$SANDBOX" <<'PY'
+import importlib.util, json, os, sys
+from importlib.machinery import SourceFileLoader
+
+plugin_path, sandbox = sys.argv[1], sys.argv[2]
+os.environ["XDG_CONFIG_HOME"] = os.path.join(sandbox, "config")
+os.environ["XDG_RUNTIME_DIR"] = os.path.join(sandbox, "run")
+os.makedirs(os.path.join(sandbox, "config", "asteroidz"), exist_ok=True)
+os.makedirs(os.path.join(sandbox, "config", "asteroidz-bar"), exist_ok=True)
+os.makedirs(os.path.join(sandbox, "run"), exist_ok=True)
+
+# An explicit loader: the plugin has no .py suffix, and spec_from_file_location
+# answers None for a name it cannot classify rather than raising.
+spec = importlib.util.spec_from_file_location(
+    "ptt", plugin_path, loader=SourceFileLoader("ptt", plugin_path))
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+
+PASS = FAIL = 0
+def ok(msg):
+    global PASS; PASS += 1; print("  \033[32mok\033[0m   " + msg)
+def bad(msg):
+    global FAIL; FAIL += 1; print("  \033[31mFAIL\033[0m " + msg)
+def check(cond, msg):
+    ok(msg) if cond else bad(msg)
+
+# ── save_conf ───────────────────────────────────────────────────────────────
+# The file is documented as hand-editable, so a save that ate somebody's notes
+# would be a real loss and an invisible one.
+with open(m.CONF, "w") as fh:
+    fh.write("# my notes\ntrigger = F12\nkey = F12\n# trailing note\n")
+m.save_conf({"trigger": "Super+V"})
+text = open(m.CONF).read()
+check("# my notes" in text and "# trailing note" in text,
+      "save_conf keeps comments")
+check(m.load_conf()["trigger"] == "Super+V", "save_conf changes the value")
+check(m.load_conf()["key"] == "F12", "save_conf leaves other keys alone")
+check(text.count("trigger") == 1, "save_conf rewrites in place, not by appending")
+
+# A key that is not in the file yet has to be appended, or the settings page
+# could never set one on a default install.
+os.unlink(m.CONF)
+m.save_conf({"key": "Pause"})
+check(m.load_conf()["key"] == "Pause", "save_conf creates a missing file")
+check(m.load_conf()["trigger"] == "F12", "...and the rest stay at their defaults")
+
+# Anything not in DEFAULTS is refused rather than written: the conf is a fixed
+# vocabulary and a typo should not become a permanent line in it.
+m.save_conf({"nonsense": "x"})
+check("nonsense" not in open(m.CONF).read(), "save_conf ignores unknown keys")
+
+# ── the compositor's record ─────────────────────────────────────────────────
+# This is the file that OUTRANKS the conf, which is what makes forgetting it the
+# difference between a rebind that works and one that silently does not.
+SC = m.SHORTCUTS
+with open(SC, "w") as fh:
+    fh.write("org.other.App\tpush-to-talk\tCaps_Lock\n")
+    fh.write("org.asteroidzman.DiscordPTT\tpush-to-talk\tF9\n")
+    fh.write("org.asteroidzman.DiscordPTT\tsomething-else\tF10\n")
+
+check(m.read_saved("org.asteroidzman.DiscordPTT", "push-to-talk") == "F9",
+      "read_saved finds our binding")
+check(m.read_saved("org.asteroidzman.DiscordPTT", "nope") is None,
+      "read_saved matches the shortcut id too, not just the app")
+check(m.read_saved("org.nobody.App", "push-to-talk") is None,
+      "read_saved does not answer for another app")
+
+m.forget_saved("org.asteroidzman.DiscordPTT")
+left = open(SC).read()
+check("org.other.App" in left, "forget_saved leaves other apps' bindings")
+check("org.asteroidzman.DiscordPTT" not in left,
+      "forget_saved drops every line of ours")
+
+# ── the menu ────────────────────────────────────────────────────────────────
+rows = m.menu_rows("Super+V", "F12", leader=True)["menu"]["rows"]
+vals = [r.get("value") for r in rows]
+check("ptt:pick" in vals, "the menu offers a rebind")
+check("ptt:save" in vals, "the menu offers a save")
+inputs = [r for r in rows if r.get("input")]
+check(len(inputs) == 1 and inputs[0]["value"] == "key",
+      "the injected key is the one editable field")
+check(inputs[0]["edit"] == "F12", "the field is prefilled with the current key")
+check(any("Super+V" in (r.get("text") or "") for r in rows),
+      "the menu names the binding in force")
+check(any(r.get("enabled") is False for r in rows),
+      "the heading is not clickable")
+# A mirror must say so: its menu works, but the bridge it reports on is
+# elsewhere, and that is worth seeing when something looks wrong.
+mrows = m.menu_rows("F12", "F12", leader=False)["menu"]["rows"]
+check(len(mrows) > len(rows), "a mirror's menu says it is a mirror")
+
+# ── handle_menu ─────────────────────────────────────────────────────────────
+# The whole point of routing both entry points through the conf: a pick asks,
+# a save writes, and neither needs to know which instance it is running in.
+asked = []
+
+def pick(obj):
+    # handle_menu answers on stdout -- an empty row set, which is how a plugin
+    # closes its own menu. Swallowed here so the protocol does not land in the
+    # middle of the test output.
+    import contextlib, io
+    with contextlib.redirect_stdout(io.StringIO()):
+        m.handle_menu(obj, lambda: asked.append(1))
+
+pick({"event": "menu", "value": "ptt:pick"})
+check(asked == [1], "picking 'rebind' requests the picker")
+
+m.save_conf({"key": "F12"})
+pick({"event": "menu", "value": "ptt:save", "fields": {"key": "Pause"}})
+check(m.load_conf()["key"] == "Pause", "saving the field writes the conf")
+check(asked == [1], "saving does not also trigger a rebind prompt")
+
+# An empty field is a person clearing a box, not a request to inject nothing.
+pick({"event": "menu", "value": "ptt:save", "fields": {"key": "  "}})
+check(m.load_conf()["key"] == "Pause", "an empty field is ignored, not written")
+
+# ── stdin ───────────────────────────────────────────────────────────────────
+# The leak this closes was observed, not theorised: these bridges sat in a GLib
+# loop with nothing watching the pipe, so every bar restart left two more behind
+# still holding an X connection.
+import gi
+gi.require_version("Gio", "2.0")
+from gi.repository import GLib
+
+r, w = os.pipe()
+os.dup2(r, 0)
+sys.stdin = os.fdopen(0, "r")
+seen, quit_called = [], []
+loop = GLib.MainLoop()
+m.watch_stdin(seen.append, lambda: (quit_called.append(1), loop.quit()))
+os.write(w, b'{"event":"click"}\n{"event":"menu","value":"x"}\n')
+GLib.timeout_add(200, lambda: (os.close(w), False)[1])
+GLib.timeout_add(3000, lambda: (loop.quit(), False)[1])
+loop.run()
+check(len(seen) == 2 and seen[0]["event"] == "click",
+      "stdin delivers whole lines as objects")
+check(quit_called == [1], "EOF on stdin stops the loop (the orphan leak)")
+
+# Handed back so this block's results join the one tally at the end rather
+# than printing a second, competing score.
+with open(os.environ["PTT_TALLY"], "w") as fh:
+    fh.write("%d %d" % (PASS, FAIL))
+sys.exit(1 if FAIL else 0)
+PY
+if [ -r "$PTT_TALLY" ]; then
+	read -r P F < "$PTT_TALLY"
+	PASS=$((PASS + P)); FAIL=$((FAIL + F))
+else
+	# The block died before it could report -- an import error, a missing gi.
+	# That is a failure, and a silent skip would read as a pass.
+	bad "the rebind-path checks ran at all"
+fi
+
+
 # ── live session, when there is one ─────────────────────────────────────────
 if command -v busctl >/dev/null 2>&1 \
 		&& busctl --user status >/dev/null 2>&1; then

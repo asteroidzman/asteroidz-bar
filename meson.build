@@ -105,6 +105,7 @@ install_data(
 		'shell/settings/RuleFieldRow.qml',
 		'shell/settings/Matugen.qml',
 		'shell/settings/MatugenPage.qml',
+		'shell/settings/DiscordPage.qml',
 	],
 	install_dir: qmldir / 'settings',
 )

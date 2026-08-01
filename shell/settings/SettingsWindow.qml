@@ -390,7 +390,9 @@ FloatingWindow {
                                  { name: "", label: "Keybinds",
                                    page: "binds" },
                                  { name: "", label: "Palette",
-                                   page: "palette" }])
+                                   page: "palette" },
+                                 { name: "", label: "Push-to-talk",
+                                   page: "discord" }])
 
                     delegate: Rectangle {
                         required property var modelData
@@ -558,6 +560,18 @@ FloatingWindow {
                     visible: active
                     height: active && item ? item.implicitHeight : 0
                     sourceComponent: MatugenPage {}
+                }
+
+                // No Apply bar: every control on this page writes the bridge's
+                // conf the moment it is used, because there is nothing to batch
+                // -- two keys, each independently meaningful, and the bridge
+                // applies an edit the instant it lands.
+                Loader {
+                    width: rows.width
+                    active: win.page === "discord"
+                    visible: active
+                    height: active && item ? item.implicitHeight : 0
+                    sourceComponent: DiscordPage {}
                 }
 
                 // Not loaded yet, or loaded and there is nothing to show. Both

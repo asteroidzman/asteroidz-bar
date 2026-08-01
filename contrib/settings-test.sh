@@ -825,6 +825,44 @@ else
 	"$REPO/build/asteroidz" -p -c "$HL_CONFIG" 2>&1 | head -4 | sed 's/^/       /'
 fi
 
+# ── the push-to-talk page ───────────────────────────────────────────────────
+#
+# One assertion, and it is the only one worth making from here: does "Rebind…"
+# reach the bridge. It reaches it as a FILE -- the bridge owns the portal session
+# and a mirror on another monitor has none, so the request travels through
+# XDG_RUNTIME_DIR rather than down anybody's pipe. That indirection is exactly
+# the kind that looks right in QML and connects to nothing, and the file either
+# appears or it does not.
+#
+# What the page WRITES is deliberately not driven here: the conf lives under the
+# real XDG_CONFIG_HOME, which this harness does not isolate, and a settings test
+# has no business editing the machine's push-to-talk key. save_conf, the menu and
+# the field are covered as units in contrib/discord-ptt-test.sh.
+PTT_ROW=$((4 + NGROUPS))
+PTT_Y="$(sidebar_entry_y "$PTT_ROW")"
+hl_move "$SIDEBAR_X" "$PTT_Y"; sleep 1
+hl_click "$SIDEBAR_X" "$PTT_Y"; sleep 2
+shot ptt
+
+PICK_FILE="$XDG_RUNTIME_DIR/asteroidz-discord-ptt.state.pick"
+rm -f "$PICK_FILE"
+
+read -r PTT_X PTT_BY <<<"$(lowest_button ptt)"
+if [ "${PTT_X:-0}" -gt 0 ]; then
+	ok "the push-to-talk page is showing, with its Rebind button (${PTT_X},${PTT_BY})"
+else
+	bad "the push-to-talk page is showing, with its Rebind button"
+fi
+
+hl_move "$PTT_X" "$PTT_BY"; sleep 1
+hl_click "$PTT_X" "$PTT_BY"; sleep 2
+if [ -e "$PICK_FILE" ]; then
+	ok "Rebind… asks the bridge for the interactive picker"
+else
+	bad "Rebind… asks the bridge for the interactive picker (no $PICK_FILE)"
+fi
+rm -f "$PICK_FILE"
+
 # ── reopening it ────────────────────────────────────────────────────────────
 #
 # Pressing "All settings…" a second time did nothing, and the reason was not a

@@ -199,6 +199,30 @@ KDL block form at all, so they are named at the foot of the list: a bind list wi
 no note would be quietly claiming they do not exist, and someone tidying their
 binds through this window would lose them.
 
+### Push-to-talk
+
+The last page in the sidebar, and the only one that edits a file the compositor
+knows nothing about: `~/.config/asteroidz-bar/discord-ptt.conf`, which the Discord
+bridge watches. See [Push-to-talk for Discord](#push-to-talk-for-discord) for what
+the bridge is and why it has to exist.
+
+It exists as a page because the thing it configures is two keys that are easy to
+confuse — the one you *press* and the one Discord *hears* — and getting them
+backwards is the entire failure mode. Text at the point of use is worth more here
+than a smaller page.
+
+**No Apply bar.** Nothing to batch: two independent values, and the bridge applies
+either the moment it lands. **Rebind…** hands over to asteroidz's own interactive
+picker rather than asking for a keysym name — the picker is already there, it is
+what the portal falls back to when an app binds with no usable trigger, and it
+cannot produce a name X does not know.
+
+The request reaches the bridge as a **file** in `XDG_RUNTIME_DIR`, not down its
+stdin, because the bar runs one plugin instance per monitor and only one of them
+holds the portal session. The others are mirrors, and the menu opens on whichever
+screen was clicked — so a request that only worked from the bridge's own instance
+would work on one monitor and silently do nothing on the other.
+
 ### Its icon
 
 The window carries the asteroidz ship through `xdg-toplevel-icon-v1`, so anything
@@ -268,6 +292,64 @@ Three ship with this package — `asteroidz-bar-nordvpn`, `-discord`,
 `-medication` — and they run untouched, which was the test that mattered: a
 better schema would have bought nothing and broken all of them.
 
+### Push-to-talk for Discord
+
+`asteroidz-bar-discord` is not a status pill that happens to mention Discord; it
+is a bridge, and the pill is how it reports. Discord's push-to-talk cannot work
+on Wayland — its keybinds live in a native module (`discord_utils.node`) that
+links libX11 and listens with XInput2, so it hears the key only while an X
+surface has focus. `--enable-features=GlobalShortcutsPortal` does nothing for it:
+that flag belongs to the bundled Chromium, which carries it whether Discord calls
+it or not.
+
+So the key is taken globally by asteroidz and replayed into the X server, where
+Discord is listening:
+
+```
+you press it  ──▶  asteroidz  ──(GlobalShortcuts portal)──▶  the bridge
+the bridge    ──(XTEST fake key)──▶  XWayland  ──▶  Discord
+```
+
+XTEST injection happens *inside* the X server, so an XInput2 raw-event listener
+sees it whatever Wayland surface has focus. Nothing here touches Discord's API:
+no token, no gateway, no voice code, and no account credential in the process.
+
+**Two keys, and keeping them straight is the whole thing.**
+
+| | what it is | changing it |
+|---|---|---|
+| `trigger` | what you **press**. asteroidz grabs and consumes it, so no application ever sees it | free — any key, or a chord |
+| `key` | what is **injected** for Discord to hear | must match Discord's own keybind, and everything focused in X sees it |
+
+Leave `key` at the default, set Discord once, and rebind `trigger` as often as
+you like. That asymmetry is why there are two.
+
+Three ways to change it, all writing the same file
+(`~/.config/asteroidz-bar/discord-ptt.conf`), which the bridge watches:
+
+- **the pill** — click it; "press a key to rebind" hands over to asteroidz's
+  own interactive picker.
+- **the settings window** — the *Push-to-talk* page, which also explains the
+  distinction above at the point of use.
+- **an editor** — it is a documented `key = value` file and stays one.
+
+An edit applies where it lands: a new `key` is retargeted in place, a new
+`trigger` rebinds through the portal. Nothing restarts.
+
+One gotcha worth knowing, because it is silent: asteroidz records interactively
+picked bindings in `~/.config/asteroidz/global-shortcuts`, and a recorded pick
+**outranks** the `preferred_trigger` an app asks for — deliberately, so a key you
+chose is not undone by the next release of the app that asked. The bridge
+therefore clears its own line there whenever a `trigger` is set from the conf.
+Without that, writing a new trigger would appear to work and change nothing.
+
+Discord must be running under XWayland or its keybind service is not listening
+at all; `~/.local/bin/discord-xwayland` starts it with `--ozone-platform=x11`.
+The portal also refuses `GlobalShortcuts` to a caller it cannot identify, which
+is why `org.asteroidzman.DiscordPTT.desktop` is installed beside the bridge — the
+app id must resolve to a desktop file glib can load *whose `Exec` binary exists*,
+or the portal answers "App info not found" and push-to-talk never binds.
+
 ## Testing
 
 ```sh
@@ -286,10 +368,15 @@ contrib/palette-test.sh    # the matugen palette page, fully sandboxed: its
                            #   runs beside
 contrib/settings-test.sh   # the settings window: it opens, it is populated,
                            #   search narrows it, a click previews, Apply persists,
-                           #   closing undoes an unapplied preview, and the rule
-                           #   and bind editors add through to the config file
+                           #   closing undoes an unapplied preview, the rule and
+                           #   bind editors add through to the config file, and
+                           #   Rebind… reaches the push-to-talk bridge
 contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
                            #   (no compositor needed; runs in seconds)
+contrib/discord-ptt-test.sh # the push-to-talk bridge: the app id resolves, the
+                           #   portal offers the signals, and the rebind path
+                           #   writes what it claims to (sandboxed XDG, no
+                           #   compositor, no Discord)
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
 
