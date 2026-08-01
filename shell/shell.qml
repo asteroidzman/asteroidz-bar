@@ -22,6 +22,10 @@ ShellRoot {
         // refers to is never instantiated, and the wallpaper would simply
         // never start -- silently, because there is nothing to fail.
         void Wallpaper.binary;
+        // Same for the idle service, which is a set of timers and no pixels at
+        // all -- exactly the shape of thing that goes missing without a
+        // reference. It does nothing until `bar { idle { enable true } }`.
+        void IdleService.enabled;
         if (!Ipc.connected)
             console.warn("asteroidz-bar: ASTEROIDZ_INSTANCE_SIGNATURE not set;"
                          + " running with defaults and no compositor state");

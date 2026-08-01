@@ -25,6 +25,8 @@ Singleton {
     property var popover: ({})
     property var theme: ({})
     property var custom: []
+    // Idle timeouts and actions, carried out by IdleService.
+    property var idle: ({})
     property bool loaded: false
 
     function num(obj, key, fallback) {
@@ -345,6 +347,7 @@ Singleton {
             if (obj.popover) root.popover = obj.popover;
             if (obj.theme) root.theme = obj.theme;
             if (obj.custom) root.custom = obj.custom;
+            if (obj.idle) root.idle = obj.idle;
             root.loaded = true;
         });
     }

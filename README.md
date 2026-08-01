@@ -301,6 +301,32 @@ The transitions are plain `systemctl`, without `--user`: they are system
 transitions and polkit decides whether this session may make them. Where it may
 not, systemctl says so rather than this module guessing.
 
+## Idle
+
+`swayidle` is gone: the bar does idle itself. asteroidz implements
+`ext-idle-notify-v1` and owns DPMS, and the bar is a Wayland client that can
+hold an idle timer and dispatch to it — a daemon in between was only ever
+translating one into the other, with its own config file and timeouts nothing
+else in the desktop could read.
+
+The settings live in the compositor's config (`bar { idle { … } }`) and arrive
+over `watch bar-config`, so changing one is a reload. `IdleService.qml` gives
+each action its own `IdleMonitor` rather than chaining stages: they are
+independent timeouts — screen off at ten minutes and suspend at thirty means
+suspend at thirty, not forty — which is also why the protocol gives each
+notification its own timeout.
+
+`contrib/idle-test.sh` drives the whole chain headlessly with no daemon running:
+idle notify → bar → `dpms_off_monitor` → the monitor reporting itself asleep,
+then input and the same in reverse, then a reload that turns it off. Activity
+there is a KEYPRESS, not pointer motion: a virtual pointer sends `time_msec 0`,
+and asteroidz's `motionnotify` does its idle-activity notify inside `if (time)`,
+so synthetic pointer motion neither wakes an output nor counts as activity.
+Real hardware sends real timestamps and is unaffected.
+
+See [the idle documentation](https://github.com/asteroidzman/asteroidz/blob/main/docs/configuration/idle.md)
+for every setting.
+
 ## Plugins
 
 `custom "<name>" { exec "..."; continuous true }` in the compositor's `bar {}`

@@ -47,6 +47,7 @@ install_data(
 		'shell/Metrics.qml',
 		'shell/Wallpaper.qml',
 		'shell/Logo.qml',
+		'shell/IdleService.qml',
 		'shell/Arrange.qml',
 		'shell/FormRow.qml',
 		'shell/Picker.qml',

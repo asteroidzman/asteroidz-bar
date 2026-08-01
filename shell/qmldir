@@ -16,6 +16,7 @@ singleton Metrics 1.0 Metrics.qml
 Popover 1.0 Popover.qml
 singleton Wallpaper 1.0 Wallpaper.qml
 singleton Logo 1.0 Logo.qml
+singleton IdleService 1.0 IdleService.qml
 Arrange 1.0 Arrange.qml
 FormRow 1.0 FormRow.qml
 Picker 1.0 Picker.qml
