@@ -21,14 +21,27 @@ Row {
     spacing: Cfg.moduleSpacing
 
     // The player to follow: whichever one is actually playing, else the first
-    // that can be controlled at all. Picking "the first" outright means a
-    // paused browser tab outranks the music.
+    // PAUSED one. Picking "the first" outright means a paused browser tab
+    // outranks the music.
     readonly property var player: {
         let fallback = null;
         for (const p of Mpris.players.values) {
             if (p.playbackState === MprisPlaybackState.Playing)
                 return p;
-            if (!fallback && p.canControl)
+            // Paused, not merely controllable.
+            //
+            // `canControl` is true for any player that exposes the interface at
+            // all, including one sitting at Stopped with nothing loaded -- and
+            // applications register that at startup and leave it there for the
+            // rest of the session. So this module appeared with dead transport
+            // buttons, no title and a flat visualiser, claiming something was
+            // playing when nothing had ever been opened.
+            //
+            // Paused means a track IS loaded, which is the case the fallback
+            // exists for. Stopped means an application saying only that it
+            // could play something one day.
+            if (!fallback && p.canControl
+                    && p.playbackState === MprisPlaybackState.Paused)
                 fallback = p;
         }
         return fallback;
