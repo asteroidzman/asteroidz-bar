@@ -16,6 +16,18 @@ pragma Singleton
 // suspend at thirty, not forty -- and a chain would also have to decide what
 // happens when a middle stage is disabled. Wayland's protocol gives each
 // notification its own timeout for the same reason.
+//
+// The manual inhibit (the bar's cup, `toggle_idle_inhibit`) gates all three
+// directly, as WELL as through `respectInhibitors` -- and "as well as" is the
+// honest phrasing. The obvious reading is that the cup is just another
+// inhibitor, so `respect-inhibitors false` would switch it off along with the
+// video players; measured on this stack it does not, because the compositor's
+// wlr_idle_notifier_v1_set_inhibited suppresses notifications even for a
+// client that asked to ignore inhibitors. So the gate below states which
+// behaviour is intended rather than repairing one that was broken: a person
+// clicking "keep awake" is not a client requesting something, and that option
+// is about clients. Written down because the intuition is wrong, and the only
+// reason that is known is that the test asserting it passed without the gate.
 
 import Quickshell
 import Quickshell.Wayland
@@ -38,6 +50,32 @@ Singleton {
     readonly property string lockCommand: Cfg.strOrEmpty(cfg, "lock_command", "")
     readonly property string onIdleCommand: Cfg.strOrEmpty(cfg, "on_idle", "")
     readonly property string onResumeCommand: Cfg.strOrEmpty(cfg, "on_resume", "")
+
+    // Whether any of this would actually happen: the feature is on and at
+    // least one timeout is set. What the idle pill shows itself on -- a "keep
+    // awake" toggle in a session where nothing ever sleeps is a button that
+    // reports a state it does not have.
+    readonly property bool active:
+        enabled && (dpmsTimeout > 0 || lockTimeout > 0 || suspendTimeout > 0)
+
+    // The compositor's manual inhibit, READ rather than remembered.
+    //
+    // `toggle_idle_inhibit` used to be write-only, so the pill that flips it
+    // kept its own copy of what it had done -- wrong after a bar restart,
+    // after the same state is flipped from a keybind, and after a reload. The
+    // compositor answers now (`watch idle`), so there is one copy of this and
+    // it is the one that decides whether the machine sleeps.
+    property bool manualInhibit: false
+
+    Component.onCompleted: Ipc.watch("watch idle", o => {
+        root.manualInhibit = !!o.manual;
+    });
+
+    function toggleInhibit() {
+        // -1 toggles; the reply comes back over the watch above, so nothing
+        // here guesses at the new state.
+        Ipc.dispatch("dispatch toggle_idle_inhibit,-1");
+    }
 
     // Whether the outputs are off BECAUSE OF THIS, so resume only powers them
     // back on when it was the one that turned them off. Otherwise every scrap
@@ -64,7 +102,7 @@ Singleton {
     // `.` is an unanchored regex on the output name, so one dispatch covers
     // every monitor.
     IdleMonitor {
-        enabled: root.enabled && root.dpmsTimeout > 0
+        enabled: root.enabled && root.dpmsTimeout > 0 && !root.manualInhibit
         timeout: root.dpmsTimeout
         respectInhibitors: root.respectInhibitors
         onIsIdleChanged: {
@@ -88,6 +126,7 @@ Singleton {
     // ── lock ────────────────────────────────────────────────────────────────
     IdleMonitor {
         enabled: root.enabled && root.lockTimeout > 0 && root.lockCommand !== ""
+                 && !root.manualInhibit
         timeout: root.lockTimeout
         respectInhibitors: root.respectInhibitors
         // Only on the way IN. A lock screen is dismissed by the person, not by
@@ -100,7 +139,7 @@ Singleton {
     // systemctl without --user: this is a system transition and polkit decides
     // whether the session may make it, exactly as the power menu does.
     IdleMonitor {
-        enabled: root.enabled && root.suspendTimeout > 0
+        enabled: root.enabled && root.suspendTimeout > 0 && !root.manualInhibit
         timeout: root.suspendTimeout
         respectInhibitors: root.respectInhibitors
         onIsIdleChanged: {

@@ -61,7 +61,21 @@ Image {
     }
 
     source: resolved
-    visible: source !== "" && status === Image.Ready
+
+    // Hidden when there is nothing to draw -- NOT while it is still arriving.
+    //
+    // A hidden Item is removed from its Row, so waiting for Image.Ready meant
+    // a pill that swapped one icon for another collapsed by the icon's whole
+    // advance for as long as the load took, and the panel re-trimmed around
+    // the new width (Pill.slack/leadTrim). Visible as the modules beside it
+    // jumping the FIRST time an icon changed and never again, because the
+    // pixmap is cached from then on -- which reads as a one-off glitch rather
+    // than as the layout depending on I/O. Space is reserved from `size`,
+    // which is known before the artwork is, so nothing moves.
+    //
+    // Error still collapses: artwork that failed to resolve is not coming, and
+    // padding a pill for it would leave a permanent gap.
+    visible: resolved !== "" && status !== Image.Error
 
     // The box the artwork is fitted into. Width is the ADVANCE, which is not
     // always the box: a portrait icon fitted into a square box only occupies

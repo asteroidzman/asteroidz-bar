@@ -61,7 +61,8 @@ render() { # render <modules-center> <outfile>
 theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
 bar { enable false; height 48; position "top"; margin { x 8; y 9 }
 	panel { enable true; radius 9; padding 12; blur true; shadow true }
-	modules-left ""; modules-center "$1"; modules-right "" }
+	modules-left ""; modules-center "$1"; modules-right ""
+	idle { enable true; dpms-timeout 600 } }
 EOF
 	hl_dispatch "reload_config" 1
 	sleep 1
@@ -87,6 +88,14 @@ EOF
 
 # There is no MPRIS player on this bus, so `media` is the idle case by
 # construction -- nothing has to be arranged for it.
+#
+# `idle { enable true }` above is for the `idle` MODULE, which is the cup, and
+# which hides itself when nothing in the session would ever idle -- a "keep
+# awake" button in a session where the screen never sleeps is describing
+# something that is not happening. Without it the scene below renders one pill
+# where it means to render two, and measures a gap inside weather rather than
+# the gap beside it: a pass or fail about nothing. Ten minutes so the timeout
+# cannot fire during the eight seconds the bar is up.
 render "clock" "$WORK/without.png"
 render "media,clock" "$WORK/with.png"
 render "weather,idle" "$WORK/pinned.png"

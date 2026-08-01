@@ -123,6 +123,67 @@ else
 	bad "disabling idle takes effect on reload, without restarting the bar (got '$(asleep)')"
 fi
 
+# ── the cup ─────────────────────────────────────────────────────────────────
+#
+# The bar's idle pill flips the compositor's manual inhibit
+# (`toggle_idle_inhibit`), and the whole reason that dispatch exists is to stop
+# the screen going off. Until this file it was never checked that it does: the
+# pill dispatched, the compositor set a flag, and nothing tied the flag to the
+# outcome. The state was not even readable, so the pill kept its own copy of
+# what it had last done -- a copy that a bar restart resets to "off" over a
+# compositor that is still holding sleep off.
+#
+# Driven through `amsg dispatch`, which is the same dispatch the pill sends.
+# Clicking the actual pixel is click-test.sh's job; what is at stake here is
+# whether the flag reaches the timeout.
+sed -i 's/idle { enable false; dpms-timeout 3 }/idle { enable true; dpms-timeout 3 }/' \
+	"$HL_CONFIG"
+hl_dispatch "reload_config" 1
+
+hl_dispatch "toggle_idle_inhibit,1" 0.3
+"$HL_WLVKBD" press SPACE >/dev/null 2>&1
+sleep 6
+if [ "$(asleep)" = "false" ]; then
+	ok "the idle pill's inhibit stops the bar powering the output down"
+else
+	bad "the idle pill's inhibit stops the bar powering the output down (got '$(asleep)')"
+fi
+
+# And giving it back starts the clock again, without touching anything else.
+hl_dispatch "toggle_idle_inhibit,0" 0.3
+sleep 6
+if [ "$(asleep)" = "true" ]; then
+	ok "and releasing it lets the timeout happen again"
+else
+	bad "and releasing it lets the timeout happen again (got '$(asleep)')"
+fi
+"$HL_WLVKBD" press SPACE >/dev/null 2>&1
+sleep 1
+
+# respect-inhibitors OFF must not disable the USER's own toggle.
+#
+# A CONTRACT check, not a check of the line that implements it, and the
+# difference is worth stating because this assertion passes with the bar-side
+# gate removed. That was measured, not assumed: the compositor's
+# wlr_idle_notifier_v1_set_inhibited suppresses idle even for a client that
+# asked to ignore inhibitors, so the guarantee is currently kept a layer below
+# the bar. It is here because the guarantee is what a person depends on --
+# turning off inhibitors to stop a browser holding the screen awake must not
+# quietly take their own keep-awake button with it -- and because if either
+# layer stops keeping it, this fails.
+sed -i 's/idle { enable true; dpms-timeout 3 }/idle { enable true; dpms-timeout 3; respect-inhibitors false }/' \
+	"$HL_CONFIG"
+hl_dispatch "reload_config" 1
+hl_dispatch "toggle_idle_inhibit,1" 0.3
+"$HL_WLVKBD" press SPACE >/dev/null 2>&1
+sleep 6
+if [ "$(asleep)" = "false" ]; then
+	ok "respect-inhibitors false does not disable the user's own keep-awake"
+else
+	bad "respect-inhibitors false does not disable the user's own keep-awake (got '$(asleep)')"
+fi
+hl_dispatch "toggle_idle_inhibit,0" 0.3
+
 kill "$BAR" 2>/dev/null
 wait "$BAR" 2>/dev/null
 
