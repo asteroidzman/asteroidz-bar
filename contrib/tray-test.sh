@@ -7,15 +7,23 @@
 # -- it would pass whether or not this code works, and its results would change
 # depending on what was open at the time.
 #
-# The fake item is contrib/snitem from the asteroidz tree: it registers a
-# StatusNotifierItem with a known icon and, with --menu, a DBusMenu with known
-# entries. Same binary the compositor's own tray tests use, so the two agree on
-# what a tray item is.
+# The fake item is contrib/snitem: it registers a StatusNotifierItem with a
+# known icon and, with --menu, a DBusMenu with known entries.
+#
+# It lives HERE, in the bar's own tree. It used to be the compositor's, back
+# when the compositor drew the bar and hosted the tray -- and when that all
+# moved out (asteroidz 1877e95, "remove the native bar"), snitem went with the
+# rest of the deleted tray code while this line went on pointing at where it
+# had been. Every run since has exited 1 before its first assertion, which in a
+# loop over a dozen suites looks exactly like a suite that passed quietly. A
+# test helper belongs with the thing it tests.
 set -u
 
-REPO="${ASTEROIDZ_REPO:-$HOME/asteroidz}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SNITEM="$REPO/contrib/snitem/snitem"
+SNITEM="$HERE/contrib/snitem/snitem"
+# Still the compositor's, and only for the headless harness below -- that one
+# genuinely is the compositor's, since it boots a compositor.
+REPO="${ASTEROIDZ_REPO:-$HOME/asteroidz}"
 
 PASS=0
 FAIL=0
@@ -24,7 +32,7 @@ ok() { echo "  ok   $1"; PASS=$((PASS + 1)); }
 bad() { echo "  FAIL $1"; FAIL=$((FAIL + 1)); }
 
 [ -x "$SNITEM" ] || {
-	echo "tray-test: $SNITEM not built -- run: cd $REPO/contrib/snitem && make" >&2
+	echo "tray-test: $SNITEM not built -- run: cd $HERE/contrib/snitem && make" >&2
 	exit 1
 }
 
@@ -36,12 +44,37 @@ trap 'hl_stop' EXIT
 
 WORK="$HL_OUTDIR"
 
+# The bar's own config: which modules it draws is the BAR's setting now, not the
+# compositor's, so a test that wants a particular module has to write it here.
+BAR_CONF="$WORK/bar-config.kdl"
+bar_modules() { # bar_modules <left> <center> <right>
+	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
+		"$1" "$2" "$3" > "$BAR_CONF"
+}
+
+# The C++ plugin the shell imports as `Asteroidz.Bar`, staged where quickshell
+# will find it. Without this the shell does not merely lose the plugin -- it
+# fails to LOAD, because Icon.qml imports the module and every type above it
+# then goes unavailable, so nothing draws and every pixel assertion measures an
+# empty screen. This test ran for months without it, back when it could not run
+# at all (see the snitem note above); the one assertion that survived was
+# "no QML errors", which passed against a shell that had never started.
+QMLROOT="$WORK/qml"
+mkdir -p "$QMLROOT/Asteroidz/Bar"
+cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
+cp "$HERE/plugin/qmldir" "$QMLROOT/Asteroidz/Bar/"
+
 # One private bus for the compositor-side test, shared by the item and the
 # shell. dbus-run-session gives us a bus that dies with the script.
 cat > "$WORK/run.sh" <<'INNER'
 #!/usr/bin/env bash
 set -u
-WORK="$1"; SNITEM="$2"; HERE="$3"; SIG="$4"; WL="$5"; XRD="$6"
+# Positionals, not inherited. This heredoc is QUOTED, so nothing in it expands
+# when the file is written -- a name used below and not passed in here is
+# unbound at run time, and under `set -u` that kills the backgrounded child
+# while the parent screenshots a bar-less screen and blames the feature.
+WORK="$1"; SNITEM="$2"; HERE="$3"; SIG="$4"; WL="$5"; XRD="$6"; BAR_CONF="$7"
+QMLROOT="$8"
 
 # The SHELL first, then the item.
 #
@@ -53,6 +86,8 @@ WORK="$1"; SNITEM="$2"; HERE="$3"; SIG="$4"; WL="$5"; XRD="$6"
 WAYLAND_DISPLAY="$WL" XDG_RUNTIME_DIR="$XRD" \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" \
 	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
+	ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
+	ASTEROIDZ_BAR_QML="$QMLROOT" \
 	"$HERE/bin/asteroidz-bar" > "$WORK/qs.log" 2>&1 &
 QS_PID=$!
 sleep 4
@@ -85,10 +120,11 @@ bar { enable false; height 48; position "top"; margin { x 8; y 9 }
 	panel { enable true; radius 9; padding 12 }
 	modules-left ""; modules-center ""; modules-right "tray" }
 EOF
+bar_modules "" "" "tray"
 hl_dispatch "reload_config" 1
 
 dbus-run-session -- "$WORK/run.sh" "$WORK" "$SNITEM" "$HERE" "$HL_SIG" \
-	"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR"
+	"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$BAR_CONF" "$QMLROOT"
 
 if [ ! -f "$WORK/tray.png" ]; then
 	bad "a screenshot was taken"
@@ -145,9 +181,17 @@ else
 	bad "the shell provides a StatusNotifierWatcher"
 fi
 
-if grep -q "ReferenceError\|is not defined" "$WORK/qs.log" 2>/dev/null; then
+# "Failed to load configuration" is in here for a reason. This used to look for
+# ReferenceError only, which is a run-time fault -- so a shell that never
+# reached run time reported no errors and this passed. It did exactly that for
+# months: the plugin was not staged, Icon.qml's `import Asteroidz.Bar` failed,
+# every type above it went unavailable, and the one assertion still standing
+# said the tray was fine. An assertion about errors has to see the error that
+# stops the program before it starts.
+_TRAY_ERRS="ReferenceError\|is not defined\|Failed to load configuration\|unavailable\|is not installed"
+if grep -q "$_TRAY_ERRS" "$WORK/qs.log" 2>/dev/null; then
 	bad "no QML errors while hosting the tray"
-	grep -m3 "ReferenceError\|is not defined" "$WORK/qs.log" | sed 's/^/       /'
+	grep -m3 "$_TRAY_ERRS" "$WORK/qs.log" | sed 's/^/       /'
 else
 	ok "no QML errors while hosting the tray"
 fi

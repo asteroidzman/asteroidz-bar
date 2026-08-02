@@ -5,3 +5,4 @@ asteroidz-bar/
 *.pkg.tar.zst
 *.log
 __pycache__/
+contrib/snitem/snitem
