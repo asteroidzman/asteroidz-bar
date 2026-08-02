@@ -77,7 +77,7 @@ apply_font() { # apply_font "Ubuntu 24"
 theme { font "$1"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
 bar { enable false; height 48; position "top"; margin { x 8; y 9 }
 	panel { enable true; radius 9; padding 12; blur true; shadow true }
-	modules-left ""; modules-center ""; modules-right "display" }
+	show-logo true; modules-left "tags"; modules-center ""; modules-right "" }
 EOF
 	hl_dispatch "reload_config" 2
 }
@@ -135,14 +135,16 @@ else:
 '
 }
 
-# The display pill: the only module, so it is at the right edge of the right
-# panel, one pill-height down. Same arithmetic as click-test.sh.
-PILL_X=$((HL_WIDTH - 8 - 12 - 18))
+# The ship: the first chip of the only module, and the way in to the window.
+# The ship, at the LEFT edge: margin_x + the panel's padding + half a chip.
+# Mirrors the arithmetic the retired settings pill used at the right edge, and
+# every module here is an icon-only pill of the same width.
+PILL_X=$((8 + 12 + 18))
 PILL_Y=$((9 + 24))
 
 # RIGHT click, which opens the settings window straight on the Displays page.
-# A left click opens it on All settings -- the pill's icon is a gear -- and the
-# arrangement canvas measured below is only on Displays.
+# A left click opens it on All settings, and the arrangement canvas measured
+# below is only on Displays.
 hl_move "$PILL_X" "$PILL_Y"; sleep 1
 hl_click "$PILL_X" "$PILL_Y" rclick; sleep 4
 

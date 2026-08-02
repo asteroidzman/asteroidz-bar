@@ -56,13 +56,14 @@ magick -size "${HL_WIDTH}x${HL_HEIGHT}" xc:'#9db8d8' "$WORK/wall.png"
 printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WORK" "$WORK/wall.png" \
 	> "$WORK/wallpaper.conf"
 
-# One module, at the right edge, so its pill is at a position this script can
-# compute rather than hunt for -- the same arrangement click-test.sh uses.
+# One module, at the left edge. Its first chip is the asteroidz ship, which is
+# the way in to the settings window -- there is no settings pill any more -- and
+# it sits at a position this script can compute rather than hunt for.
 cat >> "$HL_CONFIG" <<'EOF'
 theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
 bar { enable false; height 48; position "top"; margin { x 8; y 9 }
 	panel { enable true; radius 9; padding 12; blur true; shadow true }
-	modules-left ""; modules-center ""; modules-right "display" }
+	show-logo true; modules-left "tags"; modules-center ""; modules-right "" }
 EOF
 hl_dispatch "reload_config" 1
 sleep 1
@@ -105,12 +106,17 @@ fi
 
 # ── 1. the way in ───────────────────────────────────────────────────────────
 #
-# One click. The display pill used to open a popover with an "All settings…"
-# button in it, and this test used to click through both -- which meant the way
-# in to the settings window could only be tested by first testing a panel that no
-# longer exists. The pill IS the way in now.
+# One click, on the SHIP.
+#
+# This has moved twice. It was the display pill's popover with an "All settings…"
+# button in it, so reaching the window meant testing a panel first; then it was
+# the pill itself; now the pill is gone and the shell's own emblem -- the first
+# chip in the tags module -- is the way in, the way a start button is.
 
-PILL_X=$((HL_WIDTH - 8 - 12 - 18))
+# The ship, at the LEFT edge: margin_x + the panel's padding + half a chip.
+# Mirrors the arithmetic the retired settings pill used at the right edge, and
+# every module here is an icon-only pill of the same width.
+PILL_X=$((8 + 12 + 18))
 PILL_Y=$((9 + 24))
 
 # Move before the first click. A press with no preceding motion does not
@@ -137,9 +143,9 @@ for c in json.load(sys.stdin).get("clients", []):
 
 WIN="$(win_json)"
 if [ -n "$WIN" ]; then
-	ok "the display pill opens a toplevel titled \"asteroidz settings\""
+	ok "the ship opens a toplevel titled \"asteroidz settings\""
 else
-	bad "the display pill opens a toplevel titled \"asteroidz settings\""
+	bad "the ship opens a toplevel titled \"asteroidz settings\""
 fi
 
 read -r WX WY WW WH <<<"$(printf '%s' "$WIN" | python3 -c '
@@ -247,9 +253,9 @@ fi
 
 # ── 1b. right click goes straight to Displays ───────────────────────────────
 #
-# The pill's icon is a GEAR, so a left click opens the window as such and lands
-# on All settings -- anything else would be a button whose icon promises one page
-# of six. Right click is the shortcut to the page this module used to be, and it
+# A left click on the ship opens the window as such and lands on All settings --
+# the emblem means "this shell", not one page of six. Right click is the shortcut
+# to Displays, the page the retired pill's icon used to promise, and it
 # has to work on an already-open window, which is the case that is easy to get
 # wrong: `open()` sets the page before `visible`, and a window that is already
 # visible would keep whatever it was showing if the order were the other way
@@ -955,7 +961,7 @@ fi
 
 # A hand-written comment above a setting is the reason the writer edits bytes
 # instead of round-tripping the document, so check one survived.
-if grep -q 'modules-right "display"' "$HL_CONFIG"; then
+if grep -q 'modules-left "tags"' "$HL_CONFIG"; then
 	ok "the rest of the file is intact"
 else
 	bad "the rest of the file is intact"
@@ -1359,8 +1365,8 @@ fi
 
 # ── reopening it ────────────────────────────────────────────────────────────
 #
-# Pressing the pill a second time did nothing, and the reason was not a bug in
-# the window: it was still open, on the tag it was opened from. A client cannot
+# Pressing it a second time did nothing, and the reason was not a bug in the
+# window: it was still open, on the tag it was opened from. A client cannot
 # raise itself on Wayland -- there is no protocol for it -- so the press
 # correctly reused the existing window, from the far side of a tag switch, which
 # is indistinguishable from nothing happening.
@@ -1379,9 +1385,9 @@ hl_move "$PILL_X" "$PILL_Y"; sleep 1
 hl_click "$PILL_X" "$PILL_Y"; sleep 3
 T_BACK="$(acttags)"
 if [ "$T_AWAY" = "[2]" ] && [ "$T_BACK" = "[1]" ]; then
-	ok "a second press of the pill summons the window back from another tag"
+	ok "a second press of the ship summons the window back from another tag"
 else
-	bad "a second press of the pill summons the window back (away=$T_AWAY back=$T_BACK)"
+	bad "a second press of the ship summons the window back (away=$T_AWAY back=$T_BACK)"
 fi
 
 # ── closed by the COMPOSITOR, and opened again ──────────────────────────────
@@ -1410,9 +1416,9 @@ if [ -n "$WINID" ]; then
 	hl_move "$PILL_X" "$PILL_Y"; sleep 1
 	hl_click "$PILL_X" "$PILL_Y"; sleep 4
 	if [ -n "$(win_json)" ]; then
-		ok "and the pill opens it again afterwards"
+		ok "and the ship opens it again afterwards"
 	else
-		bad "and the pill opens it again afterwards"
+		bad "and the ship opens it again afterwards"
 	fi
 else
 	bad "the settings window was there to close"

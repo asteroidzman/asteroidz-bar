@@ -123,7 +123,7 @@ cat >> "$HL_CONFIG" <<'EOF'
 theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
 bar { enable false; height 48; position "top"; margin { x 8; y 9 }
 	panel { enable true; radius 9; padding 12; blur true; shadow true }
-	modules-left ""; modules-center ""; modules-right "display" }
+	show-logo true; modules-left "tags"; modules-center ""; modules-right "" }
 EOF
 hl_dispatch "reload_config" 1
 sleep 1
@@ -156,7 +156,10 @@ else
 fi
 
 # ── open the settings window and reach the palette page ─────────────────────
-PILL_X=$((HL_WIDTH - 8 - 12 - 18))
+# The ship, at the LEFT edge: margin_x + the panel's padding + half a chip.
+# Mirrors the arithmetic the retired settings pill used at the right edge, and
+# every module here is an icon-only pill of the same width.
+PILL_X=$((8 + 12 + 18))
 PILL_Y=$((9 + 24))
 hl_move "$PILL_X" "$PILL_Y"; sleep 1
 hl_click "$PILL_X" "$PILL_Y"; sleep 3

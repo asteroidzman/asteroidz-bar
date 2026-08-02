@@ -74,7 +74,6 @@ install_data(
 		'shell/modules/Media.qml',
 		'shell/modules/Spectrum.qml',
 		'shell/modules/Tray.qml',
-		'shell/modules/Display.qml',
 		'shell/modules/Custom.qml',
 		'shell/modules/Power.qml',
 	],

@@ -13,6 +13,7 @@
 
 import QtQuick
 import ".."
+import "../settings"
 
 Row {
     id: root
@@ -25,7 +26,14 @@ Row {
     readonly property int leadTrim: 0
     readonly property int trailTrim: 0
 
-    // The asteroidz ship, leading the group.
+    // The asteroidz ship, leading the group -- and the way in to the settings
+    // window.
+    //
+    // It used to be a separate pill on the right with a gear on it. A shell's
+    // own emblem is where people look for the shell's own settings, the way a
+    // start button works, and one fewer module is one fewer thing competing for
+    // bar width. The pill is gone; `display` in a module list now resolves to
+    // nothing, which ModuleLoader says once and loudly.
     Pill {
         visible: Cfg.showLogo
         // Recoloured at runtime so the exhaust burns in the theme's accent --
@@ -40,7 +48,15 @@ Row {
         // fills the chip the way a logo should.
         iconScale: 1.25
         chip: true
-        interactive: false
+
+        // Left opens the window where you left it; right goes to Displays,
+        // which is the page the retired pill's icon used to promise.
+        onClicked: button => {
+            if (button === Qt.LeftButton)
+                Settings.open();
+            else if (button === Qt.RightButton)
+                Settings.open("displays");
+        }
     }
 
     Repeater {

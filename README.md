@@ -46,29 +46,29 @@ a default, and it would still not see a palette written after startup.
 
 ## Settings
 
-The **display pill** on the bar opens a real window with every configuration
-option the compositor accepts: 95 of them, each with the compositor's own
+The **asteroidz ship** on the bar — the chip leading the tags — opens a real
+window with every configuration option the compositor accepts: 95 of them, each with the compositor's own
 one-line explanation, grouped, searchable, and showing which file the current
 value came from — plus the monitors, the wallpaper, the window rules, the
 keybinds, the palette and push-to-talk.
 
-That pill used to open a popover holding the monitors and the wallpaper, with a
-button in its corner leading here. Both of those are pages in this window now and
-the pill is the button. A popover is dismissed by the first click outside it, and
+There used to be a separate `display` pill for this, opening a popover that held
+the monitors and the wallpaper with a button in its corner leading here. Both of
+those are pages in this window now, the pill is gone, and the shell's own emblem
+is the way in — where people look for a shell's own settings, the way a start
+button works, and one fewer module competing for bar width. `display` in a module
+list resolves to nothing now, which `ModuleLoader` says once and loudly.
+
+A popover is dismissed by the first click outside it, and
 every way of judging a display change — looking at another window, dragging
 something onto the second screen, reading a frame rate off a game — is a click
 outside it; the panel that let you change a mode could not survive you looking at
 the result. It was also capped at 700px with nothing to scroll, so the wallpaper
 browser was a 220px box inside a surface that could not grow.
 
-The icon is a **gear**, not a monitor, and that is the whole argument for it:
-this pill opens every setting the compositor has, and a monitor icon promises one
-page of six. It was the right icon while the pill *was* the display panel and the
-wrong one the moment it stopped being.
-
 Left click opens the window as such, on whatever page you left it on — All
-settings the first time. Right click goes straight to Displays, which is what
-this pill used to be.
+settings the first time. Right click goes straight to Displays, which is what the
+retired pill used to be.
 
 ### Displays and Wallpaper
 
