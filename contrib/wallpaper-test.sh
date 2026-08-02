@@ -373,6 +373,25 @@ else
 	bad "...and wraps back to the first (got '$got')"
 fi
 
+# ── nextFocused: the one a keybind can actually use ─────────────────────────
+#
+# A key press has no idea which screen you are looking at, and the compositor
+# cannot tell it: the bind spawns a command line, and by the time that runs it
+# is a separate process with no notion of focus. So `next` was the only thing a
+# bind could call -- and in per-monitor scope `next` changes the SHARED
+# wallpaper, which is deliberately not drawn on a monitor that has its own.
+# Pressing the key with a per-monitor override on the focused screen therefore
+# did nothing at all, correctly and uselessly.
+#
+# In "one for all" scope it has to fall back to `next`, or the bind stops
+# working the moment the scope changes.
+got="$(qs_ipc nextFocused)"
+if [ -n "$got" ] && [ "${got#/}" != "$got" ]; then
+	ok "nextFocused answers with a file in one-for-all scope ($(basename "$got"))"
+else
+	bad "nextFocused answers with a file in one-for-all scope (got '$got')"
+fi
+
 # Random must not pick the one already showing -- a rotation that repeats the
 # current wallpaper looks like it has stopped working.
 cyc_conf random "$CYCDIR/a.png"
@@ -389,18 +408,31 @@ else
 	bad "random never picks the wallpaper already up ($same of 6 repeated)"
 fi
 
-# static is the third setting, and it means never.
+# static is the third setting, and it means the TIMER never fires -- not that
+# the wallpaper can never change. An explicit "next" still acts.
 cyc_conf static "$CYCDIR/a.png"
 sleep 2
-before="$(qs_ipc current)"
-qs_ipc next >/dev/null
-after="$(qs_ipc current)"
-# `next` is an explicit request, so it still acts -- what static governs is the
-# TIMER. Proven by the timer's own gate rather than by the manual call.
 if grep -q "^order=static" "$WORK/wallpaper.conf"; then
 	ok "static is written and read back as an order"
 else
 	bad "static is written and read back as an order"
+fi
+
+# And it advances IN SEQUENCE, not at random. Static is the mode someone picks
+# because they do not want the wallpaper moving on its own; answering a
+# deliberate keypress with a random jump is the opposite of that. It used to,
+# because pick() treated everything that was not "sequential" as random.
+got="$(qs_ipc next)"
+if [ "$got" = "$CYCDIR/b.png" ]; then
+	ok "...and an explicit next still advances, in sequence"
+else
+	bad "...and an explicit next still advances, in sequence (got '$(basename "$got")', wanted b.png)"
+fi
+got="$(qs_ipc next)"
+if [ "$got" = "$CYCDIR/c.png" ]; then
+	ok "...and again, so it is a sequence and not one step"
+else
+	bad "...and again, so it is a sequence and not one step (got '$(basename "$got")')"
 fi
 
 kill "$QS" 2>/dev/null

@@ -25,6 +25,11 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import Asteroidz.Bar
+// Explicit: without it a singleton in this directory resolves through QML's
+// implicit same-directory import, which builds a SECOND instance rather than
+// using the one qmldir registers -- and that copy is never fed by anything.
+// Cfg.qml lost a whole config to this.
+import "."
 import "settings"
 
 Singleton {
@@ -382,6 +387,28 @@ Singleton {
         // there is not distinguishable from an empty one -- which is exactly
         // the difference between "advance DP-1" and "advance the shared one".
         //
+        // The one a keybind wants.
+        //
+        // A key press has no idea which screen you are looking at, and the
+        // compositor cannot pass it: the bind spawns a command line, and by the
+        // time that command runs it is a separate process with no notion of
+        // focus. The bar has it already -- `focusedMonitor` arrives with every
+        // tag and focus change -- so the resolution happens here rather than
+        // being something the user has to write into a bind.
+        //
+        // Falls back to the shared wallpaper when the scope is "one for all",
+        // because that is what changing the wallpaper means in that scope. A
+        // bind that refused to do anything unless per-monitor was configured
+        // would be a bind that stops working when you switch scopes.
+        function nextFocused(): string {
+            if (root.scope !== "per-monitor")
+                return next();
+            const mon = Compositor.focusedMonitor;
+            if (mon === "" || !root.monitorConnected(mon))
+                return next();
+            return nextOn(mon);
+        }
+
         // These only make sense in per-monitor scope, so they say so rather
         // than writing an override that the scope quietly ignores.
         function nextOn(monitor: string): string {
@@ -456,7 +483,12 @@ Singleton {
             return list[0];
 
         const at = list.indexOf(from);
-        if (order === "sequential") {
+        // `static` advances in sequence too. It governs the TIMER -- nothing
+        // cycles on its own -- but an explicit "next" still has to mean next,
+        // and a random jump is not what someone who turned cycling off is
+        // asking for when they press the key. The only mode that picks at
+        // random is the one called random.
+        if (order === "sequential" || order === "static") {
             // Not found means the current wallpaper is outside the folder, in
             // which case the next one is the first -- the only answer that
             // makes progress.
