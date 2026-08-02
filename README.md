@@ -385,8 +385,10 @@ format says what it was instead of only naming an exit code.
 ### Modules
 
 Which modules the bar draws, in which section, in what order, and on which
-screen. Arrows reorder within a section, a picker moves one between sections,
-and anything not currently placed sits under **Not shown** to be added back.
+screen. **Drag** a row to move it — within a section to reorder, or into
+another section in one motion. The **▲▼** arrows nudge one place, the
+**section** box sends a module elsewhere without dragging, and anything not
+currently placed sits under **Not shown** to be added back.
 
 Applied as you change it, like the Wallpaper page and for the same reason: the
 only way to arrange a bar is to see it. There is no Apply here.
@@ -396,9 +398,24 @@ It writes the bar's own config file, not the compositor's — see
 time, which is why the unplaced list is a difference rather than a full list
 with some entries greyed out.
 
-Arrows rather than drag-and-drop: a drag needs a drop target for every gap
-between rows *and* for the two other sections, while an arrow that moves one
-place is unambiguous about what it did.
+Two axes are stacked on this page and it is worth being explicit about which is
+which: **Shown on** is the output the whole *section* is drawn on, and the
+`left`/`center`/`right` box on each row is which *section* that module is in.
+The second is captioned **section** because without a word over it, a box
+reading `center` directly under a row reading `DP-1` is genuinely ambiguous.
+
+The dragged row deliberately does not move. It dims in place and a line marks
+where it would land, because moving the item reflows the column under the
+pointer — which shifts the drop target while you are aiming at it. The drop
+point flips at a row's *midpoint* rather than its edge, since the last few
+pixels of a row already belong to the next slot, and an empty section grows to
+a row's height and offers **Drop here** while a drag is in progress: a one-line
+"Empty." label is far too small a target to be the only way into an empty
+section.
+
+The arrows stay alongside it. They move exactly one place, they are
+unambiguous about what they did, and they are the only way to do any of this
+from a keyboard.
 
 ### Layouts
 
@@ -793,7 +810,9 @@ or the portal answers "App info not found" and push-to-talk never binds.
 ## Testing
 
 ```sh
-contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the shadow
+contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the
+                           #   shadow, the ship, and a section drawn only on the
+                           #   output it names
 contrib/battery-test.sh    # the battery module, against a fake sysfs: absent on a
                            #   machine with no cell, present and tracking on one
 contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included,
@@ -826,8 +845,10 @@ contrib/settings-test.sh   # the settings window: the pill opens it on Displays,
                            #   its Apply commits, the Wallpaper page writes as
                            #   you type, the rule, bind and tag editors add
                            #   through to the config file, the Modules page
-                           #   builds and every module it offers can actually
-                           #   be drawn, and Rebind… reaches the push-to-talk
+                           #   builds, every module it offers can actually be
+                           #   drawn, a click writes the config and a SECOND
+                           #   click still does, dragging reorders and crosses
+                           #   sections, and Rebind… reaches the push-to-talk
                            #   bridge
 contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
 contrib/dynwall-test.sh    # Apple dynamic wallpapers: the schedule parser
