@@ -41,6 +41,14 @@ kill "$HL_SWAYBG_PID" 2>/dev/null
 [ -S "$HL_SIG" ] || { echo "palette-test: no IPC socket at $HL_SIG" >&2; exit 1; }
 
 WORK="$HL_OUTDIR"
+
+# The bar's own config: which modules it draws is the BAR's setting now, not the
+# compositor's, so a test that wants a particular module has to write it here.
+BAR_CONF="$WORK/bar-config.kdl"
+bar_modules() { # bar_modules <left> <center> <right>
+	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
+		"$1" "$2" "$3" > "$BAR_CONF"
+}
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -143,6 +151,7 @@ bar { enable false; height 48; position "top"; margin { x 8; y 9 }
 	panel { enable true; radius 9; padding 12; blur true; shadow true }
 	show-logo true; modules-left "tags"; modules-center ""; modules-right "" }
 EOF
+bar_modules "tags" "" ""
 hl_dispatch "reload_config" 1
 sleep 1
 
@@ -158,6 +167,7 @@ dbus-run-session -- \
 	ASTEROIDZ_COLORS_OUT="$MG_OUT" \
 	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
 	ASTEROIDZ_BAR_QML="$QMLROOT" \
+	ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
 	"$HERE/bin/asteroidz-bar" > "$WORK/qs.log" 2>&1 &
 QS=$!
 sleep 8
@@ -241,7 +251,7 @@ PY
 # There is no "All settings" row: a freshly opened window selects the first
 # group, so the accent pill the scan above found is row 0.
 NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
-PALETTE_ROW=$((5 + NGROUPS))
+PALETTE_ROW=$((6 + NGROUPS))
 PALETTE_Y=$((SB_TOP + PALETTE_ROW * (SB_H + 2) + SB_H / 2))
 hl_move $((WX + 60)) "$PALETTE_Y"; sleep 1
 hl_click $((WX + 60)) "$PALETTE_Y"; sleep 3

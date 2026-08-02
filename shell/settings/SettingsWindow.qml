@@ -79,6 +79,7 @@ FloatingWindow {
             return search !== "" ? "Search results"
                                  : (Schema.groupLabel(group) || "Settings");
         return ({ displays: "Displays", wallpaper: "Wallpaper",
+                  modules: "Modules",
                   layouts: "Layouts", rules: "Window rules", binds: "Keybinds",
                   palette: "Palette", discord: "Push-to-talk" })[page] || "Settings";
     }
@@ -100,6 +101,8 @@ FloatingWindow {
                       + "Changes are applied together, on Apply.",
             wallpaper: "Applied as you change them · press Enter in a field"
                        + " to apply it.",
+            modules: "The bar's own settings, not the compositor's. Applied as "
+                     + "you change them.",
             layouts: "Which layout each tag opens in, and the settings that "
                      + "layout reads. Each rule saves itself.",
             rules: "Rules apply in order and every match applies. "
@@ -550,6 +553,9 @@ FloatingWindow {
                                  { name: "", label: "Wallpaper",
                                    page: "wallpaper",
                                    icon: "asteroidz-bar/settings/wallpaper.svg" },
+                                 { name: "", label: "Modules",
+                                   page: "modules",
+                                   icon: "asteroidz-bar/settings/modules.svg" },
                                  { name: "", label: "Layouts",
                                    page: "layouts",
                                    icon: "asteroidz-bar/settings/layout.svg" },
@@ -797,6 +803,14 @@ FloatingWindow {
                     visible: active
                     height: active && item ? item.implicitHeight : 0
                     sourceComponent: WallpaperPage {}
+                }
+
+                Loader {
+                    width: parent.width
+                    active: win.page === "modules"
+                    visible: active
+                    height: active && item ? item.implicitHeight : 0
+                    sourceComponent: ModulesPage {}
                 }
 
                 // The rule and bind editors, each built once and kept, so that

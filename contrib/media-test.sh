@@ -35,6 +35,14 @@ trap 'hl_stop' EXIT
 kill "$HL_SWAYBG_PID" 2>/dev/null
 
 WORK="$HL_OUTDIR"
+
+# The bar's own config: which modules it draws is the BAR's setting now, not the
+# compositor's, so a test that wants a particular module has to write it here.
+BAR_CONF="$WORK/bar-config.kdl"
+bar_modules() { # bar_modules <left> <center> <right>
+	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
+		"$1" "$2" "$3" > "$BAR_CONF"
+}
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -52,6 +60,7 @@ bar { enable false; height 48; position "top"; margin { x 8; y 9 }
 	modules-left ""; modules-center "media"; modules-right ""
 	media { bars $BARS } }
 EOF
+bar_modules "" "media" ""
 hl_dispatch "reload_config" 1
 sleep 1
 
@@ -73,7 +82,15 @@ echo "  ..   accent: ${ACCENT:-<unknown>}"
 cat > "$WORK/run.sh" <<'INNER'
 #!/usr/bin/env bash
 set -u
+# Positionals, not inherited. This heredoc is QUOTED, so nothing in it expands
+# when the file is written -- a name used below and not passed in here is
+# unbound at run time. Under `set -u` that is fatal, and because the bar is
+# started in the background the death is the CHILD's: the error scrolls past,
+# the parent carries on, and the screenshot is taken of a screen with no bar on
+# it. BAR_CONF went missing exactly that way, and it read as a broken spectrum
+# for a day -- the failure looks like the feature under test, not the harness.
 WORK="$1"; HERE="$2"; SIG="$3"; WL="$4"; XRD="$5"; QMLROOT="$6"; REPO="$7"
+BAR_CONF="$8"
 PROBE_SHELL="${PROBE_SHELL:-}"
 
 "$HERE/contrib/mprisstub" --title "Silent Track" --artist "Nobody" \
@@ -94,6 +111,7 @@ WAYLAND_DISPLAY="$WL" XDG_RUNTIME_DIR="$XRD" \
 	ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 	ASTEROIDZ_BAR_SHELL="${PROBE_SHELL:-$HERE/shell}/shell.qml" \
 	ASTEROIDZ_BAR_QML="$QMLROOT" \
+	ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
 	"$HERE/bin/asteroidz-bar" > "$WORK/qs.log" 2>&1 &
 QS=$!
 sleep 10
@@ -105,7 +123,7 @@ chmod +x "$WORK/run.sh"
 
 MON="$HL_MON" dbus-run-session -- env MON="$HL_MON" "$WORK/run.sh" \
 	"$WORK" "$HERE" "$HL_SIG" "$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" \
-	"$QMLROOT" "$REPO"
+	"$QMLROOT" "$REPO" "$BAR_CONF"
 
 if [ ! -f "$WORK/media.png" ]; then
 	bad "the bar drew anything at all (no screenshot)"
@@ -177,5 +195,6 @@ else
 fi
 
 echo
+cp "$WORK/qs.log" /tmp/media-qs.log 2>/dev/null || true
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

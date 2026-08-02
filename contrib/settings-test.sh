@@ -40,6 +40,14 @@ trap 'hl_stop' EXIT
 kill "$HL_SWAYBG_PID" 2>/dev/null
 
 WORK="$HL_OUTDIR"
+
+# The bar's own config: which modules it draws is the BAR's setting now, not the
+# compositor's, so a test that wants a particular module has to write it here.
+BAR_CONF="$WORK/bar-config.kdl"
+bar_modules() { # bar_modules <left> <center> <right>
+	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
+		"$1" "$2" "$3" > "$BAR_CONF"
+}
 # The guard headless.sh cannot make for us: if the instance did not come up,
 # every `hl_get` below answers nothing and every assertion "passes" against an
 # empty string. An earlier run of the sibling script did exactly that -- a stale
@@ -65,6 +73,7 @@ bar { enable false; height 48; position "top"; margin { x 8; y 9 }
 	panel { enable true; radius 9; padding 12; blur true; shadow true }
 	show-logo true; modules-left "tags"; modules-center ""; modules-right "" }
 EOF
+bar_modules "tags" "" ""
 hl_dispatch "reload_config" 1
 sleep 1
 
@@ -83,6 +92,7 @@ dbus-run-session -- \
 	ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
 	ASTEROIDZ_BAR_QML="$QMLROOT" \
+	ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
 	"$HERE/bin/asteroidz-bar" > "$WORK/qs.log" 2>&1 &
 QS=$!
 sleep 8
@@ -273,9 +283,10 @@ NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
 FIRST_GROUP_ROW=0
 DISPLAYS_ROW=$NGROUPS
 WALLPAPER_ROW=$((1 + NGROUPS))
-LAYOUTS_ROW=$((2 + NGROUPS))
-RULES_ROW=$((3 + NGROUPS))
-BINDS_ROW=$((4 + NGROUPS))
+MODULES_ROW=$((2 + NGROUPS))
+LAYOUTS_ROW=$((3 + NGROUPS))
+RULES_ROW=$((4 + NGROUPS))
+BINDS_ROW=$((5 + NGROUPS))
 
 SB0=$SB_TOP
 SIDEBAR_X=$((WX + 60))
@@ -1401,6 +1412,69 @@ print(mid[1], mid[0])
 PY
 }
 
+# ── the Modules page ────────────────────────────────────────────────────────
+#
+# What the bar draws, where, and on which screen. The bar's OWN config, written
+# to the bar's own file -- the compositor draws none of it.
+#
+# Every page in this window sits behind `active: win.page === "..."`, so a page
+# nothing ever selects is a page nothing ever BUILDS. This one shipped with a
+# `for...of` over Compositor.monitors, which is a map keyed by output name and
+# not iterable that way: the picker threw on construction and offered nothing,
+# and no test went near it. Visiting the page at all is most of the value here.
+go_to "$MODULES_ROW"
+shot modules
+
+MODULES_INK="$(ink modules "$((WX + 12 + 450 + 12))" "$((WY + 120))" \
+	"$((WX + WW))" "$((WY + WH))")"
+if [ "${MODULES_INK:-0}" -gt 2000 ]; then
+	ok "the modules page is populated (${MODULES_INK} ink px)"
+else
+	bad "the modules page is populated (${MODULES_INK} ink px)"
+fi
+
+# A throw inside a function is not a blank page -- the Loader keeps whatever it
+# managed to build -- so the log is the only place monitorValues() failing shows
+# up at all.
+if grep -qE "TypeError|is not iterable|is not a function" "$WORK/qs.log"; then
+	bad "the modules page builds without a QML error"
+	grep -m3 -E "TypeError|is not iterable|is not a function" "$WORK/qs.log" \
+		| sed 's/^/       /'
+else
+	ok "the modules page builds without a QML error"
+fi
+
+# ── the offered module names agree with what can be drawn ───────────────────
+#
+# BarConfig.builtins is what the page OFFERS; ModuleLoader's switch is what a
+# name actually resolves to. Two hand-written lists that have to say the same
+# thing, and when they disagree it fails in the worst direction: the page offers
+# a name, the user adds it, the loader returns null, and nothing appears --
+# indistinguishable from a module hiding itself because it has nothing to show.
+# `spectrum` sat in the offered list exactly that way; it is a child of the media
+# pill, not a module of its own.
+#
+# Compared as text, because the alternative is placing all fifteen on a bar and
+# counting pills -- and half of them legitimately draw nothing on a headless
+# machine with no battery, no player and no tray.
+OFFERED="$(sed -n '/readonly property var builtins:/,/\]/p' "$HERE/shell/BarConfig.qml" \
+	| grep -oE '"[a-z/]+"' | tr -d '"' | sort -u)"
+RESOLVES="$(grep -oE 'case "[a-z/]+":' "$HERE/shell/modules/ModuleLoader.qml" \
+	| grep -oE '"[a-z/]+"' | tr -d '"' | sort -u)"
+UNRESOLVED="$(comm -23 <(echo "$OFFERED") <(echo "$RESOLVES") | tr '\n' ' ')"
+UNOFFERED="$(comm -13 <(echo "$OFFERED") <(echo "$RESOLVES") | tr '\n' ' ')"
+
+if [ -z "${UNRESOLVED// /}" ]; then
+	ok "every module the settings page offers can actually be drawn"
+else
+	bad "every module the settings page offers can actually be drawn (dead: $UNRESOLVED)"
+fi
+if [ -z "${UNOFFERED// /}" ]; then
+	ok "...and every module that can be drawn is offered"
+else
+	bad "...and every module that can be drawn is offered (missing: $UNOFFERED)"
+fi
+
 # ── the Layouts page ────────────────────────────────────────────────────────
 #
 # The per-tag layout rules, which until recently were config-only: `set-config`
@@ -1572,7 +1646,7 @@ fi
 # real XDG_CONFIG_HOME, which this harness does not isolate, and a settings test
 # has no business editing the machine's push-to-talk key. save_conf, the menu and
 # the field are covered as units in contrib/discord-ptt-test.sh.
-PTT_ROW=$((6 + NGROUPS))
+PTT_ROW=$((7 + NGROUPS))
 PTT_Y="$(sidebar_entry_y "$PTT_ROW")"
 hl_move "$SIDEBAR_X" "$PTT_Y"; sleep 1
 hl_click "$SIDEBAR_X" "$PTT_Y"; sleep 2

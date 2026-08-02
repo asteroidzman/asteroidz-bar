@@ -39,6 +39,14 @@ trap 'hl_stop' EXIT
 kill "$HL_SWAYBG_PID" 2>/dev/null
 
 WORK="$HL_OUTDIR"
+
+# The bar's own config: which modules it draws is the BAR's setting now, not the
+# compositor's, so a test that wants a particular module has to write it here.
+BAR_CONF="$WORK/bar-config.kdl"
+bar_modules() { # bar_modules <left> <center> <right>
+	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
+		"$1" "$2" "$3" > "$BAR_CONF"
+}
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -55,6 +63,7 @@ bar { enable false; height 48; position "top"; margin { x 8; y 9 }; interval 1
 	panel { enable true; radius 9; padding 12; blur true; shadow true }
 	show-logo false; modules-left ""; modules-center ""; modules-right "battery" }
 EOF
+bar_modules "" "" "battery"
 hl_dispatch "reload_config" 1
 
 # An EMPTY power-supply directory: a desktop, exactly as this machine is.
@@ -68,6 +77,7 @@ start_bar() {
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 		ASTEROIDZ_BAR_BATTERY_DIR="$BATDIR" \
+		ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
 		ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
 		ASTEROIDZ_BAR_QML="$QMLROOT" \
 		"$HERE/bin/asteroidz-bar" > "$WORK/qs$1.log" 2>&1 &

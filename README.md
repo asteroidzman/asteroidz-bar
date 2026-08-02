@@ -41,16 +41,48 @@ One unix socket, newline-delimited JSON, the same one `amsg` uses
 `watch bar-config` is the interesting one. The compositor resolves `bar {}` and
 `theme {}` — defaults, clamping, and the matugen palette that is rewritten
 whenever the wallpaper changes — and serves the **result**. The shell never
-parses KDL: a second reader would agree with the first until one of them gained
-a default, and it would still not see a palette written after startup.
+parses that KDL: a second reader would agree with the first until one of them
+gained a default, and it would still not see a palette written after startup.
+
+## Its own config
+
+`~/.config/asteroidz-bar/config.kdl` (or `$ASTEROIDZ_BAR_CONFIG`) — which
+modules the bar draws, in which section, in what order, and on which output:
+
+```kdl
+modules {
+	left   items="tags,layout,title" monitor=""
+	center items="media,clock"       monitor="DP-1"
+	right  items="volume,power"      monitor=""
+}
+```
+
+That is the **bar's** business, not the compositor's — it draws none of it and
+cannot. It used to arrive over `bar-config` for one historical reason: the
+compositor used to draw the bar itself, so its config described one. What still
+comes across the socket is what is genuinely compositor state — the palette, the
+tags, the layout, the focused window — plus the geometry the compositor has to
+agree with because it reserves the space.
+
+KDL, so there is one config language on this desktop rather than two, but a
+deliberately narrow slice of it: one node per section carrying properties.
+There is no KDL parser in QML, and writing a general one to store three lists
+and three strings would be a parser to maintain forever. What it writes is
+valid KDL that the compositor's own parser reads back. Anything else in the
+file is ignored rather than rejected, and a line it cannot make sense of leaves
+that section at its default — a config file is not worth a bar that refuses to
+draw.
+
+Edit it by hand, or use the settings window's **Modules** page, which applies
+as you change it. `monitor=""` is every screen.
 
 ## Settings
 
 The **asteroidz ship** on the bar — the chip leading the tags — opens a real
 window with every configuration option the compositor accepts: 95 of them, each with the compositor's own
 one-line explanation, grouped, searchable, and showing which file the current
-value came from — plus the monitors, the wallpaper, the window rules, the
-keybinds, the palette and push-to-talk.
+value came from — plus the monitors, the wallpaper, the modules, the window
+rules, the keybinds, the palette and push-to-talk.
 
 There used to be a separate `display` pill for this, opening a popover that held
 the monitors and the wallpaper with a button in its corner leading here. Both of
@@ -343,6 +375,24 @@ rendered or any post-hook fires, so the attempt that fails has changed nothing.
 
 matugen's stderr is captured either way, so a failure that is *not* about the
 format says what it was instead of only naming an exit code.
+
+### Modules
+
+Which modules the bar draws, in which section, in what order, and on which
+screen. Arrows reorder within a section, a picker moves one between sections,
+and anything not currently placed sits under **Not shown** to be added back.
+
+Applied as you change it, like the Wallpaper page and for the same reason: the
+only way to arrange a bar is to see it. There is no Apply here.
+
+It writes the bar's own config file, not the compositor's — see
+[Its own config](#its-own-config). A module can only be in one section at a
+time, which is why the unplaced list is a difference rather than a full list
+with some entries greyed out.
+
+Arrows rather than drag-and-drop: a drag needs a drop target for every gap
+between rows *and* for the two other sections, while an arrow that moves one
+place is unambiguous about what it did.
 
 ### Layouts
 
@@ -743,7 +793,11 @@ contrib/battery-test.sh    # the battery module, against a fake sysfs: absent on
 contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included,
                            #   and one per monitor against a second output the
                            #   compositor is asked to create mid-test
-contrib/tray-test.sh       # the tray, on a private D-Bus session
+contrib/tray-test.sh       # the tray, on a private D-Bus session, against
+                           #   contrib/snitem -- a stand-in StatusNotifierItem,
+                           #   so the answer does not depend on whether Steam
+                           #   happened to be running. Build it first:
+                           #   `cd contrib/snitem && make`
 contrib/media-test.sh      # the media module, with a player and no sound
 contrib/notify-test.sh     # the bell, against a stubbed swaync
 contrib/click-test.sh      # what the bar DOES when clicked: popovers open and
@@ -765,8 +819,10 @@ contrib/settings-test.sh   # the settings window: the pill opens it on Displays,
                            #   unapplied preview, the Displays page stages and
                            #   its Apply commits, the Wallpaper page writes as
                            #   you type, the rule, bind and tag editors add
-                           #   through to the config file, and Rebind… reaches
-                           #   the push-to-talk bridge
+                           #   through to the config file, the Modules page
+                           #   builds and every module it offers can actually
+                           #   be drawn, and Rebind… reaches the push-to-talk
+                           #   bridge
 contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
 contrib/dynwall-test.sh    # Apple dynamic wallpapers: the schedule parser
                            #   against synthesised plists, and frame extraction

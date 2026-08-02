@@ -13,6 +13,7 @@ ColorField 1.0 ColorField.qml
 SmallButton 1.0 SmallButton.qml
 DisplaysPage 1.0 DisplaysPage.qml
 WallpaperPage 1.0 WallpaperPage.qml
+ModulesPage 1.0 ModulesPage.qml
 LayoutsPage 1.0 LayoutsPage.qml
 TagCard 1.0 TagCard.qml
 RulesPage 1.0 RulesPage.qml

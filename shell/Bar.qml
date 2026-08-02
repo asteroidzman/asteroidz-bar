@@ -365,8 +365,11 @@ PanelWindow {
             bar: root
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            list: Cfg.modulesLeft
-            monitorFilter: Cfg.leftMonitor
+            // The bar's own config, not the compositor's: which modules
+            // it draws is the bar's business and the compositor draws
+            // none of it.
+            list: BarConfig.itemsOf("left").join(",")
+            monitorFilter: BarConfig.monitorOf("left")
             screenName: root.screenName
         }
 
@@ -375,8 +378,8 @@ PanelWindow {
             bar: root
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: parent.verticalCenter
-            list: Cfg.modulesCenter
-            monitorFilter: Cfg.centerMonitor
+            list: BarConfig.itemsOf("center").join(",")
+            monitorFilter: BarConfig.monitorOf("center")
             screenName: root.screenName
         }
 
@@ -385,8 +388,8 @@ PanelWindow {
             bar: root
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            list: Cfg.modulesRight
-            monitorFilter: Cfg.rightMonitor
+            list: BarConfig.itemsOf("right").join(",")
+            monitorFilter: BarConfig.monitorOf("right")
             screenName: root.screenName
         }
     }
