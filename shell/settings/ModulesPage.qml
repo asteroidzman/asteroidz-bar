@@ -104,10 +104,45 @@ Item {
                     font.hintingPreference: Font.PreferFullHinting
                 }
 
-                FormRow {
-                    label: "Shown on"
-                    width: parent.width
-                    control: Picker {
+                // NOT a FormRow. FormRow does `control.parent = root`, which is
+                // fine at the top level and a trap in a delegate: the control is
+                // reparented out of the delegate that made it, so it draws over
+                // whatever is above -- here, straight on top of the section
+                // heading -- and it outlives the delegate with a dead JS
+                // context, which is why picking a monitor did nothing. The
+                // label and the control are anchored directly instead, the way
+                // RuleFieldRow and BindCard's LabeledRow both do.
+                Item {
+                    width: sec.width
+                    // Follows the picker, which expands IN PLACE rather than
+                    // opening a popup -- a dropdown hanging past this surface's
+                    // edge would be clipped away by it. A fixed height here
+                    // means the list opens into a box that cannot hold it and
+                    // nothing appears to happen.
+                    height: Math.max(Math.max(28, Math.round(Cfg.fontPixelSize * 1.6)),
+                                     shownPick.implicitHeight)
+                    z: shownPick.open ? 10 : 0
+
+                    Text {
+                        id: shownLabel
+                        anchors.left: parent.left
+                        anchors.right: shownPick.left
+                        anchors.rightMargin: Cfg.spacing
+                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
+                        text: "Shown on"
+                        color: Cfg.fg
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Cfg.fontSize
+                        font.hintingPreference: Font.PreferFullHinting
+                    }
+
+                    Picker {
+                        id: shownPick
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        width: Math.max(Math.round(Cfg.fontPixelSize * 8),
+                                        Math.round(parent.width * 0.42))
                         values: page.monitorValues()
                         current: page.monitorLabel(BarConfig.monitorOf(sec.modelData))
                         onPicked: v => BarConfig.setMonitor(sec.modelData,
@@ -134,14 +169,19 @@ Item {
                         required property string modelData
                         required property int index
                         width: sec.width
-                        height: Math.max(28, Math.round(Cfg.fontPixelSize * 1.7))
+                        // Same as the row above: the section picker expands in
+                        // place, so this has to make room for it.
+                        readonly property int lineHeight:
+                            Math.max(28, Math.round(Cfg.fontPixelSize * 1.7))
+                        height: Math.max(lineHeight, sectionPick.implicitHeight)
+                        z: sectionPick.open ? 10 : 0
                         radius: Cfg.themeRadius
                         color: Qt.rgba(1, 1, 1, 0.05)
 
                         Text {
                             anchors.left: parent.left
                             anchors.leftMargin: Cfg.spacing
-                            anchors.verticalCenter: parent.verticalCenter
+                            y: (row.lineHeight - height) / 2
                             text: (row.index + 1) + ".  " + row.modelData
                             color: Cfg.fg
                             font.family: Cfg.fontFamily
@@ -152,7 +192,7 @@ Item {
                         Row {
                             anchors.right: parent.right
                             anchors.rightMargin: Cfg.spacing
-                            anchors.verticalCenter: parent.verticalCenter
+                            y: (row.lineHeight - implicitHeight) / 2
                             spacing: 4
 
                             // Order within the section. Buttons rather than
@@ -177,6 +217,7 @@ Item {
                             // one section says nothing about position in
                             // another.
                             Picker {
+                                id: sectionPick
                                 width: Math.round(Cfg.fontPixelSize * 6)
                                 values: BarConfig.sectionIds
                                 current: sec.modelData

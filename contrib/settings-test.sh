@@ -88,7 +88,7 @@ setsid dbus-run-session -- \
 	HOME="$HOME" PATH="$PATH" \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 	ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
-	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
+	ASTEROIDZ_BAR_SHELL="${PROBE_SHELL:-$HERE/shell}/shell.qml" \
 	ASTEROIDZ_BAR_QML="$QMLROOT" \
 	ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
 	"$HERE/bin/asteroidz-bar" > "$WORK/qs.log" 2>&1 &
@@ -1444,6 +1444,47 @@ if grep -qE "TypeError|is not iterable|is not a function" "$WORK/qs.log"; then
 		| sed 's/^/       /'
 else
 	ok "the modules page builds without a QML error"
+fi
+
+# ── the page actually DOES something ────────────────────────────────────────
+#
+# Rendering was the only thing checked here, and rendering is the half that was
+# never broken. Every control on this page was dead on arrival: the monitor row
+# was a FormRow, which does `control.parent = root` -- fine at the top level, a
+# trap in a delegate, because the control is reparented out of the delegate that
+# made it and outlives it with a dead JS context. It drew on top of the section
+# heading, its handler never fired, and it took the rest of the delegate with
+# it. An "is it populated" assertion passes through all of that.
+#
+# So: click something, and look at the FILE. That is the only evidence that
+# survives -- the page applies as you change it, so a write is the whole of what
+# a click is supposed to do.
+#
+# The chips under "Not shown" are the lowest controls on the page and the
+# easiest to hit without pixel-hunting for a glyph. Clicking one places that
+# module in the right section.
+BEFORE_RIGHT="$(grep -E '^\s*right ' "$BAR_CONF" | head -1)"
+read -r CHIP_X CHIP_Y <<<"$(lowest_button modules)"
+if [ "${CHIP_X:-0}" -gt 0 ]; then
+	hl_move "$CHIP_X" "$CHIP_Y"; sleep 1
+	hl_click "$CHIP_X" "$CHIP_Y"; sleep 2
+	AFTER_RIGHT="$(grep -E '^\s*right ' "$BAR_CONF" | head -1)"
+	if [ "$AFTER_RIGHT" != "$BEFORE_RIGHT" ]; then
+		ok "clicking an unplaced module writes it into the config"
+	else
+		bad "clicking an unplaced module writes it into the config (still $AFTER_RIGHT)"
+	fi
+	# And the page redraws from the file rather than from a copy beside it.
+	shot modules-after
+	MOD_INK2="$(ink modules-after "$((WX + 12 + 450 + 12))" "$((WY + 120))" \
+		"$((WX + WW))" "$((WY + WH))")"
+	if [ "${MOD_INK2:-0}" -gt 2000 ]; then
+		ok "...and the page is still drawn afterwards (${MOD_INK2} ink px)"
+	else
+		bad "...and the page is still drawn afterwards (${MOD_INK2} ink px)"
+	fi
+else
+	bad "an unplaced module chip was found to click"
 fi
 
 # ── the offered module names agree with what can be drawn ───────────────────
