@@ -26,7 +26,7 @@ optdepends=(
   'cava: the media visualiser'
   'swaync: the notification bell'
   'pipewire: the volume module'
-  'grim: contrib/parity.sh and contrib/tray-test.sh'
+  'grim: contrib/tray-test.sh'
 )
 # The released tag, not the local checkout. This is the same shape asteroidz's
 # PKGBUILD has, and it is what makes the package publishable to the AUR at all:
