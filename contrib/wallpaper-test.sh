@@ -58,13 +58,12 @@ trap 'hl_stop' EXIT
 
 WORK="$HL_OUTDIR"
 
-# The bar's own config: which modules it draws is the BAR's setting now, not the
-# compositor's, so a test that wants a particular module has to write it here.
-BAR_CONF="$WORK/bar-config.kdl"
-bar_modules() { # bar_modules <left> <center> <right>
-	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
-		"$1" "$2" "$3" > "$BAR_CONF"
-}
+# How the bar looks is the bar's own setting now; a test writes it here.
+# shellcheck disable=SC1091
+. "$HERE/contrib/lib/barconf.sh"
+BAR_CONF="$(bar_conf_path)"
+# Nothing on the bar: this suite is about the wallpaper behind it.
+bar_conf "" "" ""
 
 # The module, laid out the way an import path expects.
 QMLROOT="$WORK/qml"

@@ -7,9 +7,9 @@ pragma Singleton
 // that can hold an idle timer and dispatch to it. A separate daemon between the
 // two was only ever translating one into the other, with its own config file
 // and a set of timeouts nothing else in the desktop could read. The timeouts
-// live in the compositor's config now (`bar { idle { … } }`) and arrive here
-// over `watch bar-config`, so changing one is a reload rather than a restart of
-// something else.
+// live in the bar's own config now (`idle { … }` in
+// ~/.config/asteroidz-bar/config.kdl), watched for changes, so editing one
+// takes effect without restarting anything.
 //
 // Each action is its OWN monitor rather than a chain of stages. They are
 // independent timeouts -- screen off at ten minutes, suspend at thirty means
@@ -37,19 +37,27 @@ import "."
 Singleton {
     id: root
 
-    readonly property var cfg: Cfg.idle
+    // A property READ, not an accessor call: a QML binding tracks properties,
+    // so binding straight to BarConfig.numOf(...) would evaluate once, before
+    // the config file has been read, and stay there. See the note in Cfg.qml.
+    readonly property var cfg: BarConfig.groups.idle || ({})
+
     readonly property bool enabled: Cfg.flag(cfg, "enable", false)
 
-    readonly property int dpmsTimeout: Cfg.num(cfg, "dpms_timeout", 0)
-    readonly property int lockTimeout: Cfg.num(cfg, "lock_timeout", 0)
-    readonly property int suspendTimeout: Cfg.num(cfg, "suspend_timeout", 0)
+    readonly property int dpmsTimeout: Cfg.num(cfg, "dpms-timeout", 0)
+    readonly property int lockTimeout: Cfg.num(cfg, "lock-timeout", 0)
+    readonly property int suspendTimeout:
+        Cfg.num(cfg, "suspend-timeout", 0)
     readonly property bool lockBeforeSuspend:
-        Cfg.flag(cfg, "lock_before_suspend", false)
+        Cfg.flag(cfg, "lock-before-suspend", false)
     readonly property bool respectInhibitors:
-        Cfg.flag(cfg, "respect_inhibitors", true)
-    readonly property string lockCommand: Cfg.strOrEmpty(cfg, "lock_command", "")
-    readonly property string onIdleCommand: Cfg.strOrEmpty(cfg, "on_idle", "")
-    readonly property string onResumeCommand: Cfg.strOrEmpty(cfg, "on_resume", "")
+        Cfg.flag(cfg, "respect-inhibitors", true)
+    readonly property string lockCommand:
+        Cfg.strOrEmpty(cfg, "lock-command", "")
+    readonly property string onIdleCommand:
+        Cfg.strOrEmpty(cfg, "on-idle", "")
+    readonly property string onResumeCommand:
+        Cfg.strOrEmpty(cfg, "on-resume", "")
 
     // Whether any of this would actually happen: the feature is on and at
     // least one timeout is set. What the idle pill shows itself on -- a "keep

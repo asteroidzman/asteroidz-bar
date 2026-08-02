@@ -44,13 +44,10 @@ trap 'hl_stop' EXIT
 
 WORK="$HL_OUTDIR"
 
-# The bar's own config: which modules it draws is the BAR's setting now, not the
-# compositor's, so a test that wants a particular module has to write it here.
-BAR_CONF="$WORK/bar-config.kdl"
-bar_modules() { # bar_modules <left> <center> <right>
-	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
-		"$1" "$2" "$3" > "$BAR_CONF"
-}
+# How the bar looks is the bar's own setting now; a test writes it here.
+# shellcheck disable=SC1091
+. "$HERE/contrib/lib/barconf.sh"
+BAR_CONF="$(bar_conf_path)"
 
 # The C++ plugin the shell imports as `Asteroidz.Bar`, staged where quickshell
 # will find it. Without this the shell does not merely lose the plugin -- it
@@ -116,11 +113,10 @@ PRISTINE="$WORK/config.pristine.kdl"
 cp "$HL_CONFIG" "$PRISTINE"
 cp "$PRISTINE" "$HL_CONFIG"
 cat >> "$HL_CONFIG" <<'EOF'
-bar { enable false; height 48; position "top"; margin { x 8; y 9 }
-	panel { enable true; radius 9; padding 12 }
-	modules-left ""; modules-center ""; modules-right "tray" }
 EOF
-bar_modules "" "" "tray"
+bar_conf "" "" "tray" <<EOF
+$(bar_conf_panel)
+EOF
 hl_dispatch "reload_config" 1
 
 dbus-run-session -- "$WORK/run.sh" "$WORK" "$SNITEM" "$HERE" "$HL_SIG" \

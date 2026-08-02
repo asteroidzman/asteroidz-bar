@@ -52,13 +52,10 @@ kill "$HL_SWAYBG_PID" 2>/dev/null
 
 WORK="$HL_OUTDIR"
 
-# The bar's own config: which modules it draws is the BAR's setting now, not the
-# compositor's, so a test that wants a particular module has to write it here.
-BAR_CONF="$WORK/bar-config.kdl"
-bar_modules() { # bar_modules <left> <center> <right>
-	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
-		"$1" "$2" "$3" > "$BAR_CONF"
-}
+# How the bar looks is the bar's own setting now; a test writes it here.
+# shellcheck disable=SC1091
+. "$HERE/contrib/lib/barconf.sh"
+BAR_CONF="$(bar_conf_path)"
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -69,14 +66,14 @@ asleep() { # asleep -> true/false for the harness monitor
 		| jq -r --arg m "$HL_MON" '.monitors[] | select(.name==$m) | .asleep'
 }
 
-cat >> "$HL_CONFIG" <<'EOF'
-bar { enable false
-	idle { enable true; dpms-timeout 3 } }
+# Three seconds to DPMS, so the test does not sit for ten minutes. Nothing on
+# the bar itself: this suite is about the idle service, not about drawing.
+bar_conf "" "" "" <<'EOF'
+idle { enable #true; dpms-timeout 3 }
 EOF
-hl_dispatch "reload_config" 1
 
 # The bar, with nothing else running: no swayidle, no session daemon.
-dbus-run-session -- \
+setsid dbus-run-session -- \
 	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 	HOME="$HOME" PATH="$PATH" \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
@@ -117,13 +114,17 @@ else
 	bad "and brings it back on input (got '$(asleep)')"
 fi
 
-# Turning it off is a reload, not a restart: the same running bar must stop
+# Turning it off is a re-read, not a restart: the same running bar must stop
 # acting on the timeout. This is the half that a "does it fire" test misses,
 # and the half a person hits first when they try the setting out.
-cp "$HL_CONFIG" "$WORK/config.idle.kdl"
-sed -i 's/idle { enable true; dpms-timeout 3 }/idle { enable false; dpms-timeout 3 }/' \
-	"$HL_CONFIG"
-hl_dispatch "reload_config" 1
+#
+# The file is the BAR's own now, and it watches it -- so there is no reload to
+# dispatch and nothing to tell. Writing it is the whole of the change, which is
+# a stronger claim than the compositor-reload version made.
+bar_conf "" "" "" <<'EOF'
+idle { enable #false; dpms-timeout 3 }
+EOF
+sleep 2
 "$HL_WLVKBD" press SPACE >/dev/null 2>&1
 sleep 6
 if [ "$(asleep)" = "false" ]; then

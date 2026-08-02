@@ -35,7 +35,9 @@ Row {
     // bar width. The pill is gone; `display` in a module list now resolves to
     // nothing, which ModuleLoader says once and loudly.
     Pill {
-        visible: Cfg.showLogo
+        // Always drawn. It is not decoration: it is how the settings window is
+        // opened, so a bar without it is a bar with no way into its own
+        // configuration. There was a `show-logo` option; there is not one now.
         // Recoloured at runtime so the exhaust burns in the theme's accent --
         // see Logo.qml, and the note in the SVG itself.
         icons: [Logo.source]

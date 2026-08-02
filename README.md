@@ -33,16 +33,22 @@ One unix socket, newline-delimited JSON, the same one `amsg` uses
 
 | subscription | what it carries |
 |---|---|
-| `watch bar-config` | the resolved geometry, palette and module lists |
+| `watch bar-config` | the resolved theme: the palette, the font, border and corner metrics |
 | `watch all-tags` | per-output tag occupancy and selection |
 | `watch focused-client` | the focused window's title and app id |
 | `watch all-monitors` | layout, geometry, per-output state |
 
-`watch bar-config` is the interesting one. The compositor resolves `bar {}` and
-`theme {}` — defaults, clamping, and the matugen palette that is rewritten
-whenever the wallpaper changes — and serves the **result**. The shell never
-parses that KDL: a second reader would agree with the first until one of them
-gained a default, and it would still not see a palette written after startup.
+`watch bar-config` used to carry this bar's whole appearance — sixty-two values
+the compositor stored, clamped, described and served, and never once read. They
+were there because the compositor used to *draw* the bar. They live in [the
+bar's own config](#its-own-config) now.
+
+What is left is the part that is genuinely the compositor's. The theme is
+shared — titlebars, the overview and this bar all draw from it — and the
+compositor is the only process that knows what it currently *is*, because
+matugen rewrites it whenever the wallpaper changes. Being handed the file path
+instead would mean two KDL readers that agree until one of them gains a
+default, and it still would not see a palette written after startup.
 
 ## Its own config
 
@@ -837,7 +843,6 @@ contrib/discord-ptt-test.sh # the push-to-talk bridge: the app id resolves, the
                            #   portal offers the signals, and the rebind path
                            #   writes what it claims to (sandboxed XDG, no
                            #   compositor, no Discord)
-contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
 
 ### The wallpaper browser

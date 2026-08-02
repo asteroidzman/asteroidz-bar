@@ -41,13 +41,10 @@ kill "$HL_SWAYBG_PID" 2>/dev/null
 
 WORK="$HL_OUTDIR"
 
-# The bar's own config: which modules it draws is the BAR's setting now, not the
-# compositor's, so a test that wants a particular module has to write it here.
-BAR_CONF="$WORK/bar-config.kdl"
-bar_modules() { # bar_modules <left> <center> <right>
-	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
-		"$1" "$2" "$3" > "$BAR_CONF"
-}
+# How the bar looks is the bar's own setting now; a test writes it here.
+# shellcheck disable=SC1091
+. "$HERE/contrib/lib/barconf.sh"
+BAR_CONF="$(bar_conf_path)"
 # The guard headless.sh cannot make for us: if the instance did not come up,
 # every `hl_get` below answers nothing and every assertion "passes" against an
 # empty string. An earlier run of the sibling script did exactly that -- a stale
@@ -69,11 +66,12 @@ printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WORK" "$WORK/wall.png" \
 # it sits at a position this script can compute rather than hunt for.
 cat >> "$HL_CONFIG" <<'EOF'
 theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
-bar { enable false; height 48; position "top"; margin { x 8; y 9 }
-	panel { enable true; radius 9; padding 12; blur true; shadow true }
-	show-logo true; modules-left "tags"; modules-center ""; modules-right "" }
+// A hand-written line the writer must leave exactly as it found it.
+misc { border_radius 9 }
 EOF
-bar_modules "tags" "" ""
+bar_conf "tags" "" "" <<EOF
+$(bar_conf_panel)
+EOF
 hl_dispatch "reload_config" 1
 sleep 1
 
@@ -85,7 +83,7 @@ sleep 1
 # rule would test the rule instead of the window.
 CONFIG_BEFORE="$(cat "$HL_CONFIG")"
 
-dbus-run-session -- \
+setsid dbus-run-session -- \
 	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 	HOME="$HOME" PATH="$PATH" \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
@@ -1172,9 +1170,13 @@ else
 	"$REPO/build/asteroidz" -p -c "$HL_CONFIG" 2>&1 | head -5 | sed 's/^/       /'
 fi
 
-# A hand-written comment above a setting is the reason the writer edits bytes
-# instead of round-tripping the document, so check one survived.
-if grep -q 'modules-left "tags"' "$HL_CONFIG"; then
+# A hand-written line, and the comment above it, are the reason the writer edits
+# bytes instead of round-tripping the document -- so check they survived. It is
+# also at a NON-canonical path (`misc { border_radius }`, whose canonical
+# spelling is a bare top-level node), which is the shape that a writer assuming
+# canonical paths would silently duplicate rather than edit in place.
+if grep -q 'misc { border_radius 9 }' "$HL_CONFIG" \
+   && grep -q 'the writer must leave exactly as it found it' "$HL_CONFIG"; then
 	ok "the rest of the file is intact"
 else
 	bad "the rest of the file is intact"

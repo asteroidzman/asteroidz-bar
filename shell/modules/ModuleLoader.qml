@@ -31,11 +31,11 @@ Row {
     readonly property string customName:
         isCustom ? module.slice("custom/".length) : ""
 
-    // The `custom "<name>" { }` block, matched by name out of what the
-    // compositor served. A name with no block is a typo in modules-* and
-    // loads nothing.
+    // The `custom "<name>" { }` block, matched by name out of the bar's own
+    // config. A name with no block is a typo in the modules list and loads
+    // nothing.
     readonly property var plugin: {
-        for (const c of Cfg.custom)
+        for (const c of BarConfig.custom)
             if (c.name === customName)
                 return c;
         return null;
@@ -222,6 +222,13 @@ Row {
     Connections {
         target: Cfg
         function onLoadedChanged() { root.checkName(); }
+    }
+    // `custom` moved to BarConfig with the rest of the bar's own settings, and
+    // a Connections block whose target no longer HAS the property does not
+    // fail -- it warns once and then never fires, so a plugin that arrived
+    // late simply never appeared.
+    Connections {
+        target: BarConfig
         function onCustomChanged() { root.checkName(); }
     }
 }

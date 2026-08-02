@@ -42,13 +42,10 @@ kill "$HL_SWAYBG_PID" 2>/dev/null
 
 WORK="$HL_OUTDIR"
 
-# The bar's own config: which modules it draws is the BAR's setting now, not the
-# compositor's, so a test that wants a particular module has to write it here.
-BAR_CONF="$WORK/bar-config.kdl"
-bar_modules() { # bar_modules <left> <center> <right>
-	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
-		"$1" "$2" "$3" > "$BAR_CONF"
-}
+# How the bar looks is the bar's own setting now; a test writes it here.
+# shellcheck disable=SC1091
+. "$HERE/contrib/lib/barconf.sh"
+BAR_CONF="$(bar_conf_path)"
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -147,15 +144,14 @@ chmod +x "$MG_BIN"
 
 cat >> "$HL_CONFIG" <<'EOF'
 theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
-bar { enable false; height 48; position "top"; margin { x 8; y 9 }
-	panel { enable true; radius 9; padding 12; blur true; shadow true }
-	show-logo true; modules-left "tags"; modules-center ""; modules-right "" }
 EOF
-bar_modules "tags" "" ""
+bar_conf "tags" "" "" <<EOF
+$(bar_conf_panel)
+EOF
 hl_dispatch "reload_config" 1
 sleep 1
 
-dbus-run-session -- \
+setsid dbus-run-session -- \
 	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 	HOME="$HOME" PATH="$PATH" \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \

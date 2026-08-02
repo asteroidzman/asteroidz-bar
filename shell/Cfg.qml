@@ -15,18 +15,29 @@ pragma Singleton
 
 import Quickshell
 import QtQuick
+// Explicit, and load-bearing. Without it `BarConfig` resolves through QML's
+// implicit same-directory import, which builds its own instance rather than
+// using the one qmldir registers as a singleton -- so this file read an empty
+// config that nothing ever populated, while every other file saw the real one.
+// Silent: two objects of the same type, one of them never loaded.
+import "."
 
 Singleton {
     id: root
 
-    // Live values, replaced wholesale on every update.
-    property var bar: ({})
-    property var panel: ({})
-    property var popover: ({})
+    // The bar's own settings, read from its own config file. PROPERTIES, not
+    // accessor calls: a QML binding tracks property READS, so a binding whose
+    // expression is only a function call has nothing to depend on and
+    // evaluates exactly once -- before the file has been read, leaving every
+    // value at its default for the life of the process. That is not
+    // theoretical; it is what the first version of this did.
+    readonly property var bar: BarConfig.groups.bar || ({})
+    readonly property var panel: BarConfig.groups.panel || ({})
+    readonly property var popover: BarConfig.groups.popover || ({})
+
+    // The theme is still the compositor's: matugen rewrites it at runtime, and
+    // titlebars and the overview draw from the same palette.
     property var theme: ({})
-    property var custom: []
-    // Idle timeouts and actions, carried out by IdleService.
-    property var idle: ({})
     property bool loaded: false
 
     function num(obj, key, fallback) {
@@ -53,7 +64,7 @@ Singleton {
 
     // Booleans need their own reader, and skipping it costs more than it looks.
     //
-    // The compositor sends real JSON booleans, and `num(bar, "show_all_tags",
+    // The compositor sends real JSON booleans, and `num(bar, "show-all-tags",
     // 0) !== 0` evaluates `false !== 0`, which in JavaScript is TRUE -- strict
     // inequality between a boolean and a number is always true. Every flag read
     // that way inverted itself whenever the answer was `false`, which is how a
@@ -80,14 +91,14 @@ Singleton {
     readonly property int height: num(bar, "height", 48)
     readonly property bool bottom: str(bar, "position", "top") === "bottom"
     readonly property int spacing: num(bar, "spacing", 8)
-    readonly property int marginX: num(bar, "margin_x", 8)
-    readonly property int marginY: num(bar, "margin_y", 9)
-    readonly property int pillMinWidth: num(bar, "pill_min_width", 28)
-    readonly property int pillInset: num(bar, "pill_inset", 6)
-    readonly property int pillPadding: num(bar, "pill_padding", 6)
-    readonly property int tagPadding: num(bar, "tag_padding", 16)
-    readonly property int moduleSpacing: num(bar, "module_spacing", 12)
-    readonly property int traySpacing: num(bar, "tray_spacing", 24)
+    readonly property int marginX: num(bar, "margin-x", 8)
+    readonly property int marginY: num(bar, "margin-y", 9)
+    readonly property int pillMinWidth: num(bar, "pill-min-width", 28)
+    readonly property int pillInset: num(bar, "pill-inset", 6)
+    readonly property int pillPadding: num(bar, "pill-padding", 6)
+    readonly property int tagPadding: num(bar, "tag-padding", 16)
+    readonly property int moduleSpacing: num(bar, "module-spacing", 12)
+    readonly property int traySpacing: num(bar, "tray-spacing", 24)
 
     // ── panel ───────────────────────────────────────────────────────────────
     readonly property bool panelEnable: flag(panel, "enable", true)
@@ -95,11 +106,11 @@ Singleton {
     readonly property int panelPadding: num(panel, "padding", 12)
     readonly property bool panelBlur: flag(panel, "blur", true)
     readonly property bool panelShadow: flag(panel, "shadow", true)
-    readonly property int panelShadowSize: num(panel, "shadow_size", 14)
-    readonly property real panelShadowBlur: num(panel, "shadow_blur", 14.0)
+    readonly property int panelShadowSize: num(panel, "shadow-size", 14)
+    readonly property real panelShadowBlur: num(panel, "shadow-blur", 14.0)
     readonly property color panelColor: col(panel, "color",
                                             Qt.rgba(0.039, 0.039, 0.047, 0.85))
-    readonly property color panelShadowColor: col(panel, "shadow_color",
+    readonly property color panelShadowColor: col(panel, "shadow-color",
                                                   Qt.rgba(0, 0, 0, 0.70))
 
     // ── theme ───────────────────────────────────────────────────────────────
@@ -232,39 +243,40 @@ Singleton {
     readonly property real fontPixelSize: fontSize * 96.0 / 72.0
 
     // ── module lists ────────────────────────────────────────────────────────
-    readonly property string modulesLeft: strOrEmpty(bar, "modules_left", "tags,layout,title")
-    readonly property string modulesCenter: strOrEmpty(bar, "modules_center", "clock")
-    readonly property string modulesRight: strOrEmpty(bar, "modules_right", "")
-    readonly property string leftMonitor: strOrEmpty(bar, "modules_left_monitor", "")
-    readonly property string centerMonitor: strOrEmpty(bar, "modules_center_monitor", "")
-    readonly property string rightMonitor: strOrEmpty(bar, "modules_right_monitor", "")
 
-    readonly property string clockFormat: str(bar, "clock_format", "%H:%M:%S")
-    readonly property string iconDir: str(bar, "icon_dir", "")
-    readonly property int titleWidth: num(bar, "title_width", 320)
-    readonly property bool showAllTags: flag(bar, "show_all_tags", false)
-    readonly property int minTags: num(bar, "min_tags", 3)
-    readonly property bool showLogo: flag(bar, "show_logo", true)
-    readonly property int tagIcons: num(bar, "tag_icons", 3)
+    readonly property string clockFormat: str(bar, "clock-format", "%H:%M:%S")
+    // Where the icons live. The compositor's package installs them and used to
+    // serve this path along with everything else; the default is the same
+    // search list it built, so an unconfigured bar still finds the ship and the
+    // tag glyphs. Without it every Icon resolves to nothing and the bar draws
+    // text where the artwork should be -- silently, because a missing icon is
+    // also how an intentionally blank one looks.
+    readonly property string iconDir: str(bar, "icon-dir",
+        "/usr/share/asteroidz/bar-icons:"
+        + Quickshell.env("HOME") + "/.local/share:/usr/share")
+    readonly property int titleWidth: num(bar, "title-width", 320)
+    readonly property bool showAllTags: flag(bar, "show-all-tags", false)
+    readonly property int minTags: num(bar, "min-tags", 3)
+    readonly property int tagIcons: num(bar, "tag-icons", 3)
     readonly property int interval: num(bar, "interval", 2)
-    readonly property int volumeStep: num(bar, "volume_step", 5)
-    readonly property real netMaxDown: num(bar, "net_max_down", 0)
-    readonly property real netMaxUp: num(bar, "net_max_up", 0)
-    readonly property int mediaWidth: num(bar, "media_width", 280)
-    readonly property int mediaBars: num(bar, "media_bars", 6)
-    readonly property int mediaFps: num(bar, "media_fps", 20)
-    readonly property bool mediaViz: num(bar, "media_viz", 1) !== 0
-    readonly property int weatherInterval: num(bar, "weather_interval", 15)
+    readonly property int volumeStep: num(bar, "volume-step", 5)
+    readonly property real netMaxDown: num(bar, "net-max-down", 0)
+    readonly property real netMaxUp: num(bar, "net-max-up", 0)
+    readonly property int mediaWidth: num(bar, "media-width", 280)
+    readonly property int mediaBars: num(bar, "media-bars", 6)
+    readonly property int mediaFps: num(bar, "media-fps", 20)
+    readonly property bool mediaViz: num(bar, "media-viz", 1) !== 0
+    readonly property int weatherInterval: num(bar, "weather-interval", 15)
 
     // ── popover ─────────────────────────────────────────────────────────────
     readonly property int popoverWidth: num(popover, "width", 340)
-    readonly property int popoverRowHeight: num(popover, "row_height", 34)
+    readonly property int popoverRowHeight: num(popover, "row-height", 34)
     readonly property int popoverSpacing: num(popover, "spacing", 2)
     readonly property int popoverPadding: num(popover, "padding", 12)
     readonly property int popoverGap: num(popover, "gap", 6)
     readonly property color popoverColor: col(popover, "color",
                                               Qt.rgba(0.039, 0.039, 0.047, 0.95))
-    readonly property string weatherLocation: str(bar, "weather_location", "")
+    readonly property string weatherLocation: str(bar, "weather-location", "")
 
     function modules(list) {
         return list.split(",").map(s => s.trim()).filter(s => s.length > 0);
@@ -342,12 +354,7 @@ Singleton {
 
     Component.onCompleted: {
         Ipc.watch("watch bar-config", obj => {
-            if (obj.bar) root.bar = obj.bar;
-            if (obj.panel) root.panel = obj.panel;
-            if (obj.popover) root.popover = obj.popover;
             if (obj.theme) root.theme = obj.theme;
-            if (obj.custom) root.custom = obj.custom;
-            if (obj.idle) root.idle = obj.idle;
             root.loaded = true;
         });
     }
