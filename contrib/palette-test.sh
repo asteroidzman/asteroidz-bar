@@ -57,6 +57,8 @@ MG_BIN="$WORK/matugen-stub"
 MG_CALLS="$WORK/matugen-calls"
 MG_TOML="$WORK/matugen-config.toml"
 MG_OUT="$WORK/colors-out.kdl"
+MG_REJECT="$WORK/matugen-rejects"
+: > "$MG_REJECT"
 
 # A matugen config with somebody else's templates in it, because that is what the
 # page will meet: this file themes rofi and kitty and waybar too, and a page that
@@ -99,6 +101,22 @@ TEMPLATE_BEFORE="$(md5sum "$MG_TEMPLATE" | cut -d' ' -f1)"
 cat > "$MG_BIN" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$MG_CALLS"
+# The formats it refuses, one extension per line, so a test can put the page in
+# front of a wallpaper the tool cannot read. Real matugen refuses by EXTENSION
+# and says so ("The file extension \`."heic"\` was not recognized as an image
+# format"), then panics out of material-colors rather than returning an error --
+# so the stub does the same, down to the exit code.
+if [ -s "$MG_REJECT" ]; then
+	for a in "\$@"; do
+		ext="\${a##*.}"
+		if grep -qx "\$ext" "$MG_REJECT" 2>/dev/null; then
+			printf 'The file extension \`."%s"\` was not recognized as an image format\n' "\$ext" >&2
+			printf 'The application panicked (crashed).\n' >&2
+			printf 'Message:  failed to decode image: Unsupported\n' >&2
+			exit 101
+		fi
+	done
+fi
 for a in "\$@"; do
 	if [ "\$a" = "--dry-run" ]; then
 		printf '{"colors":{'
@@ -297,8 +315,15 @@ fi
 # right-hand column is the first row's. Computing it as "header height plus an
 # intro paragraph" was 21 pixels high and clicked nothing -- and a missed toggle
 # looks exactly like an Apply that refused, which cost a run to tell apart.
-read -r TOGGLE_X TOGGLE_Y <<<"$(python3 - "$WORK/palette.png" "${ACCENT:-#000000}" \
-		"$WX" "$WY" "$WW" "$WH" <<'PY'
+#
+# Re-located from a FRESH screenshot every time it is used, never remembered.
+# Applying puts a status line at the top of the page, which pushes every row
+# below it down by a line -- so a coordinate taken before the first Apply misses
+# by about 27px afterwards, and a missed toggle stages nothing, which makes the
+# Apply that follows inert. That is silent: an Apply that refuses and an Apply
+# that was never clicked leave the same screen.
+find_on_toggle() {
+	python3 - "$1" "${ACCENT:-#000000}" "$WX" "$WY" "$WW" "$WH" <<'PY'
 import sys
 from PIL import Image
 im = Image.open(sys.argv[1]).convert("RGB")
@@ -320,7 +345,8 @@ for y in range(wy + 60, wy + wh - 60):
         break
 print(f"{best[1]} {best[0] + 10}" if best else "0 0")
 PY
-)"
+}
+read -r TOGGLE_X TOGGLE_Y <<<"$(find_on_toggle "$WORK/palette.png")"
 if [ "${TOGGLE_X:-0}" -gt 0 ]; then
 	ok "the first row's ownership toggle was located (${TOGGLE_X},${TOGGLE_Y})"
 else
@@ -339,9 +365,11 @@ hl_click "$TOGGLE_X" "$TOGGLE_Y"; sleep 2
 # plausible button width" found a picker instead and clicked nothing, which reads
 # exactly like an Apply that refused -- three runs of looking at the wrong half of
 # the problem.
-shot palette_changed
-read -r AP_X AP_Y <<<"$(python3 - "$WORK/palette_changed.png" "${ACCENT:-#000000}" \
-		"$WX" "$WY" "$WW" "$WH" <<'PY'
+#
+# Re-located per use, for the same reason the toggle is: the status line that
+# Apply itself produces sits above the button row and moves it.
+find_apply() {
+	python3 - "$1" "${ACCENT:-#000000}" "$WX" "$WY" "$WW" "$WH" <<'PY'
 import sys
 from PIL import Image
 im = Image.open(sys.argv[1]).convert("RGB")
@@ -376,7 +404,9 @@ grp = groups[-1]
 mid = grp[len(grp) // 2]
 print(mid[1], mid[0])
 PY
-)"
+}
+shot palette_changed
+read -r AP_X AP_Y <<<"$(find_apply "$WORK/palette_changed.png")"
 if [ "${AP_X:-0}" -gt 0 ]; then
 	ok "Apply turned accent once there was something to apply (${AP_X},${AP_Y})"
 else
@@ -517,17 +547,97 @@ else
 fi
 # Idempotent: a second Apply must not add a second entry rendering the same
 # template twice.
+#
+# Both coordinates are taken again here. The first Apply put a status line above
+# the button row and moved everything under it, so the ones from before it are
+# stale -- and this assertion cannot see the difference, because a count that
+# does not grow is also what a click into empty space produces. It was passing
+# for that reason.
 BEFORE_N="$(grep -c "asteroidz-colors.kdl" "$MG_TOML")"
+: > "$MG_CALLS"
+shot palette_before_again
+read -r TOGGLE_X TOGGLE_Y <<<"$(find_on_toggle "$WORK/palette_before_again.png")"
 hl_move "$TOGGLE_X" "$TOGGLE_Y"; sleep 1
 hl_click "$TOGGLE_X" "$TOGGLE_Y"; sleep 1
 shot palette_again
+read -r AP_X AP_Y <<<"$(find_apply "$WORK/palette_again.png")"
 hl_move "$AP_X" "$AP_Y"; sleep 1
 hl_click "$AP_X" "$AP_Y"; sleep 3
-if [ "$(grep -c "asteroidz-colors.kdl" "$MG_TOML")" = "$BEFORE_N" ]; then
-	ok "...and a second Apply does not add it twice"
+# The premise, so the assertion under it means something.
+if grep -q "image " "$MG_CALLS"; then
+	ok "the second Apply really ran"
 else
-	bad "...and a second Apply does not add it twice ($BEFORE_N -> $(grep -c "asteroidz-colors.kdl" "$MG_TOML"))"
+	bad "the second Apply really ran"
 fi
+if [ "$(grep -c "asteroidz-colors.kdl" "$MG_TOML")" = "$BEFORE_N" ]; then
+	ok "...and does not add the template twice"
+else
+	bad "...and does not add the template twice ($BEFORE_N -> $(grep -c "asteroidz-colors.kdl" "$MG_TOML"))"
+fi
+
+# ── a wallpaper matugen cannot read ─────────────────────────────────────────
+#
+# The browser offers what gdk-pixbuf can decode, which is a wider set than what
+# matugen can: setting ~/Pictures/Dome.heic and pressing Apply reported
+#
+#   matugen failed (exit 101)
+#
+# and stopped there -- a Rust panic, with the reason on a stderr nobody read and
+# the file that caused it not even named. The page must not be a dead end for a
+# wallpaper the shell is happily DRAWING at the time.
+#
+# The file here is a PNG named .heic on purpose. matugen refuses by extension
+# (that is what its own message says), and gdk-pixbuf identifies by content, so
+# this reproduces both halves of the real situation without the test needing a
+# HEIC encoder on the machine.
+CONVERTED="${XDG_RUNTIME_DIR:-/tmp}/asteroidz-bar-palette-source.png"
+rm -f "$CONVERTED"
+cp "$WORK/wall.png" "$WORK/wall.heic"
+printf 'heic\n' > "$MG_REJECT"
+printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WORK" "$WORK/wall.heic" \
+	> "$WORK/wallpaper.conf"
+sleep 2
+: > "$MG_CALLS"
+# Apply is inert with nothing staged, so the wallpaper change alone leaves it
+# unclickable and the run below would never happen. (It did not, the first time
+# this was written -- which is what the premise assertion underneath is for.)
+shot palette_before_unreadable
+read -r TOGGLE_X TOGGLE_Y <<<"$(find_on_toggle "$WORK/palette_before_unreadable.png")"
+hl_move "$TOGGLE_X" "$TOGGLE_Y"; sleep 1
+hl_click "$TOGGLE_X" "$TOGGLE_Y"; sleep 1
+shot palette_before_apply
+read -r AP_X AP_Y <<<"$(find_apply "$WORK/palette_before_apply.png")"
+hl_move "$AP_X" "$AP_Y"; sleep 1
+hl_click "$AP_X" "$AP_Y"; sleep 4
+shot palette_unreadable
+
+# The premise: without it, this test cannot fail.
+if grep -q "image $WORK/wall.heic" "$MG_CALLS"; then
+	ok "the unreadable wallpaper really did reach matugen and was refused"
+else
+	bad "the unreadable wallpaper really did reach matugen and was refused"
+	sed 's/^/       /' "$MG_CALLS"
+fi
+if [ -f "$CONVERTED" ] && head -c 8 "$CONVERTED" | grep -q 'PNG'; then
+	ok "...so the shell decoded it and wrote a PNG matugen can read"
+else
+	bad "...so the shell decoded it and wrote a PNG matugen can read"
+fi
+if grep -q "image $CONVERTED" "$MG_CALLS"; then
+	ok "...and re-ran matugen against that, rather than giving up"
+else
+	bad "...and re-ran matugen against that, rather than giving up"
+	sed 's/^/       /' "$MG_CALLS"
+fi
+# The retry is a fallback, not the path every run takes: the first attempt is
+# still the original file, byte for byte what a bare `matugen image` would get.
+if [ "$(head -1 "$MG_CALLS" | grep -c "wall.heic")" = "1" ]; then
+	ok "...having tried the original first, so a readable format is untouched"
+else
+	bad "...having tried the original first, so a readable format is untouched"
+	sed 's/^/       /' "$MG_CALLS"
+fi
+rm -f "$CONVERTED"
 
 cp "$WORK"/palette*.png "${ASTEROIDZ_SHOT_DIR:-/tmp}"/ 2>/dev/null || true
 kill "$QS" 2>/dev/null

@@ -1,7 +1,10 @@
 #include "paths.hpp"
 
+#include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QUrl>
+
+#include <cstdlib>
 
 #include "imageformats.h"
 
@@ -41,4 +44,27 @@ QStringList Paths::imageExtensions() {
 		this->mExtensions.append(QString::fromUtf8(*e));
 	this->mExtensions.sort();
 	return this->mExtensions;
+}
+
+QString Paths::renderToPng(const QString& source, const QString& dest, int maxEdge) {
+	if (source.isEmpty() || dest.isEmpty()) return QStringLiteral("no path given");
+
+	// A file: URL is what everything else in this class deals in, and a caller
+	// holding a wallpaper path may well have one.
+	auto in = source.startsWith(QStringLiteral("file://"))
+	            ? QUrl(source).toLocalFile()
+	            : source;
+
+	auto dir = QFileInfo(dest).absolutePath();
+	if (!QDir().mkpath(dir))
+		return QStringLiteral("could not create %1").arg(dir);
+
+	char* err = nullptr;
+	auto ok = azbar_image_to_png(in.toUtf8().constData(), dest.toUtf8().constData(),
+	                             maxEdge, &err);
+	if (ok) return {};
+
+	auto why = err != nullptr ? QString::fromUtf8(err) : QStringLiteral("failed");
+	std::free(err);
+	return why;
 }

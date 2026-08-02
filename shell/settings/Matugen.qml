@@ -34,6 +34,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import Asteroidz.Bar
 import ".."
 
 Singleton {
@@ -656,10 +657,10 @@ Singleton {
                 filteredWriter.setText(filteredToml(tomlFile.text()));
                 cfg = ["-c", root.filteredTomlPath];
             }
-            render.command = [root.matugenBin].concat(cfg)
-                             .concat(["image", wallpaper])
-                             .concat(schemeArgs());
-            render.running = true;
+            renderArgs = cfg;
+            renderWallpaper = wallpaper;
+            converted = false;
+            runRender(wallpaper);
         } else {
             busy = false;
             status = "template written; no wallpaper set, so nothing was rendered";
@@ -672,20 +673,110 @@ Singleton {
     // makes: an Apply must never be the thing that loses a file you tuned.
     FileView { id: backupWriter;   path: root.templatePath + ".bak"; preload: false }
 
+    // ── running it, and the format matugen cannot read ──────────────────────
+    //
+    // matugen decodes what the Rust `image` crate decodes. The wallpaper browser
+    // offers what gdk-pixbuf decodes, which is a strictly wider set -- so once
+    // the browser stopped hiding HEIC, a wallpaper you can see on screen became
+    // one the Palette page dies on:
+    //
+    //   failed to decode image: Unsupported(PathExtension("heic"))
+    //   exit 101                                    (a Rust panic, not an error)
+    //
+    // The shell has a decoder that reads the file -- it is DRAWING the file. So
+    // the fix is to convert and try again.
+    //
+    // React, do not predict. The alternative is a list here of the formats
+    // matugen supports, checked before the first run, and that is the exact
+    // shape of mistake the extension list was just fixed for: a hardcoded copy
+    // of somebody else's capabilities, correct until they change. Instead the
+    // first run is byte-identical to a bare `matugen image <file>` -- the same
+    // principle the filtered TOML above is written to -- and the conversion only
+    // ever happens on a run that has already failed. If matugen gains HEIC, this
+    // path simply stops being taken, with nothing to update.
+    //
+    // The failure is at decode, before any template is rendered or any post-hook
+    // runs, so a first attempt that fails this way has changed nothing.
+
+    property var renderArgs: []
+    property string renderWallpaper: ""
+    property bool converted: false
+
+    // Derived, per run, and it must never be mistaken for a wallpaper: the
+    // runtime dir, like the filtered TOML.
+    readonly property string convertedPath:
+        (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+        + "/asteroidz-bar-palette-source.png"
+
+    function runRender(file) {
+        render.command = [root.matugenBin].concat(renderArgs)
+                         .concat(["image", file])
+                         .concat(schemeArgs());
+        render.running = true;
+    }
+
+    // 1024 on the long edge. matugen quantises down to a fraction of that, so
+    // the palette is unchanged by the resize, and it keeps the conversion off
+    // the several-thousand-pixel original.
+    function convertAndRetry() {
+        const why = Paths.renderToPng(renderWallpaper, convertedPath, 1024);
+        if (why !== "") {
+            root.status = "matugen cannot read this image, and neither can the "
+                          + "shell: " + why;
+            root.statusBad = true;
+            root.busy = false;
+            return;
+        }
+        converted = true;
+        runRender(convertedPath);
+    }
+
     // The real thing: render every template and run every post-hook, which is
     // exactly what a wallpaper change does. One of those hooks reloads the
     // compositor, which is how the new palette reaches the screen.
     Process {
         id: render
+
+        // Without this the page could only ever say "exit 101", which names
+        // neither the file nor the reason -- the run's own account of what went
+        // wrong went to a stderr nobody was reading.
+        stderr: StdioCollector { id: renderErr }
+
         onExited: (code, _) => {
-            root.busy = false;
             if (code === 0) {
-                root.status = "palette applied";
+                root.busy = false;
+                root.status = root.converted
+                    ? "palette applied, from a converted copy of the wallpaper"
+                    : "palette applied";
                 root.statusBad = false;
-            } else {
-                root.status = "matugen failed (exit " + code + ")";
-                root.statusBad = true;
+                return;
             }
+            if (!root.converted && root.renderWallpaper !== "") {
+                root.convertAndRetry();
+                return;
+            }
+            root.busy = false;
+            root.status = "matugen failed (exit " + code + ")"
+                          + root.firstLine(renderErr.text);
+            root.statusBad = true;
         }
+    }
+
+    // matugen's failures are several lines of panic decoration around one line
+    // that says what happened. The row has one line to say it in.
+    function firstLine(text) {
+        if (!text)
+            return "";
+        for (const raw of text.split("\n")) {
+            // The ANSI colouring survives a pipe; it is not a terminal here.
+            const line = raw.replace(/\x1b\[[0-9;]*m/g, "").trim();
+            if (line === "" || line.startsWith("Location:")
+                || line.startsWith("Backtrace") || line.startsWith("Run with"))
+                continue;
+            if (line.startsWith("Message:"))
+                return ": " + line.slice(8).trim();
+            return ": " + line;
+        }
+        return "";
     }
 }

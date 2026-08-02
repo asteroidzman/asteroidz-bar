@@ -45,6 +45,21 @@ public:
 	// files in a picker, and offering fewer hides usable ones.
 	Q_INVOKABLE [[nodiscard]] QStringList imageExtensions();
 
+	// Decode an image and write it out as a PNG no larger than `maxEdge` on its
+	// long side. Returns an empty string on success, or why it failed.
+	//
+	// For handing a wallpaper to a tool that cannot read it. matugen decodes
+	// what the Rust `image` crate decodes, which is a narrower set than this
+	// one -- setting `Dome.heic` as the wallpaper made the Palette page report
+	// `matugen failed (exit 101)`, a Rust panic inside its colour extraction.
+	// The shell already has a decoder that reads the file, because it is
+	// drawing it.
+	//
+	// Intermediate directories are created: the destination is a cache path
+	// that need not exist yet.
+	Q_INVOKABLE [[nodiscard]] QString
+	renderToPng(const QString& source, const QString& dest, int maxEdge);
+
 private:
 	// Icons are asked for repeatedly -- every pill that draws one asks on
 	// every config change -- and the answer only changes when a file is

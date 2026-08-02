@@ -54,3 +54,37 @@ const char *const *azbar_image_extensions(void) {
 	cached = out;
 	return (const char *const *)cached;
 }
+
+bool azbar_image_to_png(const char *src, const char *dst, int max_edge,
+                        char **err) {
+	if (err)
+		*err = NULL;
+	if (!src || !dst)
+		return false;
+	if (max_edge < 1)
+		max_edge = 1;
+
+	GError *e = NULL;
+
+	/* Scaled on the way in rather than afterwards: gdk-pixbuf hands the size to
+	 * the loader, so a 6000px HEIC never becomes a full-size buffer just to be
+	 * thrown away. TRUE preserves the aspect ratio, and _at_scale will not
+	 * enlarge an image that is already smaller. */
+	GdkPixbuf *pix = gdk_pixbuf_new_from_file_at_scale(src, max_edge, max_edge,
+	                                                   TRUE, &e);
+	if (!pix) {
+		if (err)
+			*err = strdup(e && e->message ? e->message : "could not be decoded");
+		if (e)
+			g_error_free(e);
+		return false;
+	}
+
+	bool ok = gdk_pixbuf_save(pix, dst, "png", &e, NULL);
+	if (!ok && err)
+		*err = strdup(e && e->message ? e->message : "could not be written");
+	if (e)
+		g_error_free(e);
+	g_object_unref(pix);
+	return ok;
+}

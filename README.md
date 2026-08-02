@@ -177,6 +177,27 @@ into `~/.config`: that would overwrite a tuned template on every upgrade. The
 Palette page seeds the user copy the first time it is opened and the file is
 absent, which is the one moment where copying cannot destroy anything.
 
+**A wallpaper matugen cannot read is converted and retried.** matugen decodes
+what the Rust `image` crate decodes; the wallpaper browser offers what
+gdk-pixbuf decodes, which is a strictly wider set. So once the browser stopped
+hiding HEIC, a wallpaper you could see on screen became one this page died on —
+`matugen failed (exit 101)`, a panic inside its colour extraction, with the
+reason on a stderr nobody read.
+
+The shell has a decoder that reads the file, because it is *drawing* the file.
+So a failed run is followed by one conversion to PNG through that decoder and
+one retry. Deliberately in that order, rather than checking the format first:
+checking first means a list here of matugen's supported formats, which is the
+same mistake the extension list was just fixed for — somebody else's
+capabilities, copied, correct until they change. This way the first attempt is
+byte-identical to a bare `matugen image <file>`, the conversion only happens on
+a run that already failed, and if matugen gains HEIC the path stops being taken
+with nothing to update. The decode failure happens before any template is
+rendered or any post-hook fires, so the attempt that fails has changed nothing.
+
+matugen's stderr is captured either way, so a failure that is *not* about the
+format says what it was instead of only naming an exit code.
+
 ### Layouts
 
 Which layout a tag opens in, on which monitor, with the master factor, the master
@@ -528,7 +549,9 @@ contrib/panel-layout-test.sh # the settings window's boxes fit the text in them,
 contrib/palette-test.sh    # the matugen palette page, fully sandboxed: its
                            #   template, mapping file and matugen binary are all
                            #   redirected, so it cannot re-theme the desktop it
-                           #   runs beside
+                           #   runs beside. The stub can be told to refuse a
+                           #   format, which is how the convert-and-retry path
+                           #   is reachable without a HEIC encoder
 contrib/settings-test.sh   # the settings window: the pill opens it on Displays,
                            #   it is populated, search narrows it, a click
                            #   previews, Apply persists, closing undoes an
