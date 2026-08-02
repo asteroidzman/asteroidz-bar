@@ -127,6 +127,11 @@ Rectangle {
         selectByMouse: true
         clip: true
 
+        // A caret, not a hand: this is text to type in, and with
+        // selectByMouse it is text to drag across as well. TextInput does not
+        // set a cursor of its own.
+        HoverHandler { cursorShape: Qt.IBeamCursor }
+
         onAccepted: {
             root.lastCommitted = text;
             root.committed(text);

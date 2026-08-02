@@ -14,6 +14,11 @@ import ".."
 Pill {
     id: root
 
+    // A readout. It has no `onClicked`, and saying so is what keeps the pointer
+    // an arrow over it -- `interactive` is the only thing a Pill knows about
+    // whether pressing it does anything, and it defaults to true.
+    interactive: false
+
     // SystemClock ticks on the second boundary rather than every 1000ms from
     // whenever the shell happened to start, so a seconds format does not drift
     // visibly against every other clock on the machine.

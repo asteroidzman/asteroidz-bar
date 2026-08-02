@@ -157,6 +157,7 @@ Item {
             }
 
             TapHandler { onTapped: root.picked(tile.modelData.name) }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
     }
 

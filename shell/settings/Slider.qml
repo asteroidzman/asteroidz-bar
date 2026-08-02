@@ -125,7 +125,7 @@ Item {
 
         // No `enabled` passthrough: an input handler is inert while its item is
         // disabled, and Item.enabled propagates from the root of this component.
-        HoverHandler { id: hover }
+        HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
 
         // Drag on the WHOLE track, not on the handle: a 14px circle is a hard
         // target, and every slider in every toolkit lets you grab the bar.

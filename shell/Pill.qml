@@ -260,5 +260,13 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onClicked: mouse => root.clicked(mouse.button)
         onWheel: ev => root.wheel(ev.angleDelta.y)
+        // A pill that does something says so before you press it, and one that
+        // is only a readout -- the clock -- keeps the plain arrow.
+        //
+        // Written out rather than left to `enabled` above. A disabled MouseArea
+        // does not react to a click, but Qt applies its cursorShape all the
+        // same: with the clock at `interactive: false` the pointer still turned
+        // into a hand over it, which is the one case this is here to avoid.
+        cursorShape: root.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
     }
 }

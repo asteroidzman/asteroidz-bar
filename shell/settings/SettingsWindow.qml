@@ -631,7 +631,10 @@ FloatingWindow {
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
-                        HoverHandler { id: hover }
+                        HoverHandler {
+                            id: hover
+                            cursorShape: Qt.PointingHandCursor
+                        }
                         TapHandler {
                             onTapped: {
                                 win.page = modelData.page;
@@ -1089,6 +1092,13 @@ FloatingWindow {
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
+                        HoverHandler {
+                            // The apply bar's buttons are drawn dimmed
+                            // when there is nothing staged, and dimmed
+                            // means they do nothing.
+                            cursorShape: parent.live ? Qt.PointingHandCursor
+                                                     : Qt.ArrowCursor
+                        }
                         TapHandler {
                             enabled: parent.live
                             onTapped: {

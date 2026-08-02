@@ -373,6 +373,7 @@ PopupWindow {
                         // Its own handler, so the arrow is the target rather
                         // than the row: the row's handler only focuses.
                         TapHandler { onTapped: root.spinBy(row.index, -1) }
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
                     }
 
                     Text {
@@ -395,6 +396,7 @@ PopupWindow {
                         font.family: Cfg.fontFamily
                         font.pointSize: Cfg.fontSize
                         TapHandler { onTapped: root.spinBy(row.index, 1) }
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
                     }
                 }
 
@@ -417,7 +419,15 @@ PopupWindow {
                     font.pointSize: Cfg.fontSize
                 }
 
-                HoverHandler { id: hover }
+                HoverHandler {
+                    id: hover
+                    // A separator is not a row you can act on, and a
+                    // disabled entry is one that refuses -- neither may
+                    // claim to be clickable.
+                    cursorShape: !row.modelData.separator
+                        && row.modelData.enabled !== false
+                        ? Qt.PointingHandCursor : Qt.ArrowCursor
+                }
 
                 TapHandler {
                     enabled: !row.modelData.separator

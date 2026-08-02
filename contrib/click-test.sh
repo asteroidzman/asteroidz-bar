@@ -560,6 +560,95 @@ else
 	bad "the power menu has its entries (found ${#WROWS[@]})"
 fi
 
+# ── the cursor ──────────────────────────────────────────────────────────────
+#
+# Read from the COMPOSITOR, not from a screenshot. The pointer is drawn by the
+# compositor and does not appear in a capture, so there is nothing on screen to
+# measure. `get cursorpos` reports the shape the focused client last asked for
+# over wp_cursor_shape_v1, which is what a QML `cursorShape` becomes.
+cp "$WORK/config.pristine.kdl" "$HL_CONFIG"
+cat >> "$HL_CONFIG" <<'EOF'
+theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
+bar { enable false; height 48; position "top"; margin { x 8; y 9 }
+	panel { enable true; radius 9; padding 12; blur true; shadow true }
+	modules-left ""; modules-center ""; modules-right "clock,power" }
+EOF
+hl_dispatch "reload_config" 1
+sleep 5
+# The power menu is still open from the section above, and an open popover is a
+# second surface for the pointer to be over.
+"$HL_WLVKBD" press ESC >/dev/null 2>&1
+sleep 1
+"$HL_WLVKBD" press ESC >/dev/null 2>&1
+sleep 2
+shot cursorbar
+
+# The bar's own panel, left and right edges. Its band only -- everything below
+# is wallpaper or a popover, and panel_box is the one that wants those.
+bar_box() { # bar_box <shot>
+	python3 - "$WORK/$1.png" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load(); w, h = im.size
+# margin y 9, height 48: inside the bar, clear of its rounded corners.
+xs = [x for y in range(16, min(52, h), 2) for x in range(0, w, 2)
+      if sum(px[x, y]) < 400]
+print(min(xs), max(xs)) if xs else print(0, 0)
+PY
+}
+
+cursor_shape() {
+	hl_get "get cursorpos" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("?"); raise SystemExit
+print("surface" if d.get("cursor-surface") else (d.get("cursor-shape") or "?"))
+'
+}
+
+if [ "$(cursor_shape)" = "?" ]; then
+	bad "the compositor reports a cursor shape (no cursor-shape field -- too old?)"
+else
+	ok "the compositor reports a cursor shape"
+
+	# Two pills, and the second is the point: "pointer everywhere" would satisfy
+	# the first assertion and mean nothing. Power acts on a click; the clock is a
+	# readout and says so with `interactive: false`. They must not feel the same.
+	#
+	# `panel_box` is no use here -- it starts at y=100 so that it finds an open
+	# POPOVER and not the bar above it, and against a shot with no menu open it
+	# returns nothing, which sent both probes off the screen and reported
+	# 'default' for each. The bar's own band is what is wanted.
+	# PILL_X, not the band's right edge: `bar_box` measures the PANEL, whose
+	# padding and rounded corner extend about 15px past the last pill, so a
+	# probe aimed at the edge lands on panel background and reads 'default'.
+	#
+	# And park the pointer somewhere else first. What is read back is the last
+	# shape a client ASKED for, so it only changes when the pointer crosses into
+	# a different item -- and the pointer is still sitting on this very pill from
+	# the menu clicks above, which makes the move below a no-op and leaves the
+	# stale value in place. That read as "the pill does not set a cursor".
+	read -r CL CR <<<"$(bar_box cursorbar)"
+	hl_move $((HL_WIDTH / 2)) $((HL_HEIGHT / 2)); sleep 1
+	hl_move "$PILL_X" "$PILL_Y"; sleep 1
+	ON_PILL="$(cursor_shape)"
+	if [ "$ON_PILL" = "pointer" ]; then
+		ok "...and a pill that acts on a click asks for the pointer"
+	else
+		bad "...and a pill that acts on a click asks for the pointer (got '$ON_PILL', bar $CL..$CR)"
+	fi
+	hl_move $((CL + 20)) "$PILL_Y"; sleep 1
+	ON_CLOCK="$(cursor_shape)"
+	if [ "$ON_CLOCK" != "pointer" ]; then
+		ok "...and a pill that is only a readout does not (got '$ON_CLOCK')"
+	else
+		bad "...and a pill that is only a readout does not (got '$ON_CLOCK')"
+	fi
+fi
+
 kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
 

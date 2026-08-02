@@ -109,6 +109,7 @@ Item {
                 TapHandler {
                     onTapped: Wallpaper.setKey("wallpaper", modelData)
                 }
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
             }
         }
 

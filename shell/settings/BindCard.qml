@@ -171,6 +171,7 @@ Rectangle {
                     root.view.expandedBind = root.expanded ? -1 : root.index;
                 }
             }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
 
         Text {

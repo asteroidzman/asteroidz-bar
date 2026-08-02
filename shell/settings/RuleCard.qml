@@ -138,6 +138,7 @@ Rectangle {
                     root.view.expandedRule = root.expanded ? -1 : root.index;
                 }
             }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
 
         // What it does, and where it lives. Both on one dim line, because

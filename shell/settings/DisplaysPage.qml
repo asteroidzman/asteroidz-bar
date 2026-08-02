@@ -396,6 +396,12 @@ Item {
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
+                        HoverHandler {
+                            // Dimmed means it does nothing; see the same
+                            // pair on the settings window's apply bar.
+                            cursorShape: parent.live ? Qt.PointingHandCursor
+                                                     : Qt.ArrowCursor
+                        }
                         TapHandler {
                             enabled: parent.live
                             onTapped: {

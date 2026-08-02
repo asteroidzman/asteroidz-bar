@@ -68,6 +68,12 @@ Item {
         TapHandler {
             onTapped: if (root.values.length > 1) root.open = !root.open
         }
+        // A picker with one entry is a readout, and its header does nothing when
+        // clicked -- so it must not claim otherwise.
+        HoverHandler {
+            cursorShape: root.values.length > 1 ? Qt.PointingHandCursor
+                                                : Qt.ArrowCursor
+        }
     }
 
     // Clicking anywhere else closes the list.
@@ -166,7 +172,7 @@ Item {
                     font.hintingPreference: Font.PreferFullHinting
                 }
 
-                HoverHandler { id: hover }
+                HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
                 TapHandler {
                     onTapped: {
                         root.open = false;

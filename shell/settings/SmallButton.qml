@@ -63,6 +63,6 @@ Rectangle {
         }
     }
 
-    HoverHandler { id: hover }
+    HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
     TapHandler { onTapped: root.clicked() }
 }

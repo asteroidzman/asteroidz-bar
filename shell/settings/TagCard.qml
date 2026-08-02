@@ -139,6 +139,7 @@ Rectangle {
             TapHandler {
                 onTapped: root.view.expandedTag = root.expanded ? -1 : root.index
             }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
 
         // What the rule actually does, on one line, so the list is readable

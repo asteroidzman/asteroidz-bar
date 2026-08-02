@@ -22,4 +22,9 @@ Rectangle {
     }
 
     TapHandler { onTapped: root.toggled(!root.on) }
+    // On the HoverHandler, not the TapHandler: a PointerHandler applies its
+    // cursorShape while it is ACTIVE, and a TapHandler is active only while the
+    // button is held -- which is a cursor that changes after you have already
+    // committed to pressing.
+    HoverHandler { cursorShape: Qt.PointingHandCursor }
 }
