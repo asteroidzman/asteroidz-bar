@@ -272,6 +272,12 @@ Singleton {
         setKey("wallpaper." + name, file);
     }
 
+    // What a file's own timetable says, for a page that wants to show it.
+    // { dynamic: false } for an ordinary image, which is the usual answer.
+    function dynamicInfo(file) {
+        return backdrop.dynamicInfo(file || "");
+    }
+
     FileView {
         id: conf
         path: root.confPath
@@ -307,6 +313,12 @@ Singleton {
         source: root.path
         sources: root.perMonitor
         mode: root.mode
+        // Only for a `solar` dynamic wallpaper, whose schedule is the sun's
+        // altitude rather than a clock. Nothing here asks for a lookup on a
+        // wallpaper's account: this is whatever the shell already knows.
+        latitude: Location.lat
+        longitude: Location.lon
+        hasLocation: Location.known
     }
 
     readonly property bool up: backdrop.ready

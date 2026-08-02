@@ -19,11 +19,13 @@
 // resolves against the including file's own directory first, so two headers
 // both called backdrop.h would have this one silently including itself.
 
+#include <QtCore/QDateTime>
 #include <QtCore/QList>
 #include <QtCore/QObject>
 #include <QtCore/QPair>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
+#include <QtCore/QTimer>
 #include <QtCore/QVariantMap>
 #include <QtQml/qqml.h>
 
@@ -48,6 +50,17 @@ class Backdrop: public QObject {
 	// settings page cannot offer "the wallpaper on DP-1" without knowing DP-1
 	// is there.
 	Q_PROPERTY(QStringList outputs READ outputs NOTIFY outputsChanged)
+	// Where this machine is, for a `solar` dynamic wallpaper -- whose schedule
+	// is keyed by the sun's altitude rather than by the clock, and so cannot be
+	// read without one. Set from the shell's Location singleton; when it is not
+	// known, such a file falls back to its own light/dark pair.
+	//
+	// Latitude 0 is a real place, so `hasLocation` is the flag rather than a
+	// zero test. It defaults false, and a wallpaper is not worth a lookup on
+	// its own -- this only ever arrives if something else already asked.
+	Q_PROPERTY(double latitude MEMBER mLatitude NOTIFY locationChanged)
+	Q_PROPERTY(double longitude MEMBER mLongitude NOTIFY locationChanged)
+	Q_PROPERTY(bool hasLocation MEMBER mHasLocation NOTIFY locationChanged)
 	// stretch, fill, fit, center or tile -- asteroidzbg's -m.
 	Q_PROPERTY(QString mode READ mode WRITE setMode NOTIFY modeChanged)
 	// True once an image has actually been drawn: the wallpaper is up.
@@ -78,6 +91,17 @@ public:
 	[[nodiscard]] QString mode() const { return this->mMode; }
 	void setMode(const QString& mode);
 
+	// What a file's own schedule says, for a settings page that wants to show
+	// it: { dynamic, frames, images, index, solar, changesIn } -- `changesIn`
+	// in minutes. `dynamic: false` for an ordinary image, which is not an
+	// error and is the usual answer.
+	//
+	// Worth showing rather than leaving implicit: these files carry their own
+	// timetable, and a badly authored one -- the light frame scheduled at
+	// midnight, which does exist in the wild -- is otherwise just a wallpaper
+	// that looks wrong for no visible reason.
+	Q_INVOKABLE [[nodiscard]] QVariantMap dynamicInfo(const QString& path) const;
+
 	[[nodiscard]] bool ready() const { return this->mReady; }
 	[[nodiscard]] bool hdr() const { return this->mHdr; }
 	[[nodiscard]] QString error() const { return this->mError; }
@@ -85,6 +109,7 @@ public:
 signals:
 	void sourceChanged();
 	void sourcesChanged();
+	void locationChanged();
 	void outputsChanged();
 	void modeChanged();
 	void readyChanged();
@@ -109,11 +134,26 @@ private:
 	// Whether the outputs the backdrop knows about still match mOutputs.
 	void refreshOutputs();
 
+	// An Apple dynamic wallpaper holds several images and a table saying which
+	// belongs to the time of day. `file` is what actually gets decoded -- the
+	// extracted frame for one of those, the path itself for anything else --
+	// and `changeAt` is when this answer stops being true.
+	struct Resolved {
+		QString file;
+		QDateTime changeAt; // invalid when nothing is scheduled
+	};
+	[[nodiscard]] Resolved resolve(const QString& path) const;
+	// Re-arm for the earliest change among the sources in play.
+	void scheduleNextFrame();
+
 	azbg_backdrop* mBackdrop = nullptr;
 	QString mSource;
 	QVariantMap mSources;
 	QStringList mOutputs;
 	QString mMode = QStringLiteral("fill");
+	double mLatitude = 0;
+	double mLongitude = 0;
+	bool mHasLocation = false;
 	QString mError;
 	bool mReady = false;
 	bool mHdr = false;
@@ -130,6 +170,9 @@ private:
 	Plan mQueue;
 	bool mRestart = false;
 	bool mFlushQueued = false;
+	// Fires when the next frame of a dynamic wallpaper is due. One timer for
+	// every source in play, set to the earliest of them.
+	QTimer* mFrameTimer = nullptr;
 	// Set while a plan is running, folded into mHdr when it finishes: "the
 	// wallpaper is HDR" is only meaningful as a statement about all of them.
 	bool mPlanHdr = false;

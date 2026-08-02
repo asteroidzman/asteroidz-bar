@@ -37,6 +37,19 @@ Item {
         return Wallpaper.wallpaperFor(target) || Wallpaper.path;
     }
 
+    // The timetable of whatever the target is showing. Re-asked whenever that
+    // changes, and on a slow tick so the countdown below does not sit at the
+    // number it had when the page opened.
+    property var dyn: ({ dynamic: false })
+    function refreshDyn() { dyn = Wallpaper.dynamicInfo(current); }
+    onCurrentChanged: refreshDyn()
+    Timer {
+        running: page.dyn.dynamic === true
+        interval: 60000
+        repeat: true
+        onTriggered: page.refreshDyn()
+    }
+
     // The first monitor, so the page is usable the moment it is switched to
     // per-monitor: a grid whose clicks go nowhere until you notice there is a
     // selector above it is a grid that looks broken.
@@ -64,6 +77,7 @@ Item {
     Component.onCompleted: {
         Wallpaper.rescan();
         pickDefaultTarget();
+        refreshDyn();
     }
 
     Column {
@@ -115,6 +129,42 @@ Item {
                 onPicked: v => Wallpaper.setKey(
                     "wallpaper-scope", v === page.scopePer ? "per-monitor" : "all")
             }
+        }
+
+        // ── what a dynamic wallpaper is doing ───────────────────────────────
+        //
+        // These files carry their own timetable, and nothing else on screen
+        // says so: the tile looks like any other still. Worth stating, because
+        // a wallpaper that changes on its own is otherwise a surprise -- and
+        // because the timetables in the wild are not all sane, so "showing
+        // frame 0 of 2, changes in 47 min" is what makes a badly authored one
+        // diagnosable instead of just wrong.
+        Text {
+            width: parent.width
+            visible: page.dyn.dynamic === true
+            wrapMode: Text.WordWrap
+            text: {
+                const d = page.dyn;
+                if (!d.dynamic)
+                    return "";
+                let s = "Dynamic wallpaper: " + d.images + " images, showing "
+                        + (d.index + 1) + ".";
+                if (d.solar)
+                    s += " Its schedule is by sun position, which needs a "
+                       + "location this shell does not have, so it follows the "
+                       + "file's light and dark pair instead.";
+                if (d.changesIn !== undefined) {
+                    const h = Math.floor(d.changesIn / 60);
+                    const m = d.changesIn % 60;
+                    s += " Next change in "
+                       + (h > 0 ? h + " h " + m + " min" : m + " min") + ".";
+                }
+                return s;
+            }
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
+            font.hintingPreference: Font.PreferFullHinting
         }
 
         // Which monitor the tiles below apply to. Shown only when there is a

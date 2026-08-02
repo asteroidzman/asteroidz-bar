@@ -140,6 +140,58 @@ top — one redundant draw per overridden monitor at startup, in exchange for a
 monitor whose name has not arrived from the compositor yet still having a
 wallpaper instead of being black until `xdg-output` answers.
 
+### Dynamic wallpapers
+
+An Apple dynamic wallpaper is one HEIC holding several images plus a timetable
+saying which belongs to the time of day. Setting one picks the right frame and
+switches it on a timer; the Wallpaper page says which frame is up and when the
+next change is due.
+
+Every ordinary decoder — gdk-pixbuf included — hands back the file's **primary**
+image and nothing else, which is why such a file otherwise looks like a still.
+So this reads the container with libheif: the schedule is a base64 binary plist
+in an XMP property, `apple_desktop:h24` or `apple_desktop:solar`.
+
+```
+{ ti: [ {t: 0.0, i: 1}, {t: 0.2708, i: 2}, {t: 0.7292, i: 0} ], ap: {l: 2, d: 1} }
+```
+
+**`t` counts from local midnight.** That is what every other implementation
+assumes, and the files bear it out: `0.2708` and `0.7292` are 06:30 and 17:30 —
+sunrise and sunset. Read as fractions from noon they would be 18:30 and 05:30,
+putting the daylight frame on all night.
+
+Worth knowing: **the timetables in the wild are not all sane.** One of the two
+files this was developed against schedules its *light* frame at midnight and its
+dark one at midday, which is the file being authored wrong rather than anything
+here. No attempt is made to detect or "fix" that — second-guessing a file's own
+schedule would break every correctly authored one — which is exactly why the
+page states the frame and the countdown, so a wallpaper that looks wrong is
+diagnosable instead of mysterious.
+
+`apple_desktop:solar` keys its table by the sun's altitude and azimuth instead
+of the clock. That needs to know where on Earth the machine is — and the shell
+does, from the shared location above, so such a file is read as written: the
+sun's position is computed for here and now and the nearest entry wins.
+Azimuth breaks the tie, because a solar table passes through every altitude
+twice and altitude alone would run the sunset frame at dawn. Re-checked every
+15 minutes rather than at a boundary, since the sun moves continuously.
+
+If no location is known — nothing has asked for one, or the lookup failed — a
+solar file falls back to the light/dark pair it also carries: light through the
+middle of the day, dark otherwise. Said on the page, because an approximation
+nobody mentions is indistinguishable from a bug.
+
+Frames are extracted once into `$XDG_CACHE_HOME/asteroidz-bar/dynamic-wallpaper/`
+and keyed by path, size, mtime and index, so replacing a wallpaper with a
+different file of the same name does not keep showing the old one. Extraction
+happens on the decode thread, never the GUI one — these are 6016×6016 images.
+
+**The HDR path stops at the frame.** The extracted image goes through a PNG,
+and the tagging that carries BT.2020/PQ to the compositor rides on AVIF/JXL CICP
+boxes that PNG has nowhere to put. Apple's own dynamic wallpapers are 8-bit, so
+nothing is lost on those; a 10-bit one would be drawn as SDR.
+
 ### Two stages, and why
 
 | | what it does |
@@ -487,6 +539,35 @@ Three ship with this package — `asteroidz-bar-nordvpn`, `-discord`,
 `-reminders` — and they run untouched, which was the test that mattered: a
 better schema would have bought nothing and broken all of them.
 
+### Where the machine is
+
+Plugins are told, unasked, as an ordinary event:
+
+```json
+{"event":"location","lat":52.52,"lon":13.405,"place":"Berlin, Germany"}
+```
+
+Sent when a continuous plugin starts and again whenever the answer changes. A
+plugin that does not care ignores an `event` it does not recognise, which they
+all already do.
+
+It exists because more than one thing needs it: the weather module has always
+wanted a latitude, and a `solar` dynamic wallpaper cannot be placed without one.
+Three consumers geolocating separately would be three IP lookups a session and
+three chances to disagree about where you are — so the shell resolves it once
+(`Location.qml`) and hands it out. A plugin wanting sunrise, a tide table or a
+local forecast no longer has to do it for itself.
+
+Resolved from `bar { weather-location "..." }` if it is set, because a stated
+answer beats a guessed one, and by IP otherwise. Cached to
+`$XDG_CACHE_HOME/asteroidz-bar/location.json` so a cold start knows where it is
+without waiting on the network; the lookup still runs and overwrites it, since
+the one thing worse than not knowing where you are is being certain of
+somewhere you left.
+
+Nothing here triggers a lookup on a wallpaper's account — the wallpaper uses the
+location only if something already asked for it.
+
 ### Rows that take input
 
 A menu row is normally a thing to pick. Two kinds of row are things to fill in
@@ -626,6 +707,10 @@ contrib/settings-test.sh   # the settings window: the pill opens it on Displays,
                            #   through to the config file, and Rebind… reaches
                            #   the push-to-talk bridge
 contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
+contrib/dynwall-test.sh    # Apple dynamic wallpapers: the schedule parser
+                           #   against synthesised plists, and frame extraction
+                           #   against a HEIC built by the test. No compositor,
+                           #   and pinned to no particular wallpaper
 contrib/reminders-test.sh  # the reminders plugin's scheduling, as pure logic:
                            #   no Wayland, no bar. An interval read under the
                            #   wrong key made every reminder daily, and nothing

@@ -131,6 +131,44 @@ Pill {
             proc.write(JSON.stringify(obj) + "\n");
     }
 
+    // ── where this machine is ───────────────────────────────────────────────
+    //
+    // Sent unasked, because a plugin that wants sunrise, a tide table or a
+    // local forecast should not have to geolocate for itself: three plugins
+    // doing that would be three IP lookups a session and three chances to
+    // disagree about where you are. The shell resolves it once
+    // (Location.qml) and tells them.
+    //
+    // An event like any other, so a plugin that does not care simply ignores
+    // an object whose `event` it does not recognise -- which they all already
+    // do.
+    function sendLocation() {
+        if (!Location.known)
+            return;
+        send({
+            event: "location",
+            lat: Location.lat,
+            lon: Location.lon,
+            place: Location.place
+        });
+    }
+
+    // Both directions, because either can be the late one: a plugin can start
+    // before the lookup answers, and the lookup can have answered long before
+    // a plugin added by a config reload starts.
+    Connections {
+        target: Location
+        function onChanged() { root.sendLocation(); }
+    }
+    onContinuousChanged: if (continuous) startupLocation.restart()
+    Timer {
+        id: startupLocation
+        // After the plugin's own first output, so its opening state is not
+        // racing an event it may not be ready to read yet.
+        interval: 1500
+        onTriggered: root.sendLocation()
+    }
+
     // Stop the plugins when this module goes away.
     //
     // Belt to the plugins' own braces. They exit on stdin EOF now, which covers

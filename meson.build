@@ -47,6 +47,7 @@ install_data(
 		'shell/Metrics.qml',
 		'shell/BatteryService.qml',
 		'shell/Wallpaper.qml',
+		'shell/Location.qml',
 		'shell/Logo.qml',
 		'shell/IdleService.qml',
 		'shell/Arrange.qml',
@@ -133,12 +134,20 @@ qt6_dep = dependency('qt6', modules: ['Core', 'Gui', 'Qml'])
 # rather than relying on a transitive dependency it does not declare.
 gdkpixbuf_dep = dependency('gdk-pixbuf-2.0')
 
-# Its own library, so gdk-pixbuf's include paths never reach the C++ side: with
-# them on the same target Qt's `#define signals Q_SIGNALS` fails to compile.
+# Apple dynamic wallpapers: several images in one HEIC with a schedule saying
+# which of them belongs to the time of day. libheif rather than gdk-pixbuf,
+# because gdk-pixbuf only ever hands back the PRIMARY image -- which is exactly
+# why such a file looks like an ordinary still.
+heif_dep = dependency('libheif')
+png_dep = dependency('libpng')
+
+# Their own library, so gdk-pixbuf's include paths never reach the C++ side:
+# with them on the same target Qt's `#define signals Q_SIGNALS` fails to
+# compile.
 imageformats_lib = static_library(
 	'azbarimageformats',
-	['plugin/imageformats.c'],
-	dependencies: [gdkpixbuf_dep],
+	['plugin/imageformats.c', 'plugin/dynwall.c'],
+	dependencies: [gdkpixbuf_dep, heif_dep, png_dep],
 	pic: true,
 )
 

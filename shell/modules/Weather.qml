@@ -122,34 +122,18 @@ Pill {
         xhr.send();
     }
 
-    function locate() {
-        if (Cfg.weatherLocation !== "") {
-            fetch("https://geocoding-api.open-meteo.com/v1/search?name="
-                  + encodeURIComponent(Cfg.weatherLocation) + "&count=1",
-                  data => {
-                      if (!data.results || !data.results.length)
-                          return;
-                      root.lat = data.results[0].latitude;
-                      root.lon = data.results[0].longitude;
-                      root.place = data.results[0].name
-                          + (data.results[0].country
-                             ? ", " + data.results[0].country : "");
-                      root.refresh();
-                  });
-            return;
-        }
-        // No city configured: geolocate by IP, the same fallback the plugin
-        // used. Wrong by a few miles never mattered for a temperature.
-        fetch("http://ip-api.com/json/?fields=lat,lon,city,country", data => {
-            if (data.lat === undefined)
-                return;
-            root.lat = data.lat;
-            root.lon = data.lon;
-            root.place = data.city
-                ? data.city + (data.country ? ", " + data.country : "")
-                : "";
+    // Where we are comes from the shell's Location singleton now, not from
+    // here. Two things need it -- this and a solar dynamic wallpaper -- and two
+    // resolvers would mean two IP lookups a session and two chances to disagree
+    // about where you are. Plugins are told as well; see Location.qml.
+    Connections {
+        target: Location
+        function onChanged() {
+            root.lat = Location.lat;
+            root.lon = Location.lon;
+            root.place = Location.place;
             root.refresh();
-        });
+        }
     }
 
     function refresh() {
@@ -188,7 +172,18 @@ Pill {
               });
     }
 
-    Component.onCompleted: locate()
+    // The singleton may have answered already -- it resolves once for the whole
+    // shell, and this pill can be built long afterwards on a config reload --
+    // so take what it holds rather than waiting for a signal that has been and
+    // gone.
+    Component.onCompleted: {
+        if (Location.known) {
+            root.lat = Location.lat;
+            root.lon = Location.lon;
+            root.place = Location.place;
+            root.refresh();
+        }
+    }
 
     Timer {
         interval: Math.max(1, Cfg.weatherInterval) * 60 * 1000

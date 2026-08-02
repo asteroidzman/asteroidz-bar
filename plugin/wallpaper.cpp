@@ -10,8 +10,14 @@
 
 extern "C" {
 #include "backdrop.h"
+#include "dynwall.h"
 #include "log.h"
 }
+
+#include <QtCore/QCryptographicHash>
+#include <QtCore/QDir>
+#include <QtCore/QFileInfo>
+#include <QtCore/QStandardPaths>
 
 namespace {
 
@@ -132,6 +138,135 @@ Backdrop::Plan Backdrop::plan() const {
 	return out;
 }
 
+namespace {
+
+// Where in the day we are, as the fraction Apple's table is keyed by: 0.0 is
+// local midnight, 0.5 local midday. LOCAL, because a wallpaper that turns dark
+// in the evening means the evening where the machine is.
+double dayFraction(const QDateTime& when) {
+	auto t = when.time();
+	return (t.hour() * 3600.0 + t.minute() * 60.0 + t.second()) / 86400.0;
+}
+
+// The extracted frame's file. Keyed by the source path, its size and its
+// modification time as well as the index, so replacing a wallpaper with a
+// different file of the same name does not show the old one forever.
+QString framePath(const QString& source, int index) {
+	QFileInfo info(source);
+	auto key = QStringLiteral("%1|%2|%3|%4")
+	               .arg(source)
+	               .arg(info.size())
+	               .arg(info.lastModified().toMSecsSinceEpoch())
+	               .arg(index);
+	auto hash = QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex();
+
+	auto dir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+	if (dir.isEmpty()) dir = QStringLiteral("/tmp");
+	return dir + QStringLiteral("/dynamic-wallpaper/") + QString::fromUtf8(hash)
+	     + QStringLiteral(".png");
+}
+
+} // namespace
+
+Backdrop::Resolved Backdrop::resolve(const QString& path) const {
+	Backdrop::Resolved out {path, {}};
+	if (path.isEmpty()) return out;
+
+	azbar_dyn_schedule schedule {};
+	if (!azbar_dyn_schedule_read(path.toUtf8().constData(), &schedule)) return out;
+
+	auto now = QDateTime::currentDateTime();
+	auto fraction = dayFraction(now);
+
+	int index = -1;
+	if (schedule.solar && this->mHasLocation) {
+		// The real thing: where the sun actually is, here, now. The file's
+		// table is altitude and azimuth, so with a location it can be read as
+		// written rather than approximated by the light/dark pair.
+		double altitude = 0;
+		double azimuth = 0;
+		azbar_sun_position(
+		    this->mLatitude, this->mLongitude, now.toSecsSinceEpoch(), &altitude, &azimuth
+		);
+		index = azbar_dyn_frame_at_sun(&schedule, altitude, azimuth);
+	}
+	if (index < 0) index = azbar_dyn_frame_at(&schedule, fraction);
+	auto next = azbar_dyn_next_change(&schedule, fraction);
+	bool solar = schedule.solar;
+	azbar_dyn_schedule_free(&schedule);
+
+	if (index < 0) return out;
+
+	out.file = framePath(path, index);
+	if (solar && this->mHasLocation) {
+		// The sun moves continuously, so there is no boundary to aim at the way
+		// a clock table has one. Re-checked on a fixed tick instead: fifteen
+		// minutes moves the sun under four degrees, which no wallpaper's table
+		// resolves.
+		out.changeAt = now.addSecs(15 * 60);
+	} else if (next >= 0.0) {
+		// The table is a time of day, so the moment is that far into today --
+		// and `next` is allowed to exceed 1.0, which is how "tomorrow" is
+		// expressed.
+		out.changeAt = QDateTime(now.date(), QTime(0, 0))
+		                   .addSecs(static_cast<qint64>(next * 86400.0));
+	}
+	return out;
+}
+
+void Backdrop::scheduleNextFrame() {
+	if (this->mFrameTimer == nullptr) {
+		this->mFrameTimer = new QTimer(this);
+		this->mFrameTimer->setSingleShot(true);
+		QObject::connect(this->mFrameTimer, &QTimer::timeout, this, [this]() {
+			this->reload();
+		});
+	}
+
+	QDateTime earliest;
+	auto consider = [&](const QString& path) {
+		auto r = this->resolve(path);
+		if (r.changeAt.isValid() && (!earliest.isValid() || r.changeAt < earliest))
+			earliest = r.changeAt;
+	};
+	consider(this->mSource);
+	for (auto it = this->mSources.constBegin(); it != this->mSources.constEnd(); ++it)
+		consider(it.value().toString());
+
+	if (!earliest.isValid()) {
+		this->mFrameTimer->stop();
+		return;
+	}
+
+	// A second past the boundary, so a timer that fires a hair early does not
+	// resolve to the frame that is still on screen and then sit idle until
+	// tomorrow. Floored at a second for the same reason.
+	auto ms = QDateTime::currentDateTime().msecsTo(earliest) + 1000;
+	this->mFrameTimer->start(static_cast<int>(qMax<qint64>(ms, 1000)));
+}
+
+QVariantMap Backdrop::dynamicInfo(const QString& path) const {
+	QVariantMap out;
+	out[QStringLiteral("dynamic")] = false;
+	if (path.isEmpty()) return out;
+
+	azbar_dyn_schedule schedule {};
+	if (!azbar_dyn_schedule_read(path.toUtf8().constData(), &schedule)) return out;
+
+	auto fraction = dayFraction(QDateTime::currentDateTime());
+	auto next = azbar_dyn_next_change(&schedule, fraction);
+
+	out[QStringLiteral("dynamic")] = true;
+	out[QStringLiteral("frames")] = static_cast<int>(schedule.n_frames);
+	out[QStringLiteral("images")] = static_cast<int>(schedule.n_images);
+	out[QStringLiteral("solar")] = schedule.solar;
+	out[QStringLiteral("index")] = azbar_dyn_frame_at(&schedule, fraction);
+	if (next >= 0.0)
+		out[QStringLiteral("changesIn")] = qRound((next - fraction) * 24.0 * 60.0);
+	azbar_dyn_schedule_free(&schedule);
+	return out;
+}
+
 void Backdrop::setMode(const QString& mode) {
 	if (mode == this->mMode) return;
 	this->mMode = mode;
@@ -173,11 +308,57 @@ void Backdrop::startNext() {
 	}
 
 	auto path = this->mQueue.first().first;
+	// Which frame of a dynamic wallpaper is due now. Deciding it here is cheap
+	// -- libheif parses the container's boxes without decoding anything -- and
+	// the expensive half, pulling that frame out, happens on the worker below
+	// with the decode it feeds.
+	auto frame = this->resolve(path);
+
+	// Copied out for the worker: it must not read members off the GUI thread.
+	struct { bool known; double lat; double lon; } loc {
+	    this->mHasLocation, this->mLatitude, this->mLongitude
+	};
+
 	this->mLoading = true;
 	QPointer<Backdrop> self(this);
 
-	QThreadPool::globalInstance()->start([self, path]() {
-		auto* image = azbg_image_load(path.toUtf8().constData());
+	QThreadPool::globalInstance()->start([self, path, frame, loc]() {
+		auto file = frame.file;
+		if (file != path && !QFileInfo::exists(file)) {
+			// Extracted once and kept: the frames of a 6016x6016 wallpaper are
+			// slow to pull out and there are only ever a handful of them, so
+			// the cache turns every later switch -- and every restart of the
+			// shell -- into an ordinary file read.
+			QDir().mkpath(QFileInfo(file).absolutePath());
+			char* err = nullptr;
+			azbar_dyn_schedule schedule {};
+			int index = -1;
+			if (azbar_dyn_schedule_read(path.toUtf8().constData(), &schedule)) {
+				// Re-derived rather than carried: between deciding and running
+				// here the clock may have crossed a boundary, and drawing the
+				// frame that just expired would leave it up until tomorrow.
+				auto now = QDateTime::currentDateTime();
+				if (schedule.solar && loc.known) {
+					double altitude = 0;
+					double azimuth = 0;
+					azbar_sun_position(loc.lat, loc.lon, now.toSecsSinceEpoch(), &altitude, &azimuth);
+					index = azbar_dyn_frame_at_sun(&schedule, altitude, azimuth);
+				}
+				if (index < 0) index = azbar_dyn_frame_at(&schedule, dayFraction(now));
+				azbar_dyn_schedule_free(&schedule);
+			}
+			if (index < 0
+			    || !azbar_dyn_extract(
+			        path.toUtf8().constData(), index, file.toUtf8().constData(), &err
+			    )) {
+				// Fall back to the file itself, which decodes as its primary
+				// image -- a still wallpaper rather than none.
+				file = path;
+			}
+			free(err);
+		}
+
+		auto* image = azbg_image_load(file.toUtf8().constData());
 
 		QMetaObject::invokeMethod(
 		    // The receiver is what keeps this safe: if the shell tore the
@@ -266,6 +447,11 @@ void Backdrop::loaded(azbg_image* image, const QString& forPath) {
 		this->mReady = true;
 		emit this->readyChanged();
 	}
+
+	// Set here rather than when the sources change, because it depends on what
+	// was actually drawn and on the clock at the time it was: a plan that took
+	// a while to decode can land after the boundary it was aiming at.
+	this->scheduleNextFrame();
 }
 
 void Backdrop::flush() {
