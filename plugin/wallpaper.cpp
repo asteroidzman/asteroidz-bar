@@ -3,6 +3,7 @@
 #include <QtCore/QDebug>
 #include <QtCore/QMetaObject>
 #include <QtCore/QPointer>
+#include <QtCore/QHash>
 #include <QtCore/QThreadPool>
 #include <QtGui/QGuiApplication>
 #include <QtGui/qguiapplication_platform.h>
@@ -78,6 +79,59 @@ void Backdrop::setSource(const QString& source) {
 	this->reload();
 }
 
+void Backdrop::setSources(const QVariantMap& sources) {
+	if (sources == this->mSources) return;
+	this->mSources = sources;
+	emit this->sourcesChanged();
+	this->reload();
+}
+
+void Backdrop::refreshOutputs() {
+	if (this->mBackdrop == nullptr) return;
+
+	QStringList names;
+	auto n = azbg_backdrop_output_count(this->mBackdrop);
+	names.reserve(static_cast<qsizetype>(n));
+	for (size_t i = 0; i < n; i++) {
+		const auto* name = azbg_backdrop_output_name(this->mBackdrop, i);
+		if (name != nullptr) names.append(QString::fromUtf8(name));
+	}
+	// Sorted, because the order the compositor happens to announce outputs in
+	// is not something a settings page should present as if it meant anything.
+	names.sort();
+	if (names == this->mOutputs) return;
+
+	this->mOutputs = names;
+	emit this->outputsChanged();
+}
+
+Backdrop::Plan Backdrop::plan() const {
+	// Outputs grouped by the image they want, so a file shared by three
+	// monitors is decoded once instead of three times. The empty output list
+	// is the default image and means "every output not named in the map" --
+	// left as that rather than enumerated, so a monitor that shows up later is
+	// already covered.
+	Plan out;
+	QHash<QString, QStringList> byPath;
+	QStringList order;
+
+	for (const auto& name: this->mOutputs) {
+		auto path = this->mSources.value(name).toString();
+		if (path.isEmpty()) continue; // takes the default below
+		if (!byPath.contains(path)) order.append(path);
+		byPath[path].append(name);
+	}
+
+	// The default goes first, and it goes on EVERY output including the ones
+	// that are about to be overwritten. That is one redundant draw per
+	// overridden monitor on a cold start, and it buys the thing that matters:
+	// an output whose name has not arrived yet still gets a wallpaper, rather
+	// than staying black until xdg-output answers.
+	if (!this->mSource.isEmpty()) out.append({this->mSource, {}});
+	for (const auto& path: order) out.append({path, byPath.value(path)});
+	return out;
+}
+
 void Backdrop::setMode(const QString& mode) {
 	if (mode == this->mMode) return;
 	this->mMode = mode;
@@ -93,22 +147,37 @@ void Backdrop::setError(const QString& error) {
 }
 
 void Backdrop::reload() {
-	if (this->mBackdrop == nullptr || this->mSource.isEmpty()) return;
+	if (this->mBackdrop == nullptr) return;
 
-	// A decode already running: remember what to do next instead of racing
-	// it. Only the newest request survives -- the intermediate wallpapers of
-	// a fast cycle were never going to be seen anyway.
+	// A plan already running: abandon what is left of it and start over when
+	// it lands. Newest wins -- the remaining entries were computed from a
+	// configuration that no longer holds, and the intermediate wallpapers of a
+	// fast cycle were never going to be seen anyway.
 	if (this->mLoading) {
-		this->mPending = this->mSource;
+		this->mRestart = true;
 		return;
 	}
 
+	this->mQueue = this->plan();
+	if (this->mQueue.isEmpty()) return;
+
+	this->mPlanHdr = false;
+	this->mPlanDrew = false;
+	this->startNext();
+}
+
+void Backdrop::startNext() {
+	if (this->mQueue.isEmpty()) {
+		this->mLoading = false;
+		return;
+	}
+
+	auto path = this->mQueue.first().first;
 	this->mLoading = true;
-	auto source = this->mSource;
 	QPointer<Backdrop> self(this);
 
-	QThreadPool::globalInstance()->start([self, source]() {
-		auto* image = azbg_image_load(source.toUtf8().constData());
+	QThreadPool::globalInstance()->start([self, path]() {
+		auto* image = azbg_image_load(path.toUtf8().constData());
 
 		QMetaObject::invokeMethod(
 		    // The receiver is what keeps this safe: if the shell tore the
@@ -116,53 +185,96 @@ void Backdrop::reload() {
 		    // never runs -- so the image is freed here rather than leaked to
 		    // a handler that will not be reached.
 		    qGuiApp,
-		    [self, image, source]() {
+		    [self, image, path]() {
 			    if (self.isNull()) {
 				    azbg_image_destroy(image);
 				    return;
 			    }
-			    self->loaded(image, source);
+			    self->loaded(image, path);
 		    },
 		    Qt::QueuedConnection
 		);
 	});
 }
 
-void Backdrop::loaded(azbg_image* image, const QString& forSource) {
+void Backdrop::loaded(azbg_image* image, const QString& forPath) {
 	this->mLoading = false;
 
+	// The entry this decode was for. Taken now rather than at the end, so
+	// every path out of here has already consumed it.
+	QStringList outputs;
+	if (!this->mQueue.isEmpty()) {
+		outputs = this->mQueue.first().second;
+		this->mQueue.removeFirst();
+	}
+
 	if (image == nullptr) {
-		this->setError(QStringLiteral("cannot decode %1").arg(forSource));
+		// Named, because with several images in play "cannot decode" alone
+		// does not say which monitor is the black one.
+		this->setError(
+		    outputs.isEmpty()
+		        ? QStringLiteral("cannot decode %1").arg(forPath)
+		        : QStringLiteral("cannot decode %1 (for %2)")
+		              .arg(forPath, outputs.join(QStringLiteral(", ")))
+		);
 	} else {
 		// Drawn and dropped: the buffer the compositor now holds is the only
 		// copy that has to stay in memory. Keeping the decoded surface would
 		// cost tens of megabytes for the life of the shell to save a decode
 		// that happens when a monitor changes, which is ~never.
-		bool hdr =
-		    azbg_backdrop_present(this->mBackdrop, image, this->mMode.toUtf8().constData());
+		auto mode = this->mMode.toUtf8();
+		if (outputs.isEmpty()) {
+			if (azbg_backdrop_present(this->mBackdrop, image, mode.constData()))
+				this->mPlanHdr = true;
+			this->mPlanDrew = true;
+		} else {
+			for (const auto& name: outputs) {
+				if (azbg_backdrop_present_output(
+				        this->mBackdrop, name.toUtf8().constData(), image, mode.constData()
+				    ))
+					this->mPlanHdr = true;
+				this->mPlanDrew = true;
+			}
+		}
 		azbg_image_destroy(image);
-
-		if (hdr != this->mHdr) {
-			this->mHdr = hdr;
-			emit this->hdrChanged();
-		}
-
 		this->setError(QString());
-		if (!this->mReady) {
-			this->mReady = true;
-			emit this->readyChanged();
-		}
 	}
 
-	if (!this->mPending.isEmpty()) {
-		this->mPending.clear();
+	// A change arrived mid-plan: what is left was computed from the old
+	// configuration, so it is dropped rather than drawn.
+	if (this->mRestart) {
+		this->mRestart = false;
+		this->mQueue.clear();
 		this->reload();
+		return;
+	}
+
+	if (!this->mQueue.isEmpty()) {
+		this->startNext();
+		return;
+	}
+
+	// The plan is done, so `hdr` can be answered: it is a statement about what
+	// is on screen as a whole, and mid-plan there is no such whole. True if
+	// any monitor got HDR pixels -- on a mixed pair, "no" would be wrong about
+	// one of them and "yes" is at least true of one.
+	if (this->mPlanHdr != this->mHdr) {
+		this->mHdr = this->mPlanHdr;
+		emit this->hdrChanged();
+	}
+	if (this->mPlanDrew && !this->mReady) {
+		this->mReady = true;
+		emit this->readyChanged();
 	}
 }
 
 void Backdrop::flush() {
 	this->mFlushQueued = false;
 	if (this->mBackdrop == nullptr) return;
+
+	// An output may have arrived, gone, or only just told us its name -- and
+	// the name is what a per-output wallpaper is addressed by.
+	this->refreshOutputs();
 
 	// An output that appeared or resized wants pixels, and the image is not
 	// kept -- so this is where it gets read again.

@@ -189,7 +189,87 @@ Singleton {
         if (cfg.folder) root.folder = cfg.folder;
         if (cfg.order) root.order = cfg.order;
         if (cfg.interval) root.interval = parseInt(cfg.interval) || 3600;
+
+        if (cfg["wallpaper-scope"])
+            root.scope = cfg["wallpaper-scope"];
+
+        // Per-monitor overrides: `wallpaper.DP-1=/path/to/left.avif`.
+        //
+        // A prefixed key rather than a section or a second file, because this
+        // file is a flat key=value that other things also write -- the cycle
+        // daemon, a hotkey, a script -- and every one of them would have to
+        // learn a new shape. A key they do not recognise is one they leave
+        // alone, which is exactly the behaviour wanted.
+        //
+        // Rebuilt from scratch on every read, never merged: removing an
+        // override means deleting its line, and a merge would keep honouring a
+        // line that is no longer there.
+        const per = ({});
+        for (const k in cfg) {
+            if (k.startsWith("wallpaper.") && cfg[k])
+                per[k.slice(10)] = cfg[k];
+        }
+        root.storedPerMonitor = per;
+
         root.apply(cfg);
+    }
+
+    // ── one for all monitors, or one each ───────────────────────────────────
+    //
+    // An explicit choice rather than "per-monitor if any override exists".
+    // Inferring it would mean the way to go back to a single wallpaper is to
+    // delete every override -- which throws away exactly the settings somebody
+    // with a dock or a laptop wants kept.
+    property string scope: "all"   // "all" | "per-monitor"
+
+    // Every override the FILE holds, whatever the scope, including monitors
+    // that are not plugged in right now.
+    //
+    // Kept separate from what is drawn on purpose. Switching to one-for-all
+    // must not delete anything, and neither must unplugging a monitor: an
+    // entry for a screen that is not here is inert, not gone, and lights up
+    // again by itself when that screen comes back. That is the whole point for
+    // anyone who docks and undocks.
+    property var storedPerMonitor: ({})
+
+    // What actually reaches the wallpaper. Empty in "all" scope -- the
+    // overrides are still on disk, they are simply not in force.
+    readonly property var perMonitor: {
+        void storedPerMonitor;
+        return scope === "per-monitor" ? storedPerMonitor : ({});
+    }
+
+    // The monitors that are here now, from the outputs the backdrop has been
+    // told about -- not from the compositor's monitor list. They agree, but
+    // this is the list the drawing code matches names against, so offering any
+    // other would let a settings page write an override that silently never
+    // applies.
+    readonly property var monitors: backdrop.outputs
+
+    // Those, plus any monitor the file remembers that is not currently here,
+    // so a setting made for the dock is visible and editable while undocked
+    // rather than being invisible until you plug it back in.
+    readonly property var knownMonitors: {
+        const here = backdrop.outputs;
+        const out = here.slice();
+        const absent = [];
+        for (const name in storedPerMonitor)
+            if (here.indexOf(name) < 0)
+                absent.push(name);
+        absent.sort();
+        return out.concat(absent);
+    }
+
+    function monitorConnected(name) {
+        return backdrop.outputs.indexOf(name) >= 0;
+    }
+
+    function wallpaperFor(name) {
+        return storedPerMonitor[name] || "";
+    }
+
+    function setMonitorWallpaper(name, file) {
+        setKey("wallpaper." + name, file);
     }
 
     FileView {
@@ -225,6 +305,7 @@ Singleton {
     Backdrop {
         id: backdrop
         source: root.path
+        sources: root.perMonitor
         mode: root.mode
     }
 

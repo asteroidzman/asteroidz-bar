@@ -107,6 +107,39 @@ bounded, with no change to any QML file. The alternative — a settings UI with 
 own table of options — is a second description of the config that agrees with the
 compositor's until one of them gains an option.
 
+### One wallpaper, or one per monitor
+
+The Wallpaper page has an **Applies to** choice: *One for all monitors* or *One
+per monitor*. With the second, a strip of monitor names appears and whichever is
+selected is what the browser below sets.
+
+That is a switch, not something inferred from whether any override happens to
+exist. Inferring it would mean the only way back to a single wallpaper is to
+delete every per-monitor setting you have — which is exactly what you want kept.
+So *One for all monitors* stops the overrides applying and **leaves them on
+disk**, and switching back restores them.
+
+**A monitor that is not plugged in keeps its setting.** The overrides live in
+`wallpaper.conf` as `wallpaper.DP-1=…`, and the page lists any remembered
+monitor that is currently absent, marked `(away)`, so it can still be seen and
+changed while undocked. Nothing prunes them: an entry for a screen that is not
+here is inert, not gone, and takes effect again by itself when that screen comes
+back. For anyone who docks and undocks, that is the whole feature.
+
+A prefixed key rather than a section or a second file, because `wallpaper.conf`
+is a flat `key=value` that several other things also write — the cycle daemon, a
+hotkey, `set-wallpaper.sh` — and a new shape would mean teaching all of them. A
+key they do not recognise is one they leave alone.
+
+Underneath, the surfaces were already per-output: each has its own size, scale
+and colour-management object, so a different image per output costs nothing
+structurally. What it does cost is a decode per *distinct* image, so outputs are
+grouped by path and each file is decoded once however many monitors share it.
+The shared wallpaper is drawn first, on everything, before the overrides go on
+top — one redundant draw per overridden monitor at startup, in exchange for a
+monitor whose name has not arrived from the compositor yet still having a
+wallpaper instead of being black until `xdg-output` answers.
+
 ### Two stages, and why
 
 | | what it does |
@@ -565,7 +598,9 @@ or the portal answers "App info not found" and push-to-talk never binds.
 contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the shadow
 contrib/battery-test.sh    # the battery module, against a fake sysfs: absent on a
                            #   machine with no cell, present and tracking on one
-contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included
+contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included,
+                           #   and one per monitor against a second output the
+                           #   compositor is asked to create mid-test
 contrib/tray-test.sh       # the tray, on a private D-Bus session
 contrib/media-test.sh      # the media module, with a player and no sound
 contrib/notify-test.sh     # the bell, against a stubbed swaync

@@ -2,6 +2,7 @@
 #define _ASTEROIDZBG_BACKDROP_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <wayland-client.h>
 
 /* asteroidzbg as a library: the wallpaper, drawn on somebody else's
@@ -63,6 +64,31 @@ bool azbg_image_is_hdr(const struct azbg_image *image);
  * different situations with the same outcome: 8-bit sRGB. */
 bool azbg_backdrop_present(struct azbg_backdrop *bd,
 		const struct azbg_image *image, const char *mode);
+
+/* The same, on ONE output, named as the compositor names it ("DP-1"). NULL is
+ * every output, i.e. exactly azbg_backdrop_present.
+ *
+ * The surfaces are per-output already -- each has its own size, scale and
+ * colour-management object -- so a different image per output costs nothing
+ * structurally. What it does cost is a decode per distinct image, which is why
+ * the caller groups outputs by path rather than calling this once per output
+ * with the same file.
+ *
+ * Returns whether THIS image went up as HDR. An output whose name has not
+ * arrived from the compositor yet cannot be selected by name, and matching
+ * nothing returns false without drawing. */
+bool azbg_backdrop_present_output(struct azbg_backdrop *bd,
+		const char *output_name, const struct azbg_image *image,
+		const char *mode);
+
+/* The outputs that have a name, for a caller that wants to offer them: a
+ * settings page cannot ask for "the wallpaper on DP-1" without knowing DP-1
+ * exists. Indexed rather than handing back an array, so there is nothing to
+ * free; the string belongs to the backdrop and lives until that output goes
+ * away. */
+size_t azbg_backdrop_output_count(const struct azbg_backdrop *bd);
+const char *azbg_backdrop_output_name(const struct azbg_backdrop *bd,
+		size_t index);
 
 /* Deferred work: acknowledge configures and notice which outputs still have
  * no pixels. Returns true when an output is waiting for content, i.e. when

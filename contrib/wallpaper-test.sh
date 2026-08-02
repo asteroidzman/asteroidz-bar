@@ -153,7 +153,10 @@ if [ "$HAVE_HDR" = 1 ]; then
 	else
 		want="SDR"
 	fi
-	if grep -q "presented fill as $want" "$WORK/hdr.log"; then
+	# The line names the outputs it drew on between the mode and the depth
+	# ("presented fill on every output as SDR"), so this matches around that
+	# rather than pinning the whole sentence.
+	if grep -qE "presented fill .*as $want" "$WORK/hdr.log"; then
 		ok "presented as $want, which is what this compositor advertises"
 	else
 		bad "presented as $want, which is what this compositor advertises"
@@ -195,6 +198,86 @@ case "$got_before/$got_after" in
 2244CC*/CC7722*) ok "a new wallpaper in the config reaches the screen" ;;
 *) bad "a new wallpaper in the config reaches the screen (#$got_before -> #$got_after, wanted 2244CC -> CC7722)" ;;
 esac
+
+# ── 5: one wallpaper per monitor ────────────────────────────────────────────
+#
+# A second output, so "per monitor" is a claim that can be checked rather than
+# asserted on a machine with one screen. The compositor can make one:
+# `create_virtual_output` adds a headless output at runtime, which is the same
+# thing as far as the shell is concerned as plugging a monitor in.
+#
+# Two colours, one each, and BOTH are read. A test that only looked at the
+# overridden monitor would pass just as happily if the override had gone to
+# every screen -- which is the mistake this feature is most likely to make.
+SDR3="$WORK/sdr3.png"
+magick -size 640x480 xc:'#22cc44' "$SDR3" 2>/dev/null
+
+per_conf() { # per_conf <scope>
+	printf 'folder=%s\nwallpaper=%s\nmode=fill\nwallpaper-scope=%s\nwallpaper.%s=%s\n' \
+		"$WORK" "$SDR" "$1" "$SECOND" "$SDR3" > "$WORK/wallpaper.conf"
+}
+
+hl_dispatch "create_virtual_output" 1
+sleep 2
+MONS="$(hl_get "get all-monitors" | jq -r '.monitors[].name' | sort)"
+SECOND="$(printf '%s\n' "$MONS" | grep -v "^$HL_MON\$" | head -1)"
+
+if [ -n "$SECOND" ]; then
+	ok "a second output exists to test against ($SECOND)"
+
+	# run_shell writes its own single-wallpaper config, so the real one is
+	# written after it starts -- which is also the path under test: the shell
+	# watches the file and picks the change up.
+	QS="$(run_shell "$SDR" "$WORK/two.log")"
+	sleep 6
+	per_conf "per-monitor"
+	sleep 5
+	grim -o "$HL_MON" "$WORK/mon1.png" 2>/dev/null
+	grim -o "$SECOND" "$WORK/mon2.png" 2>/dev/null
+	kill "$QS" 2>/dev/null
+	wait "$QS" 2>/dev/null
+
+	one="$(magick "$WORK/mon1.png" -crop "${HL_WIDTH}x400+0+400" +repage \
+		-resize 1x1 -format '%[hex:p{0,0}]' info: 2>/dev/null)"
+	two="$(magick "$WORK/mon2.png" -crop "300x300+10+300" +repage \
+		-resize 1x1 -format '%[hex:p{0,0}]' info: 2>/dev/null)"
+
+	case "$two" in
+	22CC44*) ok "the overridden monitor shows its own wallpaper (#$two)" ;;
+	*) bad "the overridden monitor shows its own wallpaper (got #$two, wanted 22CC44)" ;;
+	esac
+	# The premise. Without it, the assertion above passes just as well when the
+	# override has been applied to every screen.
+	case "$one" in
+	2244CC*) ok "...and the other one still shows the shared wallpaper (#$one)" ;;
+	*) bad "...and the other one still shows the shared wallpaper (got #$one, wanted 2244CC)" ;;
+	esac
+
+	# Scope is a switch, not a consequence of having overrides: back to "all"
+	# and the override stops applying WITHOUT being deleted, which is what makes
+	# it survive a docking cycle.
+	QS="$(run_shell "$SDR" "$WORK/all.log")"
+	sleep 6
+	per_conf "all"
+	sleep 5
+	grim -o "$SECOND" "$WORK/mon2all.png" 2>/dev/null
+	kill "$QS" 2>/dev/null
+	wait "$QS" 2>/dev/null
+
+	twoall="$(magick "$WORK/mon2all.png" -crop "300x300+10+300" +repage \
+		-resize 1x1 -format '%[hex:p{0,0}]' info: 2>/dev/null)"
+	case "$twoall" in
+	2244CC*) ok "...'one for all' puts the shared wallpaper back everywhere" ;;
+	*) bad "...'one for all' puts the shared wallpaper back everywhere (got #$twoall, wanted 2244CC)" ;;
+	esac
+	if grep -q "^wallpaper\.$SECOND=" "$WORK/wallpaper.conf"; then
+		ok "...without deleting the remembered per-monitor setting"
+	else
+		bad "...without deleting the remembered per-monitor setting"
+	fi
+else
+	bad "a second output exists to test against (monitors: $(printf '%s' "$MONS" | tr '\n' ' '))"
+fi
 
 # ── and nothing was spawned to do it ─────────────────────────────────────────
 

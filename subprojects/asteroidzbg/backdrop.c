@@ -376,12 +376,18 @@ static void output_name(void *data, struct wl_output *wl_output,
 	struct azbg_output *output = data;
 	free(output->name);
 	output->name = strdup(name);
+	/* The host is told, because the name is what a per-output wallpaper is
+	 * addressed BY: until it arrives this output can only take the
+	 * everything-else image, and the moment it arrives it may want a
+	 * different one. It is also what a settings page lists. */
+	wake(output->bd);
 }
 
 static void output_description(void *data, struct wl_output *wl_output,
 		const char *description) {
-	// Who cares: there is one wallpaper for every output, so there is
-	// nothing to match a description against.
+	// Who cares: a wallpaper is chosen per output by NAME, which is stable
+	// and is what the compositor calls the thing everywhere else. A
+	// description is prose and can change.
 }
 
 static const struct wl_output_listener output_listener = {
@@ -513,7 +519,9 @@ bool azbg_backdrop_ready(const struct azbg_backdrop *bd) {
 	return bd && bd->compositor && bd->shm && bd->layer_shell;
 }
 
-bool azbg_backdrop_present(struct azbg_backdrop *bd,
+/* One image onto whichever outputs `only` selects: NULL for all of them, or a
+ * name to draw on exactly one. */
+static bool present_on(struct azbg_backdrop *bd, const char *only,
 		const struct azbg_image *image, const char *mode) {
 	if (!azbg_backdrop_ready(bd)) {
 		return false;
@@ -525,8 +533,15 @@ bool azbg_backdrop_present(struct azbg_backdrop *bd,
 	}
 	bd->mode = m;
 
+	bool drew = false;
 	struct azbg_output *output;
 	wl_list_for_each(output, &bd->outputs, link) {
+		/* An output whose name has not arrived yet cannot be selected by
+		 * name. It still takes the all-outputs case, which is what keeps a
+		 * plain single wallpaper working before xdg-output has answered. */
+		if (only && (!output->name || strcmp(output->name, only) != 0)) {
+			continue;
+		}
 		if (output->needs_ack) {
 			output->needs_ack = false;
 			zwlr_layer_surface_v1_ack_configure(output->layer_surface,
@@ -537,13 +552,67 @@ bool azbg_backdrop_present(struct azbg_backdrop *bd,
 		 * nothing about the pixels. */
 		render_frame(output, image ? image->hdr : NULL);
 		output->dirty = false;
+		drew = true;
 	}
 	wl_display_flush(bd->display);
 
+	/* Nothing was drawn, so nothing is on screen to describe -- saying "SDR"
+	 * would be a claim about pixels that do not exist. */
+	if (!drew) {
+		return false;
+	}
+
 	bool hdr = wants_hdr(bd, image ? image->hdr : NULL);
-	asteroidzbg_log(LOG_DEBUG, "presented %s as %s",
-		mode ? mode : "fill", hdr ? "HDR10 (10-bit, tagged)" : "SDR (8-bit)");
+	asteroidzbg_log(LOG_DEBUG, "presented %s on %s as %s",
+		mode ? mode : "fill", only ? only : "every output",
+		hdr ? "HDR10 (10-bit, tagged)" : "SDR (8-bit)");
 	return hdr;
+}
+
+bool azbg_backdrop_present(struct azbg_backdrop *bd,
+		const struct azbg_image *image, const char *mode) {
+	return present_on(bd, NULL, image, mode);
+}
+
+bool azbg_backdrop_present_output(struct azbg_backdrop *bd,
+		const char *output_name, const struct azbg_image *image,
+		const char *mode) {
+	if (!output_name) {
+		return azbg_backdrop_present(bd, image, mode);
+	}
+	return present_on(bd, output_name, image, mode);
+}
+
+size_t azbg_backdrop_output_count(const struct azbg_backdrop *bd) {
+	if (!bd) {
+		return 0;
+	}
+	size_t n = 0;
+	struct azbg_output *output;
+	wl_list_for_each(output, &bd->outputs, link) {
+		if (output->name) {
+			n++;
+		}
+	}
+	return n;
+}
+
+const char *azbg_backdrop_output_name(const struct azbg_backdrop *bd,
+		size_t index) {
+	if (!bd) {
+		return NULL;
+	}
+	size_t n = 0;
+	struct azbg_output *output;
+	wl_list_for_each(output, &bd->outputs, link) {
+		if (!output->name) {
+			continue;
+		}
+		if (n++ == index) {
+			return output->name;
+		}
+	}
+	return NULL;
 }
 
 bool azbg_backdrop_flush(struct azbg_backdrop *bd) {
