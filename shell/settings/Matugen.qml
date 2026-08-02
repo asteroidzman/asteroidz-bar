@@ -188,6 +188,8 @@ Singleton {
     property string status: ""
     property bool statusBad: false
     property bool busy: false
+    // A re-theme that arrived before the mapping was read; run once it is.
+    property string pendingRetheme: ""
     property int generation: 0
 
     function defaultsFor(k) {
@@ -219,6 +221,15 @@ Singleton {
         roleProbe.running = true;
         mapFile.reload();
         templateFile.reload();
+    }
+
+    function runPendingRetheme() {
+        const w = pendingRetheme;
+        if (w === "")
+            return;
+        pendingRetheme = "";
+        loaded = true;   // whatever the file said, or did not
+        retheme(w);
     }
 
     function parseMapping(text) {
@@ -385,6 +396,7 @@ Singleton {
         onLoaded: {
             root.mapping = root.parseMapping(text());
             root.loaded = true;
+            root.runPendingRetheme();
         }
         onLoadFailed: {
             // No mapping yet. Seed from the template if there is one, so the
@@ -393,6 +405,10 @@ Singleton {
             root.mapping = ({});
             templateFile.reload();
             root.loaded = true;
+            // A pending re-theme still runs. No mapping is a real state -- a
+            // machine that has never opened the Palette page -- and the
+            // built-in scheme is the honest answer there.
+            root.runPendingRetheme();
         }
     }
 
@@ -618,6 +634,44 @@ Singleton {
     }
 
     // ── applying ────────────────────────────────────────────────────────────
+
+    // Re-theme for a wallpaper that just changed.
+    //
+    // Not `apply()`: that rewrites the template and the mapping, which is what
+    // the Palette page's button means. A wallpaper change means only "run the
+    // templates that are already there against this image", so this renders and
+    // nothing else -- and matugen's own post-hooks do the reloading, which is
+    // how every other themed application on the machine hears about it.
+    //
+    // set-wallpaper.sh used to do this. It was a shell script because the
+    // wallpaper was one; now the shell draws the wallpaper itself, and a
+    // separate process to re-theme it is a second thing to keep in step. They
+    // DID fall out of step -- the script passed scheme-fidelity and the Palette
+    // page passed nothing, which is scheme-tonal-spot, and 39 of matugen's 50
+    // roles differ between them -- so whichever ran last retoned the desktop.
+    function retheme(wallpaper) {
+        if (busy || !wallpaper)
+            return;
+        // The scheme flags live in the mapping file, and that is loaded lazily
+        // -- the Palette page calls load() when it is opened. A re-theme can
+        // happen long before anybody opens it (the wallpaper cycles on a timer,
+        // or is set from a keybind), and running with the built-in defaults
+        // would quietly retone the whole desktop to a scheme the user did not
+        // choose. This is the exact failure the shell script had, from the
+        // other direction.
+        if (!loaded) {
+            mapFile.reload();
+            pendingRetheme = wallpaper;
+            return;
+        }
+        busy = true;
+        status = "";
+        statusBad = false;
+        renderArgs = [];
+        renderWallpaper = wallpaper;
+        converted = false;
+        runRender(wallpaper);
+    }
 
     function apply(wallpaper) {
         if (busy)

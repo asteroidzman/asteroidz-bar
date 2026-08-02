@@ -59,7 +59,7 @@ Pill {
         // at night is still rain.
         if (!isDay && (name === "sunny" || name === "pcloudy"))
             name = name === "sunny" ? "night" : "npcloudy";
-        return "waybar-weather/" + name + ".svg";
+        return "asteroidz-bar/weather/" + name + ".svg";
     }
 
     icons: [art()]
@@ -99,7 +99,7 @@ Pill {
                 rows.push({
                     text: d.day + "   " + d.hi + "°  /  " + d.lo + "°   "
                           + (wmoText[d.code] || ""),
-                    icon: "waybar-weather/" + (wmoIcons[d.code] || "cloud") + ".svg",
+                    icon: "asteroidz-bar/weather/" + (wmoIcons[d.code] || "cloud") + ".svg",
                     enabled: false
                 });
             }

@@ -546,7 +546,7 @@ FloatingWindow {
                                     icon: "asteroidz-bar/settings/" + g.name + ".svg" }))
                         .concat([{ name: "", label: "Displays",
                                    page: "displays",
-                                   icon: "waybar-display/display.svg" },
+                                   icon: "asteroidz-bar/display/display.svg" },
                                  { name: "", label: "Wallpaper",
                                    page: "wallpaper",
                                    icon: "asteroidz-bar/settings/wallpaper.svg" },

@@ -25,6 +25,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import Asteroidz.Bar
+import "settings"
 
 Singleton {
     id: root
@@ -35,9 +36,30 @@ Singleton {
     //
     // Overridable so a test can point the shell at a wallpaper of its own
     // without touching (or being touched by) the real desktop's.
-    readonly property string confPath:
-        Quickshell.env("ASTEROIDZ_BAR_WALLPAPER_CONF")
-        || (Quickshell.env("HOME") + "/.config/waybar/wallpaper.conf")
+    // It lived at ~/.config/waybar/wallpaper.conf, named for a bar that has
+    // not run here since 2026-07-25. The old path is still used when it is the
+    // only one that exists, because the cycle daemon and the wallpaper scripts
+    // read the same file: if this moved on its own, the bar would write one
+    // file while the daemon cycled off another, and picking a wallpaper would
+    // appear to do nothing until the next interval put the old one back.
+    //
+    // Prefer-new, fall-back-old, and whichever side is upgraded first still
+    // agrees with the other.
+    readonly property string newConfPath:
+        Quickshell.env("HOME") + "/.config/asteroidz-bar/wallpaper.conf"
+    readonly property string legacyConfPath:
+        Quickshell.env("HOME") + "/.config/waybar/wallpaper.conf"
+
+    readonly property string confPath: {
+        const override = Quickshell.env("ASTEROIDZ_BAR_WALLPAPER_CONF");
+        if (override)
+            return override;
+        const found = Paths.resolve([newConfPath, legacyConfPath]);
+        if (found.startsWith("file://"))
+            return found.slice(7);
+        // Neither exists yet: the new one is what gets created.
+        return newConfPath;
+    }
 
     property string path: ""
     property string mode: "fill"
@@ -192,6 +214,9 @@ Singleton {
 
         if (cfg["wallpaper-scope"])
             root.scope = cfg["wallpaper-scope"];
+        if (cfg.retheme !== undefined)
+            root.retheming = !["0", "no", "false", "off"]
+                .includes(String(cfg.retheme).toLowerCase());
 
         // Per-monitor overrides: `wallpaper.DP-1=/path/to/left.avif`.
         //
@@ -292,8 +317,132 @@ Singleton {
         if (!next)
             return;
 
+        const changed = next !== path;
         path = next;
         mode = nextMode;
+        // Not on the first one. Startup takes `path` from "" to whatever the
+        // config says, which is not a change anybody made -- and re-theming
+        // there would run matugen and fire every reload hook on the machine
+        // once per shell start, retoning a desktop that was already themed for
+        // exactly this wallpaper when it was set.
+        //
+        // The cost is a theme left stale if something replaced the wallpaper
+        // while the shell was down. The old script paid a state file to cover
+        // that; a wrong palette until the next change is the cheaper mistake.
+        if (changed && !firstApply)
+            retheme();
+        firstApply = false;
+    }
+
+    property bool firstApply: true
+
+    // ── the theme follows the wallpaper ─────────────────────────────────────
+    //
+    // matugen derives the whole desktop's palette from the wallpaper, so a new
+    // wallpaper means a new palette. set-wallpaper.sh used to do this, and it
+    // was a shell script for one reason: the wallpaper was a separate process
+    // too. It is not any more.
+    //
+    // `retheme=0` in wallpaper.conf turns it off, which is the setting somebody
+    // wants when they have tuned a theme by hand and still want the picture to
+    // change.
+    property bool retheming: true
+
+    function retheme() {
+        if (!retheming || path === "")
+            return;
+        // Guarded against the reload that matugen's own post-hook causes: it
+        // dispatches reload_config, the compositor re-reads its config, the bar
+        // re-reads its own -- and if that round trip rewrote the wallpaper, this
+        // would run again forever. The path has to have actually changed, which
+        // apply() has already established.
+        Matugen.retheme(path);
+    }
+
+    // A wallpaper the shell picked itself still has to reach the file, or
+    // nothing else on the desktop knows what is on screen.
+    function setWallpaper(file) {
+        if (file && file !== path)
+            setKey("wallpaper", file);
+    }
+
+    // Reachable from a keybind, without a script in between.
+    //
+    // `Super+y` used to spawn cycle-wallpaper.sh, which read this same config,
+    // listed the same folder and wrote the same key -- a whole process to ask
+    // the shell to do what the shell does. Now the compositor's bind calls
+    // straight in:
+    //
+    //     qs -p /usr/share/asteroidz-bar/shell.qml ipc call wallpaper next
+    IpcHandler {
+        target: "wallpaper"
+
+        function next(): string {
+            root.advance();
+            return root.path;
+        }
+
+        function set(file: string): string {
+            root.setWallpaper(file);
+            return root.path;
+        }
+
+        // What is on screen, for anything that wants to ask rather than parse
+        // the config file itself.
+        function current(): string {
+            return root.path;
+        }
+    }
+
+    // ── cycling ─────────────────────────────────────────────────────────────
+    //
+    // This was two shell scripts: a daemon that slept for `interval` and a
+    // picker that advanced the file. Both read the same config this does and
+    // wrote the same key, so the only thing they added was two more processes
+    // and a rounding error -- the daemon slept the interval, then the picker
+    // read the folder again, so "every 60 minutes" drifted by however long the
+    // scan took, every time.
+    //
+    // Here it is a timer over a list the shell already maintains: `available`
+    // is scanned on demand AND kept current by the folder watcher, so cycling
+    // never picks a file that has just been deleted.
+    Timer {
+        id: cycle
+        // `static` means never, whatever the interval says -- and an interval
+        // of zero has always meant the same thing.
+        running: root.order !== "static" && root.interval > 0
+                 && root.available.length > 1
+        interval: Math.max(60, root.interval) * 1000
+        repeat: true
+        onTriggered: root.advance()
+    }
+
+    function advance() {
+        const list = available;
+        if (list.length === 0)
+            return;
+        if (list.length === 1) {
+            setWallpaper(list[0]);
+            return;
+        }
+
+        const at = list.indexOf(path);
+        if (order === "sequential") {
+            // Not found means the current wallpaper is outside the folder, in
+            // which case the next one is the first -- which is what the script
+            // did, and is the only answer that makes progress.
+            setWallpaper(list[(at + 1) % list.length]);
+            return;
+        }
+
+        // Random, but never the one already up: a rotation that can repeat the
+        // current wallpaper looks like it has stopped working.
+        let pick = at;
+        for (let i = 0; i < 8 && pick === at; i++)
+            pick = Math.floor(Math.random() * list.length);
+        if (pick === at)
+            pick = (at + 1) % list.length;
+        setWallpaper(list[pick]);
     }
 
     // The wallpaper itself.

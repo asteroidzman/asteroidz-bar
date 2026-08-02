@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Reminders as an asteroidz bar plugin: scheduled tasks, done or skipped.
 
-Replaces the compositor's built-in `medication` module, reading and writing the
-same store the waybar plugin used:
+Replaces the compositor's built-in `medication` module. The store is
 
-    $XDG_STATE_HOME/waybar-medication/medications.json
+    $XDG_STATE_HOME/asteroidz-bar/reminders.json
 
-That path keeps its old name deliberately. It is DATA -- an existing schedule
-and its history -- and renaming the module is not a reason to make somebody's
-reminders disappear. The same goes for the icon directory the ICON below names,
-which is installed by the asteroidz package and not by this one.
+and it used to be $XDG_STATE_HOME/asteroidz-bar/medication/medications.json -- named
+for a bar that no longer runs and for a narrower job than this now does.
+
+The old path is still READ, once, when the new one is absent: it is DATA, an
+existing schedule and its history, and a rename is not a reason to make
+somebody's reminders disappear. It is copied, never moved, so a migration that
+goes wrong leaves the original where it was.
 
 The store is the reason this belongs outside the compositor. Reading it means a
 stat() on every arrange and a JSON parse whenever it changes, and WRITING it --
@@ -63,10 +65,38 @@ doses = []          # [{key,name,time,scheduled,status,postponed_until,due}]
 menu_level = None   # None = top, otherwise the dose key being shown
 
 
-def store_path():
+def state_base():
     state = os.environ.get("XDG_STATE_HOME")
-    base = state if state else os.path.join(os.path.expanduser("~"), ".local/state")
-    return os.path.join(base, "waybar-medication", "medications.json")
+    return state if state else os.path.join(os.path.expanduser("~"), ".local/state")
+
+
+# Where the store lived when this was a waybar plugin. Read once, on the first
+# run that finds no new store, and copied across.
+def legacy_store_path():
+    return os.path.join(state_base(), "waybar-medication", "medications.json")
+
+
+def store_path():
+    path = os.path.join(state_base(), "asteroidz-bar", "reminders.json")
+    if os.path.exists(path):
+        return path
+
+    # Copied, not moved. If anything about this goes wrong -- a full disk, a
+    # permission problem, an interrupted write -- the schedule and its history
+    # are still in the old file, which is the only copy that exists.
+    old = legacy_store_path()
+    if os.path.exists(old):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + ".tmp"
+            with open(old, "rb") as src, open(tmp, "wb") as dst:
+                dst.write(src.read())
+            os.replace(tmp, path)
+        except OSError:
+            # Could not migrate: go on reading the old file rather than
+            # starting empty, which would look exactly like data loss.
+            return old
+    return path
 
 
 def load_doc():

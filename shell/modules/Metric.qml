@@ -18,8 +18,8 @@ Pill {
     readonly property int pct:
         kind === "cpu" ? Metrics.cpuPct : Metrics.memPct
 
-    icons: [kind === "cpu" ? "waybar-sysinfo/cpu.svg"
-                           : "waybar-sysinfo/mem.svg"]
+    icons: [kind === "cpu" ? "asteroidz-bar/sysinfo/cpu.svg"
+                           : "asteroidz-bar/sysinfo/mem.svg"]
     iconTint: Metrics.loadTint(pct)
     // Icon-only pills carry no padding of their own: the run is spaced by an
     // exact gap instead, because padding is symmetric and would also pad the

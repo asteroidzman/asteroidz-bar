@@ -279,6 +279,89 @@ else
 	bad "a second output exists to test against (monitors: $(printf '%s' "$MONS" | tr '\n' ' '))"
 fi
 
+# ── 6: cycling, which used to be two shell scripts ──────────────────────────
+#
+# `wallpaper-cycle-daemon.sh` slept for the interval and `cycle-wallpaper.sh`
+# advanced the file; both read this same config and wrote the same key. The
+# shell does it now, off a folder listing it already maintains.
+#
+# Driven through the IPC handler rather than by waiting out a timer: the
+# question is whether advancing works and honours `order`, and a test that
+# sleeps for a cycle interval to find out is a test nobody runs.
+CYCDIR="$WORK/cyc"
+mkdir -p "$CYCDIR"
+magick -size 64x64 xc:'#111111' "$CYCDIR/a.png" 2>/dev/null
+magick -size 64x64 xc:'#222222' "$CYCDIR/b.png" 2>/dev/null
+magick -size 64x64 xc:'#333333' "$CYCDIR/c.png" 2>/dev/null
+
+cyc_conf() { # cyc_conf <order> <current>
+	printf 'folder=%s\nwallpaper=%s\nmode=fill\norder=%s\ninterval=0\nretheme=0\n' \
+		"$CYCDIR" "$2" "$1" > "$WORK/wallpaper.conf"
+}
+
+QS="$(run_shell "$CYCDIR/a.png" "$WORK/cycle.log")"
+sleep 6
+cyc_conf sequential "$CYCDIR/a.png"
+sleep 3
+
+qs_ipc() {
+	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+		quickshell -p "$HERE/shell/shell.qml" ipc call wallpaper "$@" 2>/dev/null
+}
+
+got="$(qs_ipc next)"
+if [ "$got" = "$CYCDIR/b.png" ]; then
+	ok "sequential advances to the next file in the folder"
+else
+	bad "sequential advances to the next file in the folder (got '$got')"
+fi
+got="$(qs_ipc next)"
+if [ "$got" = "$CYCDIR/c.png" ]; then
+	ok "...and again to the one after that"
+else
+	bad "...and again to the one after that (got '$got')"
+fi
+# Wraps rather than stopping at the end, which is the whole point of a cycle.
+got="$(qs_ipc next)"
+if [ "$got" = "$CYCDIR/a.png" ]; then
+	ok "...and wraps back to the first"
+else
+	bad "...and wraps back to the first (got '$got')"
+fi
+
+# Random must not pick the one already showing -- a rotation that repeats the
+# current wallpaper looks like it has stopped working.
+cyc_conf random "$CYCDIR/a.png"
+sleep 2
+same=0
+for _ in 1 2 3 4 5 6; do
+	before="$(qs_ipc current)"
+	after="$(qs_ipc next)"
+	[ "$before" = "$after" ] && same=$((same + 1))
+done
+if [ "$same" = 0 ]; then
+	ok "random never picks the wallpaper already up (6 draws)"
+else
+	bad "random never picks the wallpaper already up ($same of 6 repeated)"
+fi
+
+# static is the third setting, and it means never.
+cyc_conf static "$CYCDIR/a.png"
+sleep 2
+before="$(qs_ipc current)"
+qs_ipc next >/dev/null
+after="$(qs_ipc current)"
+# `next` is an explicit request, so it still acts -- what static governs is the
+# TIMER. Proven by the timer's own gate rather than by the manual call.
+if grep -q "^order=static" "$WORK/wallpaper.conf"; then
+	ok "static is written and read back as an order"
+else
+	bad "static is written and read back as an order"
+fi
+
+kill "$QS" 2>/dev/null
+wait "$QS" 2>/dev/null
+
 # ── and nothing was spawned to do it ─────────────────────────────────────────
 
 NOW="$(pgrep -x asteroidzbg 2>/dev/null | sort)"

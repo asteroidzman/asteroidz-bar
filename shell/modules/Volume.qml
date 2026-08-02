@@ -22,10 +22,10 @@ Pill {
     // reports whatever it held when it was first seen.
     PwObjectTracker { objects: root.sink ? [root.sink] : [] }
 
-    icons: [muted || pct === 0 ? "waybar-volume/vol-mute.svg"
-          : pct < 34 ? "waybar-volume/vol-low.svg"
-          : pct < 67 ? "waybar-volume/vol-med.svg"
-                     : "waybar-volume/vol-high.svg"]
+    icons: [muted || pct === 0 ? "asteroidz-bar/volume/vol-mute.svg"
+          : pct < 34 ? "asteroidz-bar/volume/vol-low.svg"
+          : pct < 67 ? "asteroidz-bar/volume/vol-med.svg"
+                     : "asteroidz-bar/volume/vol-high.svg"]
 
     // Dimmed while muted, so it reads as inactive like a resting metric.
     iconTint: muted ? Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)

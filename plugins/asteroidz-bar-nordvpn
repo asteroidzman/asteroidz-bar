@@ -59,8 +59,8 @@ def _find_cli():
 
 CLI = _find_cli()
 
-ICON_ON = "waybar-nordvpn/shield.svg"
-ICON_OFF = "waybar-nordvpn/shield-off.svg"
+ICON_ON = "asteroidz-bar/nordvpn/shield.svg"
+ICON_OFF = "asteroidz-bar/nordvpn/shield-off.svg"
 POLL_SECONDS = int(os.environ.get("ASTEROIDZ_VPN_INTERVAL", "5"))
 # Amber, for "connecting". Not a theme token because the theme has no word for
 # in-progress; the built-in module carries the same literal for the same reason.

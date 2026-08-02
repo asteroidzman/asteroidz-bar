@@ -87,7 +87,7 @@ check(rem.scheduled_today(
 # reload_doses, which is what actually decides whether the pill lights up.
 with tempfile.TemporaryDirectory() as tmp:
     os.environ["XDG_STATE_HOME"] = tmp
-    os.makedirs(os.path.join(tmp, "waybar-medication"), exist_ok=True)
+    os.makedirs(os.path.join(tmp, "asteroidz-bar"), exist_ok=True)
     today = datetime.now().date()
     doc = {"version": 1, "doseState": {}, "history": [],
            "medications": [
@@ -103,6 +103,43 @@ with tempfile.TemporaryDirectory() as tmp:
     names = sorted({d["name"] for d in rem.doses})
     check(names == ["escitalopram"],
           "reload_doses lists only what is scheduled today (%s)" % (names,))
+
+# ── the store moved, and the old one is still read ──────────────────────────
+#
+# It used to be $XDG_STATE_HOME/waybar-medication/medications.json, named for a
+# bar that no longer runs. Somebody's schedule and its history live in that
+# file, so the rename has to carry it across -- and carry it by COPYING, so a
+# migration that fails leaves the only copy where it was.
+with tempfile.TemporaryDirectory() as tmp:
+    os.environ["XDG_STATE_HOME"] = tmp
+    old_dir = os.path.join(tmp, "waybar-medication")
+    os.makedirs(old_dir)
+    old_file = os.path.join(old_dir, "medications.json")
+    doc = {"version": 1, "doseState": {}, "history": [],
+           "medications": [med(1, start=datetime.now().date(), key="frequencyValue")]}
+    open(old_file, "w").write(json.dumps(doc))
+
+    new_file = os.path.join(tmp, "asteroidz-bar", "reminders.json")
+    check(rem.store_path() == new_file,
+          "the store is at the new path")
+    check(os.path.exists(new_file),
+          "...and an old store is migrated to it")
+    check(os.path.exists(old_file),
+          "...by COPYING: the original is still there")
+    check(json.load(open(new_file)) == doc,
+          "...with the schedule and history intact")
+
+    # A second call must not re-copy over whatever has been written since.
+    open(new_file, "w").write(json.dumps({"version": 1, "medications": [], "note": "newer"}))
+    rem.store_path()
+    check(json.load(open(new_file)).get("note") == "newer",
+          "...and once migrated the old file is never read again")
+
+# No store at all is the first-run case: a path to create, not an error.
+with tempfile.TemporaryDirectory() as tmp:
+    os.environ["XDG_STATE_HOME"] = tmp
+    check(rem.store_path() == os.path.join(tmp, "asteroidz-bar", "reminders.json"),
+          "a first run with nothing to migrate points at the new path")
 
 print()
 print("  %d passed, %d failed" % (PASS, FAIL))

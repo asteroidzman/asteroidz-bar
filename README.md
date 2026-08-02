@@ -140,6 +140,48 @@ top — one redundant draw per overridden monitor at startup, in exchange for a
 monitor whose name has not arrived from the compositor yet still having a
 wallpaper instead of being black until `xdg-output` answers.
 
+### The wallpaper stack is the shell, not five scripts
+
+Cycling, applying and re-theming used to be `set-wallpaper.sh`,
+`cycle-wallpaper.sh`, `wallpaper-cycle-daemon.sh`, `hdr-proxy.sh` and
+`wallust-theme.py` — around 700 lines reading the same `wallpaper.conf` this
+shell reads, to do work this shell was already doing. It draws the wallpaper in
+its own process, keeps the folder listing current with an inotify watcher, and
+runs matugen for the Palette page.
+
+They were not merely redundant, they **disagreed**: the script passed
+`scheme-fidelity` and the Palette page passed nothing, which means
+`scheme-tonal-spot`, and 39 of matugen's 50 roles differ between the two — so
+whichever ran last retoned the whole desktop. Duplicated state in a second
+process is the cost, not the line count.
+
+| was | is |
+|---|---|
+| `wallpaper-cycle-daemon.sh` + `cycle-wallpaper.sh` | a `Timer` over `Wallpaper.available` |
+| `set-wallpaper.sh`'s matugen half | `Matugen.retheme()` on a wallpaper change |
+| `set-wallpaper.sh`'s asteroidzbg half | already dead — the shell draws it in-process |
+| `hdr-proxy.sh` | the convert-and-retry the Palette page already does |
+| `wallust-theme.py` | gone; matugen is the themer |
+
+`Super+y` no longer spawns anything:
+
+```
+Super+y { spawn "qs -p /usr/share/asteroidz-bar/shell.qml ipc call wallpaper next"; }
+```
+
+`wallpaper` exposes `next`, `set <file>` and `current`.
+
+**Two things were deliberately dropped.** The script kept a *theme cache* keyed
+by image identity, so revisiting a wallpaper restored the generated files
+instead of re-running matugen — worth a second or two on a revisit, and not
+worth reimplementing. And `themer=wallust` is gone entirely.
+
+One trap this hit: matugen's scheme flags live in a mapping file the Palette
+page loads *lazily*, so a re-theme fired by the cycle timer before anybody
+opened that page would have used the built-in defaults — the same
+retone-the-desktop bug, from the other direction. A re-theme that arrives early
+now waits for the mapping and runs after it.
+
 ### Changing on its own, or not
 
 **Change** is `random`, `sequential` or `static`, and **Every (min)** is only

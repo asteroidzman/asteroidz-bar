@@ -5,7 +5,7 @@
 // them already exist and are used daily; a "better" schema would have bought
 // nothing and broken all of them.
 //
-//   {"text":"Idle","icon":"waybar-discord-voice/discord.svg","tint":"accent"}
+//   {"text":"Idle","icon":"asteroidz-bar/discord-voice/discord.svg","tint":"accent"}
 //   {"menu":{"item":"","rows":[{"text":"Mute","value":"do:mute"}]}}
 //   {"hidden":true}
 //

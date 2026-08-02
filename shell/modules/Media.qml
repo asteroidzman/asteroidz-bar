@@ -63,7 +63,7 @@ Row {
     // ── transport ───────────────────────────────────────────────────────────
 
     Pill {
-        icons: ["waybar-media-cava/prev.svg"]
+        icons: ["asteroidz-bar/media-cava/prev.svg"]
         iconTint: Cfg.fg
         // These SVGs fill their viewBox edge to edge, with none of the margin
         // a themed icon carries, so at the pill's full height they tower over
@@ -77,8 +77,8 @@ Row {
 
     Pill {
         // The ACTION, not the state: a playing track offers pause.
-        icons: [root.playing ? "waybar-media-cava/pause.svg"
-                             : "waybar-media-cava/play.svg"]
+        icons: [root.playing ? "asteroidz-bar/media-cava/pause.svg"
+                             : "asteroidz-bar/media-cava/play.svg"]
         iconTint: Cfg.fg
         iconScale: 0.66
         paddingX: 0
@@ -87,7 +87,7 @@ Row {
     }
 
     Pill {
-        icons: ["waybar-media-cava/next.svg"]
+        icons: ["asteroidz-bar/media-cava/next.svg"]
         iconTint: Cfg.fg
         iconScale: 0.66
         paddingX: 0
