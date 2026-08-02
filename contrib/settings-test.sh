@@ -1474,6 +1474,28 @@ if [ "${CHIP_X:-0}" -gt 0 ]; then
 	else
 		bad "clicking an unplaced module writes it into the config (still $AFTER_RIGHT)"
 	fi
+	# TWICE. One click proved the write path and nothing else -- and the bug
+	# this file missed was that the SECOND action did nothing: every mutation
+	# starts from a clone of the current sections, and those were only refreshed
+	# when the filesystem watcher got round to reporting our own write back to
+	# us. Until then a second click cloned stale state and wrote the first
+	# change out again. "It works once" is invisible to any test that clicks
+	# once.
+	SECOND_BEFORE="$(grep -E '^\s*right ' "$BAR_CONF" | head -1)"
+	read -r CHIP2_X CHIP2_Y <<<"$(shot modules-mid; lowest_button modules-mid)"
+	if [ "${CHIP2_X:-0}" -gt 0 ]; then
+		hl_move "$CHIP2_X" "$CHIP2_Y"; sleep 1
+		hl_click "$CHIP2_X" "$CHIP2_Y"; sleep 2
+		SECOND_AFTER="$(grep -E '^\s*right ' "$BAR_CONF" | head -1)"
+		if [ "$SECOND_AFTER" != "$SECOND_BEFORE" ]; then
+			ok "...and a second click works too, not just the first"
+		else
+			bad "...and a second click works too, not just the first (stuck at $SECOND_AFTER)"
+		fi
+	else
+		bad "a second unplaced chip was found to click"
+	fi
+
 	# And the page redraws from the file rather than from a copy beside it.
 	shot modules-after
 	MOD_INK2="$(ink modules-after "$((WX + 12 + 450 + 12))" "$((WY + 120))" \

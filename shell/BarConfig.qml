@@ -217,14 +217,25 @@ Singleton {
     // writer goes to some length to preserve. The difference is who writes:
     // that file is edited by hand and occasionally by a settings page, this one
     // is the settings page's own store that can also be edited by hand.
-    // Writing the file IS the update: the write triggers a reload, the reload
-    // re-parses, and everything re-reads from what was actually stored rather
-    // than from a copy kept alongside it that could disagree.
+    // Applied HERE, then written -- not written and waited for.
+    //
+    // The file is watched, so a write does come back as a reload and a
+    // re-parse. Relying on that to update our own state is a race by
+    // construction: the watcher fires whenever the kernel and the event loop
+    // get round to it, and until then `sections` still describes the state
+    // before the change. Every mutation below starts from clone(), so a second
+    // action taken before the watcher caught up cloned stale sections and
+    // wrote the FIRST change back out again -- which reads exactly as "it only
+    // works once", because the first one lands and nothing after it does.
+    //
+    // We know what we just wrote, so we say so immediately. The reload still
+    // happens and still wins; it just agrees with what is already here, and it
+    // is what picks up an edit made in a text editor.
     function save(nextSections, nextGroups, nextCustom) {
-        conf.setText(render(
-            nextSections !== undefined ? nextSections : sections,
-            nextGroups !== undefined ? nextGroups : groups,
-            nextCustom !== undefined ? nextCustom : custom));
+        if (nextSections !== undefined) sections = nextSections;
+        if (nextGroups !== undefined) groups = nextGroups;
+        if (nextCustom !== undefined) custom = nextCustom;
+        conf.setText(render(sections, groups, custom));
     }
 
     function setValue(group, key, value) {
