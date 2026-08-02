@@ -3,6 +3,8 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QUrl>
 
+#include "imageformats.h"
+
 QString Paths::resolve(const QStringList& candidates) {
 	if (candidates.isEmpty()) return {};
 
@@ -29,4 +31,14 @@ QString Paths::resolve(const QStringList& candidates) {
 
 	this->mCache.insert(key, found);
 	return found;
+}
+
+QStringList Paths::imageExtensions() {
+	if (!this->mExtensions.isEmpty()) return this->mExtensions;
+
+	const char* const* exts = azbar_image_extensions();
+	for (const char* const* e = exts; e != nullptr && *e != nullptr; e++)
+		this->mExtensions.append(QString::fromUtf8(*e));
+	this->mExtensions.sort();
+	return this->mExtensions;
 }

@@ -45,11 +45,22 @@ Singleton {
     property string order: "random"
     property int interval: 3600
 
-    // What the browser offers. The same extensions the scripts discover, avif
-    // and jxl included -- an HDR wallpaper has to be pickable here too, not
-    // only nameable in the config file.
-    readonly property var extensions:
-        ["jpg", "jpeg", "png", "webp", "avif", "jxl"]
+    // What the browser offers: whatever the DECODER can read.
+    //
+    // Asked, not listed. This was six extensions, and a hardcoded list of
+    // somebody else's capabilities is right until they gain one -- gdk-pixbuf
+    // here also reads heic, heif, tiff, bmp, gif, svg and qoi, so a folder full
+    // of perfectly displayable wallpapers showed a fraction of itself. Reported
+    // as "there is a file Pictures/Dome.heic, why is it not shown".
+    //
+    // The fallback is the old six, for a build whose plugin is older than this
+    // property: an empty browser would be a worse answer than a narrow one.
+    readonly property var extensions: {
+        const fromDecoder = Paths.imageExtensions();
+        if (fromDecoder && fromDecoder.length > 0)
+            return fromDecoder;
+        return ["jpg", "jpeg", "png", "webp", "avif", "jxl"];
+    }
 
     property var available: []
 

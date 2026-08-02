@@ -126,6 +126,19 @@ install_data(
 # would put a module nothing else can use where every Qt application looks.
 qt6 = import('qt6')
 qt6_dep = dependency('qt6', modules: ['Core', 'Gui', 'Qml'])
+# Asked for by name here as well as through asteroidzbg: Paths::imageExtensions
+# reports what the decoder can read, so the plugin includes its header directly
+# rather than relying on a transitive dependency it does not declare.
+gdkpixbuf_dep = dependency('gdk-pixbuf-2.0')
+
+# Its own library, so gdk-pixbuf's include paths never reach the C++ side: with
+# them on the same target Qt's `#define signals Q_SIGNALS` fails to compile.
+imageformats_lib = static_library(
+	'azbarimageformats',
+	['plugin/imageformats.c'],
+	dependencies: [gdkpixbuf_dep],
+	pic: true,
+)
 
 plugin_moc = qt6.preprocess(
 	moc_headers: ['plugin/wallpaper.hpp', 'plugin/paths.hpp', 'plugin/windowicon.hpp'],
@@ -146,6 +159,7 @@ shared_module(
 		plugin_moc,
 	],
 	dependencies: [qt6_dep, asteroidzbg_dep],
+	link_with: imageformats_lib,
 	install: true,
 	install_dir: qmlplugindir,
 	# A QML plugin is dlopened by name from its qmldir; the lib prefix is
