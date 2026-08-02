@@ -58,6 +58,14 @@ trap 'hl_stop' EXIT
 
 WORK="$HL_OUTDIR"
 
+# The bar's own config: which modules it draws is the BAR's setting now, not the
+# compositor's, so a test that wants a particular module has to write it here.
+BAR_CONF="$WORK/bar-config.kdl"
+bar_modules() { # bar_modules <left> <center> <right>
+	printf 'modules {\n\tleft items="%s" monitor=""\n\tcenter items="%s" monitor=""\n\tright items="%s" monitor=""\n}\n' \
+		"$1" "$2" "$3" > "$BAR_CONF"
+}
+
 # The module, laid out the way an import path expects.
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
@@ -93,6 +101,7 @@ run_shell() { # run_shell <image> <logfile>
 		QT_QPA_PLATFORM=wayland QT_FONT_DPI=96 \
 		QML2_IMPORT_PATH="$QMLROOT" QML_IMPORT_PATH="$QMLROOT" \
 		ASTEROIDZ_BAR_WALLPAPER_CONF="$conf" \
+		ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
 		ASTEROIDZ_BAR_BG_DEBUG=1 \
 		quickshell -p "$HERE/shell/shell.qml" > "$log" 2>&1 &
 	echo $!
@@ -275,6 +284,42 @@ if [ -n "$SECOND" ]; then
 	else
 		bad "...without deleting the remembered per-monitor setting"
 	fi
+
+	# ── the shared wallpaper must not touch an overridden monitor ───────────
+	#
+	# Changing the SHARED wallpaper used to draw it onto every output first,
+	# including the ones with an image of their own, which then reverted a
+	# decode later. Reported as "DP-1 changes briefly then goes back".
+	#
+	# Asserted on the COUNT the library logs, not by screenshotting for the
+	# flash. A 64x64 fixture decodes in under a millisecond, so the wrong
+	# behaviour is invisible to any sampling this test could do -- it is only
+	# visible in real life because the override there is a 6016x6016 HEIC.
+	# A screenshot version of this passed against the unfixed build.
+	per_conf "per-monitor"
+	QS="$(run_shell "$SDR" "$WORK/keep.log")"
+	sleep 6
+	per_conf "per-monitor"
+	sleep 6
+	kill "$QS" 2>/dev/null
+	wait "$QS" 2>/dev/null
+
+	# Two outputs exist and one is overridden, so the shared image belongs on
+	# exactly one of them.
+	if grep -q "on the shared set (1 output)" "$WORK/keep.log"; then
+		ok "the shared wallpaper skips the monitor that has its own"
+	else
+		bad "the shared wallpaper skips the monitor that has its own"
+		grep "presented" "$WORK/keep.log" | tail -3 | sed 's/^/       /'
+	fi
+	# The premise: there really were two outputs to choose between, so "1" is
+	# a skip and not simply a single-monitor session.
+	if [ "$(printf '%s\n' "$MONS" | grep -c .)" -ge 2 ]; then
+		ok "...with two outputs present, so that 1 is a skip"
+	else
+		bad "...with two outputs present, so that 1 is a skip"
+	fi
+
 else
 	bad "a second output exists to test against (monitors: $(printf '%s' "$MONS" | tr '\n' ' '))"
 fi

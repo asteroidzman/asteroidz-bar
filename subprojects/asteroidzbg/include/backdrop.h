@@ -81,6 +81,17 @@ bool azbg_backdrop_present_output(struct azbg_backdrop *bd,
 		const char *output_name, const struct azbg_image *image,
 		const char *mode);
 
+/* The shared image, onto every output EXCEPT the named ones.
+ *
+ * For a wallpaper that is per-output: the outputs with an image of their own
+ * must not be drawn with the shared one first, or they visibly flash it and
+ * revert a decode later. An output whose name has not arrived from the
+ * compositor yet cannot be named here, so it still takes the shared image --
+ * which is the reason the shared one is drawn first at all. */
+bool azbg_backdrop_present_except(struct azbg_backdrop *bd,
+		const char *const *skip, size_t n_skip,
+		const struct azbg_image *image, const char *mode);
+
 /* The outputs that have a name, for a caller that wants to offer them: a
  * settings page cannot ask for "the wallpaper on DP-1" without knowing DP-1
  * exists. Indexed rather than handing back an array, so there is nothing to

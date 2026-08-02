@@ -357,6 +357,8 @@ Singleton {
     IpcHandler {
         target: "wallpaper"
 
+        // The shared wallpaper -- the one every monitor takes unless it has an
+        // override of its own.
         function next(): string {
             root.advance();
             return root.path;
@@ -371,6 +373,45 @@ Singleton {
         // the config file itself.
         function current(): string {
             return root.path;
+        }
+
+        // ── one monitor at a time ───────────────────────────────────────────
+        //
+        // Separate names rather than an optional argument, because the CLI
+        // form is `ipc call wallpaper nextOn DP-1` and an omitted argument
+        // there is not distinguishable from an empty one -- which is exactly
+        // the difference between "advance DP-1" and "advance the shared one".
+        //
+        // These only make sense in per-monitor scope, so they say so rather
+        // than writing an override that the scope quietly ignores.
+        function nextOn(monitor: string): string {
+            if (root.scope !== "per-monitor")
+                return "not in per-monitor scope";
+            if (!root.monitorConnected(monitor))
+                return "no such monitor: " + monitor;
+            const file = root.pick(root.wallpaperFor(monitor) || root.path);
+            if (file === "")
+                return "no images in " + root.folder;
+            root.setMonitorWallpaper(monitor, file);
+            return file;
+        }
+
+        function setOn(monitor: string, file: string): string {
+            if (root.scope !== "per-monitor")
+                return "not in per-monitor scope";
+            if (!root.monitorConnected(monitor))
+                return "no such monitor: " + monitor;
+            root.setMonitorWallpaper(monitor, file);
+            return file;
+        }
+
+        function currentOn(monitor: string): string {
+            return root.wallpaperFor(monitor) || root.path;
+        }
+
+        // Which monitors there are to address, one per line.
+        function monitors(): string {
+            return (root.monitors || []).join("\n");
         }
     }
 
@@ -398,31 +439,38 @@ Singleton {
     }
 
     function advance() {
+        const file = pick(path);
+        if (file !== "")
+            setWallpaper(file);
+    }
+
+    // The next wallpaper after `from`, per `order`. Shared by the timer, the
+    // shared-wallpaper IPC and the per-monitor one, so "next" means the same
+    // thing however it is asked for -- a monitor advancing by a different rule
+    // than the timer would be indistinguishable from a bug.
+    function pick(from) {
         const list = available;
         if (list.length === 0)
-            return;
-        if (list.length === 1) {
-            setWallpaper(list[0]);
-            return;
-        }
+            return "";
+        if (list.length === 1)
+            return list[0];
 
-        const at = list.indexOf(path);
+        const at = list.indexOf(from);
         if (order === "sequential") {
             // Not found means the current wallpaper is outside the folder, in
-            // which case the next one is the first -- which is what the script
-            // did, and is the only answer that makes progress.
-            setWallpaper(list[(at + 1) % list.length]);
-            return;
+            // which case the next one is the first -- the only answer that
+            // makes progress.
+            return list[(at + 1) % list.length];
         }
 
         // Random, but never the one already up: a rotation that can repeat the
         // current wallpaper looks like it has stopped working.
-        let pick = at;
-        for (let i = 0; i < 8 && pick === at; i++)
-            pick = Math.floor(Math.random() * list.length);
-        if (pick === at)
-            pick = (at + 1) % list.length;
-        setWallpaper(list[pick]);
+        let choice = at;
+        for (let i = 0; i < 8 && choice === at; i++)
+            choice = Math.floor(Math.random() * list.length);
+        if (choice === at)
+            choice = (at + 1) % list.length;
+        return list[choice];
     }
 
     // The wallpaper itself.

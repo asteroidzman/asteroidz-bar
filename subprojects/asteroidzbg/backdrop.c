@@ -519,9 +519,10 @@ bool azbg_backdrop_ready(const struct azbg_backdrop *bd) {
 	return bd && bd->compositor && bd->shm && bd->layer_shell;
 }
 
-/* One image onto whichever outputs `only` selects: NULL for all of them, or a
- * name to draw on exactly one. */
+/* One image onto whichever outputs the selection allows: `only` names exactly
+ * one, or NULL means every output except those in `skip`. */
 static bool present_on(struct azbg_backdrop *bd, const char *only,
+		const char *const *skip, size_t n_skip,
 		const struct azbg_image *image, const char *mode) {
 	if (!azbg_backdrop_ready(bd)) {
 		return false;
@@ -534,6 +535,7 @@ static bool present_on(struct azbg_backdrop *bd, const char *only,
 	bd->mode = m;
 
 	bool drew = false;
+	size_t n_drawn = 0;
 	struct azbg_output *output;
 	wl_list_for_each(output, &bd->outputs, link) {
 		/* An output whose name has not arrived yet cannot be selected by
@@ -541,6 +543,26 @@ static bool present_on(struct azbg_backdrop *bd, const char *only,
 		 * plain single wallpaper working before xdg-output has answered. */
 		if (only && (!output->name || strcmp(output->name, only) != 0)) {
 			continue;
+		}
+		/* An output that has an image of its own must not be drawn with the
+		 * shared one first. It is visible: the override lands a decode later,
+		 * so the monitor flashes the shared wallpaper and then reverts, which
+		 * reads as the change being undone.
+		 *
+		 * An output whose name has not arrived yet cannot be in this list, so
+		 * it still takes the shared image -- which is the case the
+		 * draw-everything-first order existed for. */
+		if (!only && output->name) {
+			bool skipped = false;
+			for (size_t i = 0; i < n_skip; i++) {
+				if (skip[i] && strcmp(output->name, skip[i]) == 0) {
+					skipped = true;
+					break;
+				}
+			}
+			if (skipped) {
+				continue;
+			}
 		}
 		if (output->needs_ack) {
 			output->needs_ack = false;
@@ -553,6 +575,7 @@ static bool present_on(struct azbg_backdrop *bd, const char *only,
 		render_frame(output, image ? image->hdr : NULL);
 		output->dirty = false;
 		drew = true;
+		n_drawn++;
 	}
 	wl_display_flush(bd->display);
 
@@ -563,15 +586,26 @@ static bool present_on(struct azbg_backdrop *bd, const char *only,
 	}
 
 	bool hdr = wants_hdr(bd, image ? image->hdr : NULL);
-	asteroidzbg_log(LOG_DEBUG, "presented %s on %s as %s",
-		mode ? mode : "fill", only ? only : "every output",
+	/* The COUNT, not "every output". With per-output wallpapers the shared
+	 * image deliberately skips the outputs that have one of their own, so
+	 * "every output" would be a lie -- and it is the one thing a test can
+	 * assert about the skip without racing a decode. */
+	asteroidzbg_log(LOG_DEBUG, "presented %s on %s (%zu output%s) as %s",
+		mode ? mode : "fill", only ? only : "the shared set",
+		n_drawn, n_drawn == 1 ? "" : "s",
 		hdr ? "HDR10 (10-bit, tagged)" : "SDR (8-bit)");
 	return hdr;
 }
 
 bool azbg_backdrop_present(struct azbg_backdrop *bd,
 		const struct azbg_image *image, const char *mode) {
-	return present_on(bd, NULL, image, mode);
+	return present_on(bd, NULL, NULL, 0, image, mode);
+}
+
+bool azbg_backdrop_present_except(struct azbg_backdrop *bd,
+		const char *const *skip, size_t n_skip,
+		const struct azbg_image *image, const char *mode) {
+	return present_on(bd, NULL, skip, n_skip, image, mode);
 }
 
 bool azbg_backdrop_present_output(struct azbg_backdrop *bd,
@@ -580,7 +614,7 @@ bool azbg_backdrop_present_output(struct azbg_backdrop *bd,
 	if (!output_name) {
 		return azbg_backdrop_present(bd, image, mode);
 	}
-	return present_on(bd, output_name, image, mode);
+	return present_on(bd, output_name, NULL, 0, image, mode);
 }
 
 size_t azbg_backdrop_output_count(const struct azbg_backdrop *bd) {

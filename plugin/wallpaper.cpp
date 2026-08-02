@@ -405,7 +405,24 @@ void Backdrop::loaded(azbg_image* image, const QString& forPath) {
 		// that happens when a monitor changes, which is ~never.
 		auto mode = this->mMode.toUtf8();
 		if (outputs.isEmpty()) {
-			if (azbg_backdrop_present(this->mBackdrop, image, mode.constData()))
+			// The shared image, and NOT onto the outputs that have one of their
+			// own. Drawing it everywhere first and letting the overrides land a
+			// decode later is visible: the monitor shows the new shared
+			// wallpaper and then reverts to its own, which reads as the change
+			// being undone. Reported exactly that way.
+			QList<QByteArray> owned;
+			QList<const char*> skip;
+			for (const auto& name: this->mOutputs) {
+				if (!this->mSources.value(name).toString().isEmpty())
+					owned.append(name.toUtf8());
+			}
+			skip.reserve(owned.size());
+			for (const auto& n: owned) skip.append(n.constData());
+
+			if (azbg_backdrop_present_except(
+			        this->mBackdrop, skip.constData(), static_cast<size_t>(skip.size()),
+			        image, mode.constData()
+			    ))
 				this->mPlanHdr = true;
 			this->mPlanDrew = true;
 		} else {
