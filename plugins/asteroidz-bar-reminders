@@ -111,7 +111,17 @@ def scheduled_today(med, day):
             if day < s:
                 return False
             unit = med.get("frequencyUnit", "days")
-            freq = int(med.get("frequency", 1) or 1)
+            # `frequencyValue` is the name the form WRITES and the name the
+            # editor reads back. This read `frequency`, which nothing has ever
+            # written, so it got the default 1 every time, never reached the
+            # modulo below, and returned True unconditionally -- every reminder
+            # fired every day whatever its interval said. An air filter set to
+            # 30 days went off the day after it was created.
+            #
+            # `frequency` stays as a fallback for a file written before the
+            # form settled on the longer name.
+            freq = int(med.get("frequencyValue",
+                               med.get("frequency", 1)) or 1)
             if unit == "days" and freq > 1:
                 return (day - s).days % freq == 0
         except ValueError:

@@ -350,6 +350,34 @@ so it matches as a substring unless you anchor it.
 `asteroidz -R` lists every field a rule accepts, and `amsg get window-rule-schema`
 serves the same table with an explanation per field.
 
+## The cursor
+
+Anything that acts on a click asks for the pointer cursor: pills, popover rows
+and their steppers, toggles, pickers, sliders, buttons, card headers, wallpaper
+tiles. Text fields ask for the caret instead, because `selectByMouse` means
+there is text to drag across as well and `TextInput` sets no cursor of its own.
+
+Two of those are worth writing down.
+
+**`interactive` is what a Pill knows about whether pressing it does anything**,
+and it defaults to true — so the clock, which has no `onClicked` at all, was
+claiming to be a button. It now says `interactive: false`, which also stops it
+swallowing clicks meant for the menu-dismissal catcher underneath.
+
+**A disabled MouseArea still applies its `cursorShape`.** `enabled: false` stops
+it reacting to a press, and it looks as though the cursor should follow, but Qt
+sets the item's cursor regardless — the clock kept turning the pointer into a
+hand. So the shape is written out as a condition rather than left to `enabled`:
+
+```qml
+cursorShape: root.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+```
+
+Everywhere else the shape goes on a `HoverHandler`, not the `TapHandler` beside
+it: a `PointerHandler` applies its `cursorShape` while it is **active**, and a
+TapHandler is active only while the button is held — a cursor that changes after
+you have already committed to pressing.
+
 ## Blur and shadows
 
 Blur is the compositor's (`ext-background-effect-v1`): the shell reports the
@@ -543,7 +571,9 @@ contrib/media-test.sh      # the media module, with a player and no sound
 contrib/notify-test.sh     # the bell, against a stubbed swaync
 contrib/click-test.sh      # what the bar DOES when clicked: popovers open and
                            #   dismiss, plugin menus, plugin forms and their
-                           #   fields, the power menu's confirmation
+                           #   fields, the power menu's confirmation, and the
+                           #   cursor shape over a pill that acts against one
+                           #   that only reads out
 contrib/panel-layout-test.sh # the settings window's boxes fit the text in them,
                            #   at three font sizes
 contrib/palette-test.sh    # the matugen palette page, fully sandboxed: its
@@ -561,6 +591,10 @@ contrib/settings-test.sh   # the settings window: the pill opens it on Displays,
                            #   through to the config file, and Rebind… reaches
                            #   the push-to-talk bridge
 contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
+contrib/reminders-test.sh  # the reminders plugin's scheduling, as pure logic:
+                           #   no Wayland, no bar. An interval read under the
+                           #   wrong key made every reminder daily, and nothing
+                           #   that clicks on things could see it
                            #   (no compositor needed; runs in seconds)
 contrib/discord-ptt-test.sh # the push-to-talk bridge: the app id resolves, the
                            #   portal offers the signals, and the rebind path
