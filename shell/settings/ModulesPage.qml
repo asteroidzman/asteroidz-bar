@@ -62,6 +62,49 @@ Item {
         return label === everyScreen ? "" : label;
     }
 
+    // ── dragging a module ───────────────────────────────────────────────────
+    //
+    // The arrows stay: they move one place, they are unambiguous about what
+    // they did, and they are the only way to do this from a keyboard. Drag is
+    // the direct way, and it is the one that can cross sections in one motion
+    // rather than "remove, then re-add at the far end".
+    //
+    // The dragged row is NOT moved. It sits in its Column looking picked up
+    // (dimmed), and a line shows where it would land -- because moving the item
+    // would reflow the Column under the pointer, which moves the drop target
+    // while you are aiming at it.
+    property string dragName: ""
+    property string dropSection: ""
+    property int dropIndex: -1
+
+    // Where would a release at this height put it? Sections are asked in
+    // order; the last one also catches anything below it, so a drag past the
+    // bottom lands at the end rather than nowhere.
+    function updateDrop(py) {
+        for (let i = 0; i < sectionRep.count; i++) {
+            const sec = sectionRep.itemAt(i);
+            if (!sec)
+                continue;
+            const top = sec.mapToItem(page, 0, 0).y;
+            if (py < top + sec.height || i === sectionRep.count - 1) {
+                dropSection = sec.modelData;
+                dropIndex = sec.indexAt(py);
+                return;
+            }
+        }
+    }
+
+    function commitDrop() {
+        const name = dragName;
+        const sect = dropSection;
+        const at = dropIndex;
+        dragName = "";
+        dropSection = "";
+        dropIndex = -1;
+        if (name !== "" && sect !== "" && at >= 0)
+            BarConfig.place(name, sect, at);
+    }
+
     Column {
         id: col
         width: parent.width
@@ -71,7 +114,9 @@ Item {
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Drawn left to right within each section. A module can only "
-                  + "be in one section at a time."
+                  + "be in one section at a time \u2014 drag one to move it, or "
+                  + "use the arrows to nudge it and the section box to send it "
+                  + "elsewhere."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
             font.family: Cfg.fontFamily
             font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
@@ -79,6 +124,7 @@ Item {
         }
 
         Repeater {
+            id: sectionRep
             model: BarConfig.sectionIds
 
             delegate: Column {
@@ -90,6 +136,23 @@ Item {
                 readonly property var items: {
                     void BarConfig.sections;
                     return BarConfig.itemsOf(modelData);
+                }
+
+                // How many rows sit above this height: the insertion index a
+                // release here would use. Measured from each row's MIDPOINT, so
+                // the target flips when the pointer passes the middle of a row
+                // rather than its edge -- an edge means the last few pixels of a
+                // row already belong to the next slot.
+                function indexAt(py) {
+                    let n = 0;
+                    for (let i = 0; i < rowRep.count; i++) {
+                        const it = rowRep.itemAt(i);
+                        if (!it)
+                            continue;
+                        if (py > it.mapToItem(page, 0, it.height / 2).y)
+                            n = i + 1;
+                    }
+                    return n;
                 }
 
                 Item { width: 1; height: Cfg.spacing }
@@ -162,18 +225,63 @@ Item {
                     }
                 }
 
-                Text {
+                // An empty section still has to be a place you can drop into,
+                // and a one-line label is a very small target for that. It
+                // keeps a row's worth of height while a drag is in progress,
+                // and says so.
+                Item {
                     width: parent.width
                     visible: sec.items.length === 0
-                    text: "Empty."
-                    color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
-                    font.family: Cfg.fontFamily
-                    font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
-                    font.hintingPreference: Font.PreferFullHinting
+                    height: page.dragName !== ""
+                            ? Math.max(28, Math.round(Cfg.fontPixelSize * 1.7))
+                            : emptyLabel.implicitHeight
+
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: page.dragName !== ""
+                        radius: Cfg.themeRadius
+                        color: "transparent"
+                        border.width: 1
+                        border.color: page.dropSection === sec.modelData
+                            ? Cfg.focusBg
+                            : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.2)
+                    }
+
+                    Text {
+                        id: emptyLabel
+                        anchors.centerIn: parent
+                        text: page.dragName !== "" ? "Drop here" : "Empty."
+                        color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
+                        font.hintingPreference: Font.PreferFullHinting
+                    }
+                }
+
+                // A header for the control columns. Once per section rather
+                // than a label on every row: the picker is a `left/center/right`
+                // box sitting directly under a "Shown on" row that also reads
+                // like a placement control, and without a word over it there is
+                // nothing to say which of the two axes it is.
+                Item {
+                    width: sec.width
+                    height: Math.round(Cfg.fontPixelSize * 1.1)
+                    visible: sec.items.length > 0
+
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: Cfg.spacing + Math.round(Cfg.fontPixelSize * 4.6)
+                        text: "section"
+                        color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Math.max(7, Cfg.fontSize * 0.72)
+                        font.hintingPreference: Font.PreferFullHinting
+                    }
                 }
 
                 // One row per module, in the order it is drawn.
                 Repeater {
+                    id: rowRep
                     model: sec.items
 
                     delegate: Rectangle {
@@ -188,7 +296,55 @@ Item {
                         height: Math.max(lineHeight, sectionPick.implicitHeight)
                         z: sectionPick.open ? 10 : 0
                         radius: Cfg.themeRadius
-                        color: Qt.rgba(1, 1, 1, 0.05)
+                        color: Qt.rgba(1, 1, 1, row.beingDragged ? 0.02 : 0.05)
+                        opacity: row.beingDragged ? 0.45 : 1.0
+
+                        readonly property bool beingDragged:
+                            page.dragName === row.modelData && page.dragName !== ""
+
+                        // Picking it up. A DragHandler rather than a MouseArea
+                        // so the taps on the buttons inside still get through --
+                        // a MouseArea over the row would swallow them.
+                        DragHandler {
+                            id: rowDrag
+                            target: null
+                            onActiveChanged: {
+                                if (active) {
+                                    page.dragName = row.modelData;
+                                } else if (page.dragName !== "") {
+                                    page.commitDrop();
+                                }
+                            }
+                            onCentroidChanged: {
+                                if (!active)
+                                    return;
+                                page.updateDrop(
+                                    page.mapFromItem(null,
+                                        centroid.scenePosition).y);
+                            }
+                        }
+
+                        HoverHandler {
+                            cursorShape: rowDrag.active ? Qt.ClosedHandCursor
+                                                        : Qt.OpenHandCursor
+                        }
+
+                        // Where it would land. Drawn on the row rather than
+                        // between rows, because a Column's spacing is 4px and a
+                        // line in it would be invisible.
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            height: 2
+                            radius: 1
+                            color: Cfg.focusBg
+                            visible: page.dragName !== ""
+                                     && page.dropSection === sec.modelData
+                                     && (page.dropIndex === row.index
+                                         || (page.dropIndex === row.index + 1
+                                             && row.index === sec.items.length - 1))
+                            y: page.dropIndex === row.index ? -3 : parent.height + 1
+                        }
 
                         // Same fixed line as above, for the same reason.
                         Item {

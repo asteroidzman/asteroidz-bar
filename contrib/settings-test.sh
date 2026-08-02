@@ -1509,6 +1509,46 @@ else
 	bad "an unplaced module chip was found to click"
 fi
 
+# ── dragging a module reorders it ───────────────────────────────────────────
+#
+# The arrows move one place at a time; a drag is the direct way and the only one
+# that crosses sections in a single motion. It is also the one that cannot be
+# judged from a screenshot: the dragged row deliberately does NOT move, because
+# reflowing the Column under the pointer would move the drop target while you
+# are aiming at it. What moves is the config.
+#
+# Rows are located through lowest_button, which finds the accent-coloured
+# control clusters -- the ▲▼ pair on each row. Hunting for the row slab itself
+# does not work: it is rgba(1,1,1,0.05) over the panel, which is within a
+# rounding error of the panel.
+shot modules-drag
+read -r B0_X B0_Y <<<"$(lowest_button modules-drag 0)"
+read -r B1_X B1_Y <<<"$(lowest_button modules-drag 1)"
+
+if [ "${B0_Y:-0}" -gt 0 ] && [ "${B1_Y:-0}" -gt "$B0_Y" ]; then
+	# Grab by the module NAME, well left of the buttons: a press that lands on
+	# ▲ is a click on ▲, not the start of a drag.
+	GRAB_X=$((WX + 12 + 450 + 40))
+	DRAG_BEFORE="$(grep -E '^\s*(left|center|right) ' "$BAR_CONF" | md5sum)"
+	cp "$BAR_CONF" "$WORK/bar-config.predrag"
+	# Past the NEXT row's midpoint: the drop index flips at a row's middle, not
+	# its edge, so a drag that stops short of it is a no-op by design.
+	hl_drag "$GRAB_X" "$B0_Y" "$GRAB_X" "$((B1_Y + 6))"
+	sleep 2
+	DRAG_AFTER="$(grep -E '^\s*(left|center|right) ' "$BAR_CONF" | md5sum)"
+	if [ "$DRAG_BEFORE" != "$DRAG_AFTER" ]; then
+		ok "dragging a module past its neighbour reorders the config"
+	else
+		bad "dragging a module past its neighbour reorders the config (unchanged)"
+	fi
+	# Put it back. The ship lives in the left section, so a reorder can move it
+	# -- and the cases after this one press it at a position measured before.
+	cp "$WORK/bar-config.predrag" "$BAR_CONF"
+	sleep 2
+else
+	bad "two module rows were found to drag between (got ${B0_Y:-0}, ${B1_Y:-0})"
+fi
+
 # ── the offered module names agree with what can be drawn ───────────────────
 #
 # BarConfig.builtins is what the page OFFERS; ModuleLoader's switch is what a
