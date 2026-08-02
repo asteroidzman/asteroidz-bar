@@ -487,6 +487,8 @@ or the portal answers "App info not found" and push-to-talk never binds.
 
 ```sh
 contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the shadow
+contrib/battery-test.sh    # the battery module, against a fake sysfs: absent on a
+                           #   machine with no cell, present and tracking on one
 contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included
 contrib/tray-test.sh       # the tray, on a private D-Bus session
 contrib/media-test.sh      # the media module, with a player and no sound
@@ -516,6 +518,43 @@ contrib/discord-ptt-test.sh # the push-to-talk bridge: the app id resolves, the
                            #   compositor, no Discord)
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
+
+### The battery
+
+`battery` reads `capacity` and `status` straight from
+`/sys/class/power_supply`, polled on the bar's own tick. No upower, no D-Bus: a
+daemon in between would be a dependency, a service that has to be running, and a
+second description of what those two files already say.
+
+There is no directory listing in QML, so the battery's name is asked for rather
+than discovered — `BAT0`–`BAT2`, `CMB0`, `macsmc-battery`, which is what Linux
+actually uses. Anything else reports no battery, which is the same outcome as
+having none: **the pill is absent**, not drawn empty and not drawn at zero. A
+desktop showing a permanently full cell is saying something false about hardware
+it does not have, and one showing 0% is saying something alarming. The idle cup
+hides itself on the same principle.
+
+`Paths.resolve` caches misses as well as hits, so a machine that *gains* a
+battery after the bar starts keeps saying it has none until the bar restarts.
+That is a laptop having its cell replaced, not a case worth a filesystem scan
+every tick.
+
+`Charging`, `Discharging`, `Full` and **`Not charging`** are four states, not
+three: the last is a plugged-in laptop holding at its charge limit, and calling
+it discharging would put a draining icon on a machine sitting on mains. The
+popover shows the kernel's own word rather than a translation of it.
+
+The reading lives in a `BatteryService` singleton, named that way for the reason
+`IdleService` is: a singleton and a module of the same name are ambiguous to
+anything importing both directories, and `ModuleLoader` imports both. QML reports
+that as *"Type ModuleLoader unavailable"* — the whole bar simply absent, four
+levels from the cause.
+
+**It is tested on a machine with no battery**, which is the only reason it is
+tested at all: `BatteryService` takes its root from `ASTEROIDZ_BAR_BATTERY_DIR`
+and `contrib/battery-test.sh` writes a directory of real `capacity`/`status`
+files into it. Nothing there fakes an interface the kernel does not have — sysfs
+is two small files and the module re-reads them on a timer.
 
 `look-test.sh` exists because of three bugs that were reported as one
 complaint about spacing and none of which are visible in the QML — they only

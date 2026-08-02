@@ -113,6 +113,8 @@ Row {
                 return mediaComponent;
             case "tray":
                 return trayComponent;
+            case "battery":
+                return batteryComponent;
             case "power":
                 return powerComponent;
             default:
@@ -179,6 +181,11 @@ Row {
     Component {
         id: trayComponent
         Tray { bar: root.bar }
+    }
+
+    Component {
+        id: batteryComponent
+        Battery { bar: root.bar }
     }
 
     Component {
