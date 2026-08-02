@@ -197,10 +197,15 @@ wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
 if len(acc) != 6:
     print("0 0"); raise SystemExit
 want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
-r = wx + max(int(ww * 0.22), 170)
+# A fraction of the sidebar's width, not a pixel count: its header is the
+# asteroidz ship and the ship's exhaust burns in the accent, so a flat threshold
+# finds the flame and calls it a row.
+r = wx + 12 + max(int(ww * 0.24), 190)
+span = r - wx
 rows = [y for y in range(wy, wy + wh)
         if sum(1 for x in range(wx, r)
-               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))) > 40]
+               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want)))
+           > span * 0.5]
 if not rows:
     print("0 0"); raise SystemExit
 groups = []
@@ -214,11 +219,11 @@ print(grp[0], grp[-1] - grp[0] + 1)
 PY
 )"
 
-# All settings, one row per option group, then Displays, Wallpaper, rules,
-# binds, palette. A left click on the pill selects "All settings", so the accent
-# pill the scan above found is row 0.
+# One row per option group, then Displays, Wallpaper, rules, binds, palette.
+# There is no "All settings" row: a freshly opened window selects the first
+# group, so the accent pill the scan above found is row 0.
 NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
-PALETTE_ROW=$((5 + NGROUPS))
+PALETTE_ROW=$((4 + NGROUPS))
 PALETTE_Y=$((SB_TOP + PALETTE_ROW * (SB_H + 2) + SB_H / 2))
 hl_move $((WX + 60)) "$PALETTE_Y"; sleep 1
 hl_click $((WX + 60)) "$PALETTE_Y"; sleep 3
@@ -350,7 +355,7 @@ want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
 # to apply -- and so is every ownership toggle that is on, but those sit hard
 # against the right edge while the button row is left-aligned. The side is what
 # tells them apart; "lowest accent block" alone finds a toggle.
-content_l = wx + max(int(ww * 0.22), 170) + 10
+content_l = wx + 12 + max(int(ww * 0.24), 190) + 12 + 4
 l = content_l
 r = content_l + int((wx + ww - content_l) * 0.35)
 runs = []

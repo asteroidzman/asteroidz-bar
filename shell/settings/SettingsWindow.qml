@@ -67,11 +67,80 @@ FloatingWindow {
     property string page: "options"
     readonly property bool onOptions: page === "options"
 
+    // What the heading says. Derived rather than stored: the sidebar already
+    // knows every page's label, and a second table would be a second answer to
+    // the same question.
+    readonly property string pageTitle: {
+        void Schema.generation;
+        if (page === "options")
+            return search !== "" ? "Search results"
+                                 : (Schema.groupLabel(group) || "Settings");
+        return ({ displays: "Displays", wallpaper: "Wallpaper",
+                  rules: "Window rules", binds: "Keybinds",
+                  palette: "Palette", discord: "Push-to-talk" })[page] || "Settings";
+    }
+
+    // One line, and factual. What a person needs before touching anything is how
+    // the page behaves -- the two apply models in this window are genuinely
+    // different and each page is in one of them.
+    readonly property string pageSubtitle: {
+        void Schema.generation;
+        if (page === "options") {
+            if (search !== "")
+                return shownOptions.length + " option"
+                       + (shownOptions.length === 1 ? "" : "s")
+                       + " match, across every group.";
+            return "Changes preview live · Apply writes them to your config.";
+        }
+        return ({
+            displays: "Arrange your screens and set their mode. "
+                      + "Changes are applied together, on Apply.",
+            wallpaper: "Applied as you change them.",
+            rules: "Rules apply in order and every match applies. "
+                   + "Each rule saves itself.",
+            binds: "Every chord the compositor knows. Each bind saves itself.",
+            palette: "Which Material role each generated colour comes from.",
+            discord: "Push-to-talk, through the global-shortcuts portal."
+        })[page] || "";
+    }
+
+    // A search spans every group; browsing is confined to the selected one.
+    //
+    // That split is what lets the "All settings" row go. It was the only way to
+    // see results from more than one group, and it paid for that by making the
+    // default view a list of all ninety-five options -- which is not a list
+    // anyone reads. Typing is an explicit act and deserves the wider net;
+    // clicking a group is a request to see that group.
     readonly property var shownOptions: {
         void Schema.generation;
+        const searching = win.search !== "";
         return Schema.options.filter(
-            o => (win.group === "" || o.group === win.group)
+            o => (searching || win.group === "" || o.group === win.group)
                  && Schema.matches(o, win.search));
+    }
+
+    // Land on the first group the compositor declares, once it has said what
+    // that is. Without "All settings" there is no entry that means "no group",
+    // and an empty `group` would show everything -- the view that row existed to
+    // provide and that this removes on purpose.
+    function seedGroup() {
+        if (win.page === "options" && win.group === ""
+                && Schema.groups.length > 0)
+            win.group = Schema.groups[0].name;
+    }
+
+    // Twice, and both are needed.
+    //
+    // The signal covers the first window of a session, which is built before the
+    // schema has arrived. onCompleted covers every window after it: the schema is
+    // already loaded by then, so `generation` never changes again and a window
+    // rebuilt on reopen -- which is what happens now, since a closed toplevel
+    // cannot be shown again -- came up with no group selected. That is not a
+    // cosmetic gap: with no "All settings" row, an empty group means the pane
+    // lists every option and the sidebar highlights nothing.
+    Connections {
+        target: Schema
+        function onGenerationChanged() { win.seedGroup(); }
     }
 
     // ── staged edits ────────────────────────────────────────────────────────
@@ -340,12 +409,30 @@ FloatingWindow {
     // It is therefore the packaged ship rather than the accent-recoloured copy
     // Logo.qml writes: recolouring produces a FILE, and a file cannot travel down
     // a channel that carries a name.
-    Component.onCompleted: WindowIcon.set("asteroidz-settings")
+    // One handler, both jobs. QML allows exactly one binding per signal, and a
+    // second Component.onCompleted in this file is not a second handler -- it is
+    // "Property value set multiple times" and the whole type failing to load,
+    // four levels of "Type X unavailable" away from the line that caused it.
+    Component.onCompleted: {
+        WindowIcon.set("asteroidz-settings");
+        seedGroup();
+    }
 
     // ── layout ──────────────────────────────────────────────────────────────
 
+    // Two cards on a page, rather than two regions of one surface.
+    //
+    // The layout is the one in the reference screenshot: a bordered list on the
+    // left, a bordered sheet on the right, both inset from the window edge so the
+    // window colour reads as a page they sit on. Only the geometry is borrowed --
+    // every colour is still Cfg's, so the window follows the compositor's theme
+    // and the matugen palette like everything else in this shell.
     Item {
         anchors.fill: parent
+        anchors.margins: Cfg.panelPadding
+
+        readonly property color cardEdge:
+            Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, 0.14)
 
         // ── sidebar ─────────────────────────────────────────────────────────
         Rectangle {
@@ -353,50 +440,80 @@ FloatingWindow {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            width: Math.max(Math.round(Cfg.fontPixelSize * 8),
-                            Math.round(parent.width * 0.22))
+            width: Math.max(Math.round(Cfg.fontPixelSize * 9),
+                            Math.round(parent.width * 0.24))
+            radius: Cfg.panelRadius
             color: Qt.rgba(1, 1, 1, 0.04)
+            border.width: 1
+            border.color: parent.cardEdge
 
             Column {
                 anchors.fill: parent
                 anchors.margins: Cfg.panelPadding
                 spacing: 2
 
-                Text {
-                    text: "asteroidz"
-                    color: Cfg.fg
-                    font.family: Cfg.fontFamily
-                    font.pointSize: Cfg.fontSize
-                    font.bold: true
-                    font.hintingPreference: Font.PreferFullHinting
+                // The ship, not the word.
+                //
+                // The wordmark was a bold "asteroidz" in the theme font, which is
+                // the shell naming itself in the one place its own emblem already
+                // does -- and the emblem is what the bar, the window's titlebar
+                // icon and the tags row all use for the same purpose. Untinted:
+                // Logo.source is a file the singleton has already recoloured, so
+                // a tint would flood the hull and leave a solid triangle.
+                Item {
+                    width: parent.width
+                    height: Math.round(Cfg.fontPixelSize * 1.8)
+
+                    Icon {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.round(Cfg.fontPixelSize * 1.6)
+                        height: width
+                        size: width
+                        name: Logo.source
+                    }
                 }
 
                 Item { width: 1; height: Cfg.spacing }
 
-                // "All" first, then the compositor's groups in the order it
-                // declares them -- that order is curated in config-schema.h and
-                // sorting it here would throw away the one thing a schema cannot
-                // express as a field.
+                // The compositor's groups in the order it declares them -- that
+                // order is curated in config-schema.h and sorting it here would
+                // throw away the one thing a schema cannot express as a field --
+                // then the pages that are not options.
+                //
+                // No "All settings" row. It was the first entry and the default,
+                // and it listed all ninety-five options at once, which is a list
+                // nobody reads. What it was genuinely useful for was searching
+                // across groups, so that moved into the search itself: a non-empty
+                // query spans every group regardless of which one is selected.
                 Repeater {
-                    // The option groups, then the two things that are not
-                    // options. `page` distinguishes them: an entry with a page of
-                    // "options" also selects a group, the other two do not.
-                    model: [{ name: "", label: "All settings", page: "options" }]
-                        .concat(Schema.groups.map(
+                    // `page` distinguishes the two kinds of entry: one with a page
+                    // of "options" also selects a GROUP, the rest do not. `icon`
+                    // is the artwork beside the label; Displays borrows the icon
+                    // the retired bar pill used, since it is the same subject.
+                    model: Schema.groups.map(
                             g => ({ name: g.name, label: g.label,
-                                    page: "options" })))
+                                    page: "options",
+                                    icon: "asteroidz-bar/settings/" + g.name + ".svg" }))
                         .concat([{ name: "", label: "Displays",
-                                   page: "displays" },
+                                   page: "displays",
+                                   icon: "waybar-display/display.svg" },
                                  { name: "", label: "Wallpaper",
-                                   page: "wallpaper" },
+                                   page: "wallpaper",
+                                   icon: "asteroidz-bar/settings/wallpaper.svg" },
                                  { name: "", label: "Window rules",
-                                   page: "rules" },
+                                   page: "rules",
+                                   icon: "asteroidz-bar/settings/rules.svg" },
                                  { name: "", label: "Keybinds",
-                                   page: "binds" },
+                                   page: "binds",
+                                   icon: "asteroidz-bar/settings/binds.svg" },
                                  { name: "", label: "Palette",
-                                   page: "palette" },
+                                   page: "palette",
+                                   icon: "asteroidz-bar/settings/palette.svg" },
                                  { name: "", label: "Push-to-talk",
-                                   page: "discord" }])
+                                   page: "discord",
+                                   icon: "asteroidz-bar/settings/discord.svg" }])
 
                     delegate: Rectangle {
                         required property var modelData
@@ -405,23 +522,59 @@ FloatingWindow {
                             && (modelData.page !== "options"
                                 || win.group === modelData.name)
 
+                        readonly property int glyph:
+                            Math.round(Cfg.fontPixelSize * 1.05)
+
                         width: sidebar.width - 2 * Cfg.panelPadding
-                        height: Math.max(26, Math.round(Cfg.fontPixelSize * 1.5))
+                        height: Math.max(28, Math.round(Cfg.fontPixelSize * 1.7))
                         radius: Cfg.themeRadius
                         color: selected
                             ? Cfg.focusBg
                             : hover.hovered ? Qt.rgba(1, 1, 1, 0.10)
                                             : "transparent"
 
-                        Text {
+                        // The artwork, tinted to follow the label so it inverts
+                        // with the row when the row is selected.
+                        Icon {
+                            id: rowIcon
                             anchors.left: parent.left
                             anchors.leftMargin: 8
-                            anchors.right: parent.right
-                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.glyph
+                            height: parent.glyph
+                            size: parent.glyph
+                            name: modelData.icon || ""
+                            tint: parent.selected ? Cfg.focusFg : Cfg.fg
+                        }
+
+                        Text {
+                            anchors.left: rowIcon.right
+                            anchors.leftMargin: Cfg.spacing
+                            anchors.right: chevron.left
+                            anchors.rightMargin: 4
                             anchors.verticalCenter: parent.verticalCenter
                             elide: Text.ElideRight
                             text: modelData.label
                             color: parent.selected ? Cfg.focusFg : Cfg.fg
+                            font.family: Cfg.fontFamily
+                            font.pointSize: Cfg.fontSize
+                            font.hintingPreference: Font.PreferFullHinting
+                        }
+
+                        // Says the row leads somewhere, which a flat list of
+                        // words does not. Dimmed against its own foreground
+                        // rather than given a colour of its own, so it stays
+                        // secondary on either side of the selection.
+                        Text {
+                            id: chevron
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "\u203a"
+                            color: {
+                                const c = parent.selected ? Cfg.focusFg : Cfg.fg;
+                                return Qt.rgba(c.r, c.g, c.b, c.a * 0.5);
+                            }
                             font.family: Cfg.fontFamily
                             font.pointSize: Cfg.fontSize
                             font.hintingPreference: Font.PreferFullHinting
@@ -474,22 +627,74 @@ FloatingWindow {
             }
         }
 
-        // ── header: search, and a close that does not depend on decorations ──
-        Item {
-            id: header
+        // ── the sheet everything else is on ─────────────────────────────────
+        Rectangle {
+            id: card
             anchors.left: sidebar.right
+            anchors.leftMargin: Cfg.panelPadding
             anchors.right: parent.right
             anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            radius: Cfg.panelRadius
+            color: Qt.rgba(1, 1, 1, 0.02)
+            border.width: 1
+            border.color: parent.cardEdge
+        }
+
+        // ── the page's own heading ──────────────────────────────────────────
+        //
+        // A title and one line saying what the page is for, which is the part of
+        // the reference worth taking beyond the boxes: a pane that opens straight
+        // into a column of controls makes you infer where you are from the
+        // sidebar highlight. The subtitle is factual rather than decorative --
+        // for a group it says how the page behaves, because "changes preview live
+        // and Apply writes them" is the thing a person needs to know before
+        // touching anything.
+        Item {
+            id: heading
+            anchors.left: card.left
+            anchors.right: card.right
+            anchors.top: card.top
             anchors.margins: Cfg.panelPadding
-            height: Math.max(28, Math.round(Cfg.fontPixelSize * 1.6))
+            height: titleText.implicitHeight + subtitleText.implicitHeight + 4
+
+            Text {
+                id: titleText
+                anchors.left: parent.left
+                anchors.right: searchField.left
+                anchors.rightMargin: Cfg.spacing
+                anchors.top: parent.top
+                elide: Text.ElideRight
+                text: win.pageTitle
+                color: Cfg.fg
+                font.family: Cfg.fontFamily
+                font.pointSize: Math.round(Cfg.fontSize * 1.3)
+                font.bold: true
+                font.hintingPreference: Font.PreferFullHinting
+            }
+
+            Text {
+                id: subtitleText
+                anchors.left: parent.left
+                anchors.right: searchField.left
+                anchors.rightMargin: Cfg.spacing
+                anchors.top: titleText.bottom
+                anchors.topMargin: 2
+                elide: Text.ElideRight
+                text: win.pageSubtitle
+                color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
+                font.family: Cfg.fontFamily
+                font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+                font.hintingPreference: Font.PreferFullHinting
+            }
 
             Field {
                 id: searchField
-                anchors.left: parent.left
                 anchors.right: closeBtn.left
                 anchors.rightMargin: Cfg.spacing
-                anchors.verticalCenter: parent.verticalCenter
-                height: parent.height
+                anchors.top: parent.top
+                width: Math.round(Cfg.fontPixelSize * 11)
+                height: Math.max(28, Math.round(Cfg.fontPixelSize * 1.6))
                 // Options only. It searches the option schema, and leaving it on
                 // the bind page would be a box that filters nothing -- the bind
                 // page carries its own filter, over chords and actions.
@@ -510,8 +715,8 @@ FloatingWindow {
             SmallButton {
                 id: closeBtn
                 anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                height: parent.height
+                anchors.top: parent.top
+                height: Math.max(28, Math.round(Cfg.fontPixelSize * 1.6))
                 label: "Close"
                 // Present even though this is a toplevel with a close button:
                 // asteroidz draws no client-side decorations, so under the
@@ -523,9 +728,9 @@ FloatingWindow {
         // ── the options ─────────────────────────────────────────────────────
         Flickable {
             id: scroll
-            anchors.left: sidebar.right
-            anchors.right: parent.right
-            anchors.top: header.bottom
+            anchors.left: card.left
+            anchors.right: card.right
+            anchors.top: heading.bottom
             anchors.bottom: applyBar.top
             anchors.margins: Cfg.panelPadding
             clip: true
@@ -659,6 +864,21 @@ FloatingWindow {
                             // the pane already has its padding there.
                             topPadding: entry.index === 0 ? 0 : Cfg.spacing
 
+                            // A rule, so a section reads as a section and not as
+                            // one more row in bold. Not above the first heading:
+                            // there is nothing there to divide it from.
+                            Rectangle {
+                                width: entry.width
+                                height: 1
+                                visible: entry.index > 0
+                                color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, 0.12)
+                            }
+
+                            Item {
+                                width: 1
+                                height: entry.index > 0 ? Cfg.spacing : 0
+                            }
+
                             Text {
                                 // Only where it tells you something: with a group
                                 // selected in the sidebar every row is in it, and
@@ -737,9 +957,13 @@ FloatingWindow {
         // The bar that would promise otherwise is absent rather than misleading.
         Rectangle {
             id: applyBar
-            anchors.left: sidebar.right
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
+            anchors.left: card.left
+            anchors.leftMargin: 1
+            anchors.right: card.right
+            anchors.rightMargin: 1
+            anchors.bottom: card.bottom
+            anchors.bottomMargin: 1
+            radius: Cfg.panelRadius
             visible: win.onOptions
             height: visible ? Math.max(40, Math.round(Cfg.fontPixelSize * 2.2))
                             : 0

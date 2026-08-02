@@ -183,7 +183,8 @@ im = Image.open(sys.argv[1]).convert("RGB")
 px = im.load(); w, h = im.size
 wx, wy, ww, wh = (int(v) for v in sys.argv[2:6])
 
-x0 = max(wx + max(int(ww * 0.22), 170), wx + ww - max(200, int(ww * 0.20)))
+x0 = max(wx + 12 + max(int(ww * 0.24), 190),
+         wx + ww - max(200, int(ww * 0.20)))
 x1 = min(w, wx + ww - 2)
 # From below the compositor's 2px focus border to past the tallest header a
 # theme can produce.
@@ -203,6 +204,16 @@ def lum(c):
 
 # Rows carrying a wide non-background run; the button is the widest such run on
 # each of its own rows.
+# Two filters, and the restyle is why both are needed.
+#
+# A run spanning the band is the CONTENT CARD'S OWN TOP BORDER, which now sits
+# above the button -- and being topmost and widest it won every test, reporting
+# the Close button as 378x7. "The button grew with its text" then passed against
+# a 378-pixel-wide box, which is a test that cannot fail. A button is a fraction
+# of the band; an edge is all of it.
+#
+# And a block at least twelve rows tall, because that border is eight.
+band = x1 - x0
 rows = {}
 for y in range(y0, y1):
     runs, start = [], None
@@ -211,7 +222,8 @@ for y in range(y0, y1):
         if solid and start is None:
             start = x
         elif not solid and start is not None:
-            if x - start > 20:
+            n = x - start
+            if 20 < n < band * 0.6:
                 runs.append((start, x - 1))
             start = None
     if runs:
@@ -225,6 +237,9 @@ for y in sorted(rows):
         groups[-1].append(y)
     else:
         groups.append([y])
+groups = [g for g in groups if len(g) >= 12]
+if not groups:
+    print("ERR no-button-block"); raise SystemExit
 g = groups[0]                       # the header sits above everything else
 top, bot = g[0], g[-1]
 
@@ -288,7 +303,7 @@ def near(c, tol=14):
 def lum(c):
     return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
 
-x0 = wx + max(int(ww * 0.22), 170) + 4
+x0 = wx + 12 + max(int(ww * 0.24), 190) + 12
 x1 = min(w, wx + ww - 4)
 y0, y1 = wy + 2, min(h, wy + wh - 2)
 

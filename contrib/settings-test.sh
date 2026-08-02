@@ -196,11 +196,20 @@ wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
 if len(acc) != 6:
     print("0 0"); raise SystemExit
 want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
-# The sidebar is the left fifth or so, floored at fontPixelSize * 8.
-r = wx + max(int(ww * 0.22), 170)
+# The sidebar is the left quarter or so, floored at fontPixelSize * 9.
+r = wx + max(int(ww * 0.24), 190)
+# A FRACTION of the sidebar's width, not a count.
+#
+# The header of that sidebar is the asteroidz ship, and the ship's exhaust burns
+# in the accent -- Logo.qml recolours it to Cfg.focusBg on purpose. At a flat
+# threshold of 40 pixels the flame is an accent run about as tall as a row, and
+# "the largest run" picked it perfectly plausibly. A selected entry spans the
+# whole sidebar minus its padding; the flame spans a couple of dozen pixels.
+span = r - wx
 rows = [y for y in range(wy, wy + wh)
         if sum(1 for x in range(wx, r)
-               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))) > 40]
+               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want)))
+           > span * 0.5]
 if not rows:
     print("0 0"); raise SystemExit
 # The LARGEST run, not the first.
@@ -221,15 +230,18 @@ print(grp[0], grp[-1] - grp[0] + 1)
 PY
 )"
 
-# 0 = All settings, then one row per option group, then the pages that are not
-# options. The group count comes from the schema rather than being hard-coded, so
-# adding a group does not silently start clicking the wrong row.
+# One row per option group, then the pages that are not options. The group count
+# comes from the schema rather than being hard-coded, so adding a group does not
+# silently start clicking the wrong row.
+#
+# There is no "All settings" row any more, so row 0 is the FIRST GROUP and that
+# is also what a freshly opened window selects.
 NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
-ALL_ROW=0
-DISPLAYS_ROW=$((1 + NGROUPS))
-WALLPAPER_ROW=$((2 + NGROUPS))
-RULES_ROW=$((3 + NGROUPS))
-BINDS_ROW=$((4 + NGROUPS))
+FIRST_GROUP_ROW=0
+DISPLAYS_ROW=$NGROUPS
+WALLPAPER_ROW=$((1 + NGROUPS))
+RULES_ROW=$((2 + NGROUPS))
+BINDS_ROW=$((3 + NGROUPS))
 
 SB0=$SB_TOP
 SIDEBAR_X=$((WX + 60))
@@ -284,7 +296,7 @@ if len(acc) != 6:
     print("0 0"); raise SystemExit
 want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
 # The content pane only: the sidebar's selected entry is accent too.
-l = wx + max(int(ww * 0.22), 170) + 4
+l = wx + 12 + max(int(ww * 0.24), 190) + 12
 r = min(im.size[0], wx + ww - 4)
 top, bot = wy + 2, min(im.size[1], wy + wh - 2)
 rows = [y for y in range(top, bot)
@@ -357,7 +369,10 @@ im = Image.open(sys.argv[1]).convert("RGB")
 px = im.load()
 wx, wy, ww, wh = (int(v) for v in sys.argv[2:6])
 # The content pane: right of the sidebar, below the header, above the footer.
-x0 = wx + max(int(ww * 0.22), 170) + 20
+# The page inset, the sidebar, and the card's own padding. The cards are inset
+# from the window now, so the pane no longer starts a fraction of the way across
+# the frame.
+x0 = wx + 12 + max(int(ww * 0.24), 190) + 12 + 8
 x1 = min(im.size[0], wx + ww - 20)
 y0, y1 = wy + 75, min(im.size[1], wy + wh - 20)
 
@@ -458,7 +473,7 @@ im = Image.open(sys.argv[1]).convert("RGB")
 px = im.load()
 cx, sy = int(sys.argv[2]), int(sys.argv[3])
 wx, wy, ww, wh = (int(v) for v in sys.argv[4:8])
-l = wx + max(int(ww * 0.22), 170) + 20
+l = wx + 12 + max(int(ww * 0.24), 190) + 12 + 8
 r = min(im.size[0], wx + ww - 20)
 top, bot = wy + 75, min(im.size[1], wy + wh - 10)
 bg = Counter(px[x, y] for y in range(top, bot, 2)
@@ -583,7 +598,10 @@ if len(acc) != 6:
 want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
 # The content pane only: the sidebar's selected entry is accent too. And below
 # the arrangement canvas, whose selected tile is the largest accent block here.
-x0 = wx + max(int(ww * 0.22), 170) + 20
+# The page inset, the sidebar, and the card's own padding. The cards are inset
+# from the window now, so the pane no longer starts a fraction of the way across
+# the frame.
+x0 = wx + 12 + max(int(ww * 0.24), 190) + 12 + 8
 x1 = min(im.size[0], wx + ww - 20)
 y0 = max(wy + 75, arr_top + arr_h + 4)
 y1 = min(im.size[1], wy + wh - 10)
@@ -673,7 +691,7 @@ if len(acc) != 6:
 want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
 def near(c, tol=20):
     return all(abs(x - y) <= tol for x, y in zip(c, want))
-x0 = wx + max(int(ww * 0.22), 170) + 4
+x0 = wx + 12 + max(int(ww * 0.24), 190) + 12
 x1 = min(a.size[0], b.size[0], wx + ww - 4)
 y0, y1 = wy + 2, min(a.size[1], b.size[1], wy + wh - 2)
 before = sum(1 for y in range(y0, y1) for x in range(x0, x1) if near(pa[x, y]))
@@ -705,13 +723,12 @@ fi
 
 # ── on to the options ───────────────────────────────────────────────────────
 #
-# Everything below is about the schema-driven half of the window, which is not
-# what the pill opens onto any more.
-go_to "$ALL_ROW"
+# Everything below is about the schema-driven half of the window.
+go_to "$FIRST_GROUP_ROW"
 
 # ── 2. it is populated ──────────────────────────────────────────────────────
 #
-# Ink, not a row count. Ninety-five options with an explanation each is a lot of
+# Ink, not a row count. A group of options with an explanation each is a lot of
 # text; an unpopulated pane is one sentence. The gap between those is enormous,
 # so a coarse measure is a reliable one -- and the same measure is what makes the
 # search assertion below meaningful, since narrowing must reduce it a long way.
@@ -756,8 +773,78 @@ fi
 # The search field spans the header from the sidebar to the Close button, so it
 # is the widest target in the window; clicking a third of the way across it is
 # inside it for any sidebar width.
-SEARCH_X=$((WX + WW / 2))
-SEARCH_Y=$((WY + 12 + 14))
+# A control in the page heading, counted from the RIGHT: 0 is Close, 1 is the
+# search box beside it.
+#
+# Found by its TEXT, not by its fill, and that is the second time this window has
+# taught the same lesson. A field is rgba(1,1,1,0.06) and a button
+# rgba(1,1,1,0.08) over a card that is nearly black, so both sit four or five
+# levels from their background -- inside any tolerance loose enough to survive
+# dithering, which is why a fill-based scan returned nothing at all and the
+# search click went to 0,0. Glyphs are drawn in the foreground colour and are
+# unmistakable.
+#
+# The topmost y-run of the cluster, because the rightmost column of the pane also
+# holds the scroll indicator, which is bright enough to join the button's cluster
+# and drag its centre down past the bottom of the button.
+heading_box() { # heading_box <shot> <nth-from-right>  ->  "x y"
+	python3 - "$WORK/$1.png" "$2" "$WX" "$WY" "$WW" "$WH" <<'HEADPY'
+import sys
+from collections import Counter
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+nth = int(sys.argv[2])
+wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
+x0 = max(wx + 12 + max(int(ww * 0.24), 190),
+         wx + ww - max(260, int(ww * 0.26)))
+x1 = min(im.size[0], wx + ww - 2)
+y0, y1 = wy + 8, min(im.size[1], wy + 8 + 110)
+if x1 <= x0 or y1 <= y0:
+    print(0, 0); raise SystemExit
+sample = [px[x, y] for y in range(y0, y1) for x in range(x0, x1, 2)]
+bg = Counter(sample).most_common(1)[0][0]
+def lum(c):
+    return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+thr = lum(bg) + 40
+xs = sorted({x for y in range(y0, y1) for x in range(x0, x1)
+             if lum(px[x, y]) > thr})
+# 12, not 25. The search box is OUTLINED IN THE ACCENT while it is focused, and
+# that outline is bright: at 25 the field's right edge and Close's first letter
+# are one cluster, whose centre is the empty space between them. Close was duly
+# "found" at 1734 and the click went nowhere. Letters within a word are two or
+# three pixels apart, so 12 keeps a word together and keeps two controls apart.
+clusters = []
+for x in xs:
+    if clusters and x - clusters[-1][-1] <= 12:
+        clusters[-1].append(x)
+    else:
+        clusters.append([x])
+if len(clusters) <= nth:
+    print(0, 0); raise SystemExit
+c = clusters[len(clusters) - 1 - nth]
+ys = [y for y in range(y0, y1)
+      if any(lum(px[x, y]) > thr for x in range(c[0], c[-1] + 1))]
+grp = [ys[0]]
+for y in ys[1:]:
+    if y - grp[-1] <= 3:
+        grp.append(y)
+    else:
+        break
+print((c[0] + c[-1]) // 2, (grp[0] + grp[-1]) // 2)
+HEADPY
+}
+
+# The search box is in the page heading now, at the top right beside Close --
+# not a full-width bar across the pane, which is what "half way across, one
+# header-row down" assumed. Clicking there landed on the heading's title text,
+# the query never arrived, the pane never narrowed, and the toggle that was then
+# located belonged to whichever option happened to be first in the group.
+#
+# Measured: the second box from the right in the heading band. Close is the
+# rightmost; this is the one beside it.
+read -r SEARCH_X SEARCH_Y <<<"$(heading_box settings 1)"
+echo "  ..   search box located at ${SEARCH_X},${SEARCH_Y}"
 hl_move "$SEARCH_X" "$SEARCH_Y"; sleep 1
 hl_click "$SEARCH_X" "$SEARCH_Y"; sleep 1
 
@@ -836,10 +923,18 @@ im = Image.open(sys.argv[1]).convert("RGB")
 px = im.load()
 which = sys.argv[2]
 wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
-# The right-hand third: the control column. Searching the whole width would also
-# find the sidebar's selected-group pill, which is just as flat a block.
-l = wx + int(ww * 0.62)
-r = wx + ww
+# The control column: right of the label column, which is right of the sidebar.
+#
+# It used to be "the right-hand third", because controls were flush to the pane's
+# right edge. They start at one x now -- the label column is 30% of the pane and
+# every control begins just past it -- so a scan of the right-hand third finds
+# the empty space beside a toggle and calls it background. That is the whole of
+# why eleven assertions failed after the restyle while the window worked: the
+# toggle click landed on nothing, so nothing staged, and every claim about a
+# staged value followed it down.
+pane = wx + 12 + max(int(ww * 0.24), 190) + 12
+l = pane + 8
+r = wx + ww - 12
 # Below the HEADER, not from the top of the window. The search field is a flat
 # non-background block spanning almost the full width, so a scan that includes it
 # finds it every time -- the first run of this located the "toggle" at wy + 40,
@@ -930,8 +1025,64 @@ fi
 #
 # Bottom-right of the window, in the apply bar. Apply is the rightmost of the two
 # buttons, one panel-padding in from the edge.
-APPLY_X=$((WX + WW - 12 - 40))
-APPLY_Y=$((WY + WH - 20))
+# Apply is the accent-filled button in the bar at the foot of the content card,
+# and it is only accent while something is staged -- which is the state this is
+# clicked in. Measured, for the same reason Close is: the bar is inside the card
+# now, so an offset from the window's bottom-right corner lands on the page
+# behind it.
+apply_button() { # apply_button <shot>  ->  "x y" of the lowest accent block
+	python3 - "$WORK/$1.png" "${ACCENT:-#000000}" "$WX" "$WY" "$WW" "$WH" <<'APPLYPY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+acc = sys.argv[2].lstrip("#")
+wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
+if len(acc) != 6:
+    print(0, 0); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+x0 = wx + max(int(ww * 0.24), 190) + 10
+x1 = min(im.size[0], wx + ww - 14)
+y0, y1 = wy + 60, min(im.size[1], wy + wh - 14)
+# Rows carrying a wide accent run, grouped into blocks.
+#
+# "The lowest such row" is what this did first, and the lowest accent row in the
+# window is not the button: asteroidz draws a FOCUSED BORDER around the window in
+# the accent, so the bottom edge of the frame is a full-width accent run a couple
+# of pixels tall. It measured 1058 for a button that ends at 1047, and the click
+# landed on the border. A block at least ten rows tall is a button; two rows is a
+# frame.
+rows = []
+for y in range(y0, y1):
+    start, best = None, None
+    for x in range(x0, x1 + 1):
+        hit = x < x1 and all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))
+        if hit and start is None:
+            start = x
+        elif not hit and start is not None:
+            if x - start > 30 and (best is None or x - start > best[1] - best[0]):
+                best = (start, x)
+            start = None
+    if best is not None:
+        rows.append((y, (best[0] + best[1]) // 2))
+groups = []
+for y, cx in rows:
+    if groups and y - groups[-1][-1][0] <= 2:
+        groups[-1].append((y, cx))
+    else:
+        groups.append([(y, cx)])
+groups = [g for g in groups if len(g) >= 10]
+if not groups:
+    print(0, 0); raise SystemExit
+g = groups[-1]
+mid = g[len(g) // 2]
+print(mid[1], mid[0])
+APPLYPY
+}
+
+shot staging
+read -r APPLY_X APPLY_Y <<<"$(apply_button staging)"
+echo "  ..   Apply button at ${APPLY_X},${APPLY_Y}"
 hl_move "$APPLY_X" "$APPLY_Y"; sleep 1
 hl_click "$APPLY_X" "$APPLY_Y"; sleep 3
 
@@ -991,8 +1142,10 @@ else
 	bad "Reset previews the default (value=$SG_VAL from $SG_KIND)"
 fi
 
+shot beforesecondapply
 hl_move "$APPLY_X" "$APPLY_Y"; sleep 1
 hl_click "$APPLY_X" "$APPLY_Y"; sleep 3
+shot aftersecondapply
 if ! grep -q 'smartgaps' "$HL_CONFIG"; then
 	ok "Apply removes the line from the config file"
 else
@@ -1023,8 +1176,13 @@ hl_click "$TG_X" "$TG_Y"; sleep 2
 read -r SG_VAL _ <<<"$(value_of smartgaps)"
 PREVIEWED_ON="$SG_VAL"
 
-CLOSE_X=$((WX + WW - 12 - 30))
-CLOSE_Y=$((WY + 12 + 14))
+# Measured rather than computed from the window corner. The button sits inside
+# the content card now, so its offset is the page inset plus the card's own
+# padding plus its height -- three theme values, each of which a restyle moves.
+# It is the topmost filled box at the right-hand end of the pane, which is a
+# description the layout cannot invalidate.
+read -r CLOSE_X CLOSE_Y <<<"$(heading_box applied 0)"
+echo "  ..   Close button at ${CLOSE_X},${CLOSE_Y}"
 hl_move "$CLOSE_X" "$CLOSE_Y"; sleep 1
 hl_click "$CLOSE_X" "$CLOSE_Y"; sleep 3
 
@@ -1094,11 +1252,20 @@ wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
 if len(acc) != 6:
     print("0 0"); raise SystemExit
 want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
-# The sidebar is the left fifth or so, floored at fontPixelSize * 8.
-r = wx + max(int(ww * 0.22), 170)
+# The sidebar is the left quarter or so, floored at fontPixelSize * 9.
+r = wx + max(int(ww * 0.24), 190)
+# A FRACTION of the sidebar's width, not a count.
+#
+# The header of that sidebar is the asteroidz ship, and the ship's exhaust burns
+# in the accent -- Logo.qml recolours it to Cfg.focusBg on purpose. At a flat
+# threshold of 40 pixels the flame is an accent run about as tall as a row, and
+# "the largest run" picked it perfectly plausibly. A selected entry spans the
+# whole sidebar minus its padding; the flame spans a couple of dozen pixels.
+span = r - wx
 rows = [y for y in range(wy, wy + wh)
         if sum(1 for x in range(wx, r)
-               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))) > 40]
+               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want)))
+           > span * 0.5]
 if not rows:
     print("0 0"); raise SystemExit
 # The LARGEST run, not the first.
@@ -1139,7 +1306,7 @@ from PIL import Image
 im = Image.open(sys.argv[1]).convert("RGB")
 px = im.load()
 wx, wy, ww, wh = (int(v) for v in sys.argv[2:6])
-l = wx + max(int(ww * 0.22), 170) + 20
+l = wx + 12 + max(int(ww * 0.24), 190) + 12 + 8
 r = wx + ww - 20
 top = wy + 75
 bot = wy + wh - 20
@@ -1305,7 +1472,7 @@ fi
 # real XDG_CONFIG_HOME, which this harness does not isolate, and a settings test
 # has no business editing the machine's push-to-talk key. save_conf, the menu and
 # the field are covered as units in contrib/discord-ptt-test.sh.
-PTT_ROW=$((6 + NGROUPS))
+PTT_ROW=$((5 + NGROUPS))
 PTT_Y="$(sidebar_entry_y "$PTT_ROW")"
 hl_move "$SIDEBAR_X" "$PTT_Y"; sleep 1
 hl_click "$SIDEBAR_X" "$PTT_Y"; sleep 2
@@ -1422,6 +1589,12 @@ if [ -n "$WINID" ]; then
 	fi
 else
 	bad "the settings window was there to close"
+fi
+
+if [ -n "${ASTEROIDZ_SHOT_DIR:-}" ]; then
+	mkdir -p "$ASTEROIDZ_SHOT_DIR"
+	cp "$WORK"/*.png "$ASTEROIDZ_SHOT_DIR/" 2>/dev/null
+	echo "  ..   shots in $ASTEROIDZ_SHOT_DIR"
 fi
 
 kill "$QS" 2>/dev/null

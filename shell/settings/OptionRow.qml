@@ -57,64 +57,83 @@ Item {
 
     readonly property bool atDefault: shown === option.default
 
+    // The label column, right-aligned, with the control and everything that
+    // explains it in the column beside it.
+    //
+    // This is the reference screenshot's arrangement, and it is a real
+    // improvement over label-left/control-right: a description that starts under
+    // the LABEL reads as a caption for the label, and the eye has to cross the
+    // row to find what it describes. Under the control, it is where the answer to
+    // "what does this do" belongs -- beside the thing that does it.
+    //
+    // A third of the width, floored so a narrow window does not squeeze the
+    // labels to nothing and capped so a wide one does not strand the controls a
+    // long way right of them.
+    readonly property int labelColumn:
+        Math.max(Math.round(Cfg.fontPixelSize * 6),
+                 Math.min(Math.round(Cfg.fontPixelSize * 14),
+                          Math.round(root.width * 0.30)))
+    readonly property int gutter: Cfg.spacing * 2
+    readonly property int fieldColumn:
+        Math.max(Math.round(Cfg.fontPixelSize * 6),
+                 root.width - labelColumn - gutter)
     readonly property int controlWidth:
-        Math.max(Math.round(Cfg.fontPixelSize * 9),
-                 Math.round(root.width * 0.34))
+        Math.min(fieldColumn, Math.max(Math.round(Cfg.fontPixelSize * 9),
+                                       Math.round(root.width * 0.34)))
 
     implicitHeight: block.implicitHeight + Cfg.spacing
 
+    // The label, right-aligned against the gutter and pinned to the top of the
+    // row rather than centred in it: the row is as tall as its explanation, and
+    // a label floating halfway down that has nothing beside it.
+    Text {
+        id: labelText
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.topMargin: Math.round(Cfg.fontPixelSize * 0.28)
+        width: root.labelColumn
+        horizontalAlignment: Text.AlignRight
+        wrapMode: Text.WordWrap
+        text: root.option.label
+        color: Cfg.fg
+        font.family: Cfg.fontFamily
+        font.pointSize: Cfg.fontSize
+        font.hintingPreference: Font.PreferFullHinting
+    }
+
+    // Says "this differs from what the compositor is running", which is the one
+    // piece of state a control cannot show about itself: a slider at 8 looks the
+    // same whether 8 is applied or pending. In the gutter now, where it marks the
+    // row rather than trailing the label's last word.
+    Rectangle {
+        anchors.verticalCenter: labelText.verticalCenter
+        anchors.left: labelText.right
+        anchors.leftMargin: Math.round(root.gutter / 2) - 3
+        visible: root.staged
+        width: 6
+        height: 6
+        radius: 3
+        color: Cfg.focusBg
+    }
+
     Column {
         id: block
-        width: parent.width
+        anchors.left: parent.left
+        anchors.leftMargin: root.labelColumn + root.gutter
+        anchors.right: parent.right
+        anchors.top: parent.top
         spacing: 2
 
-        // ── the label line, with the control beside it ───────────────────────
-        Item {
-            width: parent.width
-            height: Math.max(control.implicitHeight,
-                             Math.round(Cfg.fontPixelSize * 1.4))
-
-            Text {
-                id: labelText
-                anchors.left: parent.left
-                anchors.right: control.left
-                anchors.rightMargin: Cfg.spacing
-                anchors.top: parent.top
-                elide: Text.ElideRight
-                text: root.option.label
-                color: Cfg.fg
-                font.family: Cfg.fontFamily
-                font.pointSize: Cfg.fontSize
-                font.hintingPreference: Font.PreferFullHinting
-            }
-
-            // Says "this differs from what the compositor is running", which is
-            // the one piece of state a control cannot show about itself: a
-            // slider at 8 looks the same whether 8 is applied or pending.
-            Rectangle {
-                anchors.verticalCenter: labelText.verticalCenter
-                anchors.left: labelText.left
-                anchors.leftMargin: Math.min(labelText.contentWidth,
-                                             labelText.width) + 6
-                visible: root.staged
-                width: 6
-                height: 6
-                radius: 3
-                color: Cfg.focusBg
-            }
-
-            Loader {
-                id: control
-                anchors.right: parent.right
-                anchors.top: parent.top
-                width: root.controlWidth
-                sourceComponent: {
-                    if (root.type === "bool") return boolControl;
-                    if (root.choices.length > 0) return enumControl;
-                    if (root.type === "color") return colorControl;
-                    if (root.bounded) return sliderControl;
-                    return textControl;
-                }
+        // ── the control ─────────────────────────────────────────────────────
+        Loader {
+            id: control
+            width: root.controlWidth
+            sourceComponent: {
+                if (root.type === "bool") return boolControl;
+                if (root.choices.length > 0) return enumControl;
+                if (root.type === "color") return colorControl;
+                if (root.bounded) return sliderControl;
+                return textControl;
             }
         }
 
@@ -200,7 +219,11 @@ Item {
         Item {
             implicitHeight: Math.max(22, Math.round(Cfg.fontPixelSize * 1.35))
             Toggle {
-                anchors.right: parent.right
+                // Left, with the other controls. It was right-aligned when the
+                // control column was flush to the pane's right edge; now every
+                // control starts at the same x, and a toggle drifting off to the
+                // right would be the one that broke the line.
+                anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 enabled: root.editable
                 opacity: root.editable ? 1.0 : 0.4
