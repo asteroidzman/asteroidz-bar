@@ -67,6 +67,9 @@ FloatingWindow {
     property string page: "options"
     readonly property bool onOptions: page === "options"
 
+    // The compositor's own version, as it reports it: "0.21.1(50ac2c4)".
+    property string compositorVersion: ""
+
     // What the heading says. Derived rather than stored: the sidebar already
     // knows every page's label, and a second table would be a second answer to
     // the same question.
@@ -416,6 +419,10 @@ FloatingWindow {
     Component.onCompleted: {
         WindowIcon.set("asteroidz-settings");
         seedGroup();
+        Ipc.request("get version", o => {
+            if (o && o.version)
+                win.compositorVersion = o.version;
+        });
     }
 
     // ── layout ──────────────────────────────────────────────────────────────
@@ -452,19 +459,26 @@ FloatingWindow {
                 anchors.margins: Cfg.panelPadding
                 spacing: 2
 
-                // The ship, not the word.
+                // The ship, the name, and which build this is.
                 //
-                // The wordmark was a bold "asteroidz" in the theme font, which is
-                // the shell naming itself in the one place its own emblem already
-                // does -- and the emblem is what the bar, the window's titlebar
-                // icon and the tags row all use for the same purpose. Untinted:
-                // Logo.source is a file the singleton has already recoloured, so
-                // a tint would flood the hull and leave a solid triangle.
+                // Untinted: Logo.source is a file the singleton has already
+                // recoloured, so a tint would paint through the whole alpha
+                // channel, flood the hull and leave a solid triangle.
+                //
+                // The version comes from the compositor rather than from this
+                // package, and that is the useful direction: the window edits the
+                // compositor's configuration, so the build that matters when
+                // something looks wrong is the one answering the socket. It is
+                // also the only one either side can be sure of -- the bar and the
+                // compositor are separate packages and can be different commits.
                 Item {
                     width: parent.width
-                    height: Math.round(Cfg.fontPixelSize * 1.8)
+                    height: Math.max(Math.round(Cfg.fontPixelSize * 2.2),
+                                     nameText.implicitHeight
+                                     + versionText.implicitHeight)
 
                     Icon {
+                        id: shipIcon
                         anchors.left: parent.left
                         anchors.leftMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
@@ -472,6 +486,37 @@ FloatingWindow {
                         height: width
                         size: width
                         name: Logo.source
+                    }
+
+                    Text {
+                        id: nameText
+                        anchors.left: shipIcon.right
+                        anchors.leftMargin: Cfg.spacing
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        elide: Text.ElideRight
+                        text: "asteroidz"
+                        color: Cfg.fg
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Cfg.fontSize
+                        font.bold: true
+                        font.hintingPreference: Font.PreferFullHinting
+                    }
+
+                    Text {
+                        id: versionText
+                        anchors.left: shipIcon.right
+                        anchors.leftMargin: Cfg.spacing
+                        anchors.right: parent.right
+                        anchors.top: nameText.bottom
+                        elide: Text.ElideRight
+                        text: win.compositorVersion
+                        visible: text !== ""
+                        color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b,
+                                       Cfg.fg.a * 0.5)
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Math.max(7, Cfg.fontSize * 0.74)
+                        font.hintingPreference: Font.PreferFullHinting
                     }
                 }
 
