@@ -89,6 +89,39 @@ sleep 8
 
 shot() { grim -o "$HL_MON" "$WORK/$1.png" 2>/dev/null; }
 
+# Ink, not a row count. A group of options with an explanation each is a lot of
+# text; an unpopulated pane is one sentence. The gap between those is enormous,
+# so a coarse measure is a reliable one -- and the same measure is what makes the
+# search assertion below meaningful, since narrowing must reduce it a long way.
+# Pixels that are NOT the window's own background, measured against the
+# background found in the shot itself.
+#
+# Not "brighter than a threshold". That is what this did first, and it reported
+# 458684 of 459000 sampled pixels as ink for every shot -- the headless theme sets
+# the surface to a bright colour, so the constant said "everything is text" and
+# both the populated and the narrowed assertion were comparing noise. The
+# dominant colour in a region is its surface by definition, whatever it is.
+ink() { # ink <shot> <l> <t> <r> <b>
+	python3 - "$WORK/$1.png" "$2" "$3" "$4" "$5" <<'PY'
+import sys
+from collections import Counter
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load(); w, h = im.size
+l, t, r, b = (int(v) for v in sys.argv[2:6])
+l = max(0, l); t = max(0, t); r = min(w, r); b = min(h, b)
+sample = [px[x, y] for y in range(t, b, 2) for x in range(l, r, 2)]
+if not sample:
+    print(0); raise SystemExit
+bg = Counter(sample).most_common(1)[0][0]
+# A tolerance, not equality: the surface is a flat fill, but a corner radius and
+# the odd 4%-white block sit within a few levels of it and counting those as text
+# would drown the signal.
+print(sum(1 for c in sample if any(abs(a - b2) > 12 for a, b2 in zip(c, bg))))
+PY
+}
+
+
 # ── 0. the QML loaded at all ────────────────────────────────────────────────
 #
 # First, because everything after it is meaningless otherwise -- and because the
@@ -717,6 +750,55 @@ PY
 	# Back, so the browser below still has this run's images in it.
 	printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WORK" "$WORK/wall.png" \
 		> "$WORK/wallpaper.conf"
+
+	# ── the folder is watched ───────────────────────────────────────────
+	#
+	# A file appearing while the page is OPEN has to show up. Nothing polls and
+	# nothing rescans on its own; an inotify watcher does, debounced so a burst
+	# is one scan.
+	#
+	# In a folder of its OWN, which the first version of this got wrong. The
+	# harness's wallpaper folder is $WORK -- where every screenshot in this file
+	# is written -- so the browser was already full of its own shots, the grid
+	# overflowed the pane, and one more tile landed below the fold: 3511 ink
+	# before and 3511 after, with the watcher working perfectly.
+	WATCHDIR="$WORK/watched"
+	mkdir -p "$WATCHDIR"
+	printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WATCHDIR" "$WORK/wall.png" \
+		> "$WORK/wallpaper.conf"
+	sleep 3
+	shot beforenewfile
+
+	# The empty folder is the baseline, and it is asserted rather than assumed:
+	# if the page were still showing the old folder the count below would move
+	# for the wrong reason.
+	# The CONTENT PANE below the form rows, which is where the grid is.
+	#
+	# "The bottom half of the window" was the first try and it measured the
+	# SIDEBAR -- whose row labels never change -- so it reported 3511 before and
+	# 3511 after, twice, against a watcher that was working. The page is short
+	# when the folder is empty, so the grid sits high; the sidebar is the only
+	# thing down there at all.
+	PANE_L=$((WX + 12 + 450 + 12))
+	GRID_T=$((WY + 260))
+	EMPTY_INK="$(ink beforenewfile "$PANE_L" "$GRID_T" \
+		"$((WX + WW))" "$((WY + WH))")"
+
+	magick -size 320x180 xc:'#e04040' "$WATCHDIR/zz-watched.png"
+	sleep 3
+	shot afternewfile
+	FULL_INK="$(ink afternewfile "$PANE_L" "$GRID_T" \
+		"$((WX + WW))" "$((WY + WH))")"
+
+	if [ "${FULL_INK:-0}" -gt "$((EMPTY_INK + 200))" ]; then
+		ok "a file added to the folder appears without reopening the page ($EMPTY_INK -> $FULL_INK ink)"
+	else
+		bad "a file added to the folder appears without reopening the page ($EMPTY_INK -> $FULL_INK ink)"
+	fi
+
+	printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WORK" "$WORK/wall.png" \
+		> "$WORK/wallpaper.conf"
+	rm -rf "$WATCHDIR"
 else
 	bad "the Wallpaper page shows its form rows (found ${#WROWS[@]})"
 fi
@@ -728,38 +810,6 @@ go_to "$FIRST_GROUP_ROW"
 
 # ── 2. it is populated ──────────────────────────────────────────────────────
 #
-# Ink, not a row count. A group of options with an explanation each is a lot of
-# text; an unpopulated pane is one sentence. The gap between those is enormous,
-# so a coarse measure is a reliable one -- and the same measure is what makes the
-# search assertion below meaningful, since narrowing must reduce it a long way.
-# Pixels that are NOT the window's own background, measured against the
-# background found in the shot itself.
-#
-# Not "brighter than a threshold". That is what this did first, and it reported
-# 458684 of 459000 sampled pixels as ink for every shot -- the headless theme sets
-# the surface to a bright colour, so the constant said "everything is text" and
-# both the populated and the narrowed assertion were comparing noise. The
-# dominant colour in a region is its surface by definition, whatever it is.
-ink() { # ink <shot> <l> <t> <r> <b>
-	python3 - "$WORK/$1.png" "$2" "$3" "$4" "$5" <<'PY'
-import sys
-from collections import Counter
-from PIL import Image
-im = Image.open(sys.argv[1]).convert("RGB")
-px = im.load(); w, h = im.size
-l, t, r, b = (int(v) for v in sys.argv[2:6])
-l = max(0, l); t = max(0, t); r = min(w, r); b = min(h, b)
-sample = [px[x, y] for y in range(t, b, 2) for x in range(l, r, 2)]
-if not sample:
-    print(0); raise SystemExit
-bg = Counter(sample).most_common(1)[0][0]
-# A tolerance, not equality: the surface is a flat fill, but a corner radius and
-# the odd 4%-white block sit within a few levels of it and counting those as text
-# would drown the signal.
-print(sum(1 for c in sample if any(abs(a - b2) > 12 for a, b2 in zip(c, bg))))
-PY
-}
-
 shot settings
 FULL_INK="$(ink settings "$WX" "$WY" $((WX + WW)) $((WY + WH)))"
 if [ "${FULL_INK:-0}" -gt 2000 ]; then

@@ -519,6 +519,27 @@ contrib/discord-ptt-test.sh # the push-to-talk bridge: the app id resolves, the
 contrib/parity.sh          # native bar vs this one (historical; see the header)
 ```
 
+### The wallpaper browser
+
+The folder is scanned at startup, whenever it changes, and every time the page
+opens — and **watched** in between, through `inotifywait`. A poll would be a
+`find` over the directory every few seconds forever, for an event that happens a
+handful of times a day, and would still be late by up to its own interval; this
+is idle until the kernel says something changed. A burst is debounced into one
+rescan, because copying fifty files in emits fifty events while the directory is
+still being written to.
+
+`inotify-tools` is an *optdepend*: without it the watcher process simply fails to
+start and the scan-on-open path carries on, so the browser is merely less
+immediate rather than broken.
+
+The scan used to run **only** from `onFolderChanged`, and `folder` starts at
+`~/Pictures`. A `wallpaper.conf` with no `folder=` line — the common case, since
+nothing else writes one — never changed it, so the browser was empty forever
+rather than stale. Setting `folder` by hand to the value it already held did not
+help either, which is the give-away: assigning a property its current value is
+not a change.
+
 ### The battery
 
 `battery` reads `capacity` and `status` straight from

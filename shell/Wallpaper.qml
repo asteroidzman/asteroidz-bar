@@ -85,8 +85,52 @@ Singleton {
         scan.running = true;
     }
 
-    onFolderChanged: rescan()
+    onFolderChanged: {
+        // The watcher is watching the OLD directory: a Process picks up a
+        // changed `command` when it starts, not while it runs.
+        watcher.running = false;
+        watcher.running = Qt.binding(() => root.folder !== "");
+        rescan();
+    }
     Component.onCompleted: rescan()
+
+    // ── the folder, watched ─────────────────────────────────────────────────
+    //
+    // Rescanning when the page opens covers the ordinary case and nothing else:
+    // a file saved, downloaded or deleted while the browser is on screen leaves
+    // it showing a directory that no longer exists that way. One tile in this
+    // session was scanned and then removed before it drew, so the grid asked the
+    // renderer for a file that had gone.
+    //
+    // inotify rather than a timer. A poll is a `find` over the directory every
+    // few seconds forever, for an event that happens a handful of times a day,
+    // and it is still late by up to its own interval. This is idle until the
+    // kernel says something changed.
+    //
+    // OPTIONAL: inotify-tools is an optdepend. Without it the process simply
+    // fails to start and the scan-on-open path carries on doing its job, which
+    // is why nothing here treats a missing binary as an error.
+    Process {
+        id: watcher
+        running: root.folder !== ""
+        command: ["inotifywait", "-m", "-q",
+                  "-e", "create,delete,moved_to,moved_from,close_write",
+                  "--format", ".", root.folder]
+        stdout: SplitParser {
+            // Every event is one line, and the content does not matter -- the
+            // rescan reads the directory again regardless. What matters is that
+            // a burst is ONE rescan: copying fifty files in emits fifty lines,
+            // and a `find` per line would be fifty scans of a directory that is
+            // still being written to.
+            onRead: debounce.restart()
+        }
+    }
+
+    Timer {
+        id: debounce
+        interval: 250
+        onTriggered: root.rescan()
+    }
 
     // Write one key back to wallpaper.conf. The file is the interface every
     // other piece of this desktop already uses -- the cycle daemon, the
