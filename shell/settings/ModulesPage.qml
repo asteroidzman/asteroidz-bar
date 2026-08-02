@@ -119,16 +119,28 @@ Item {
                     // edge would be clipped away by it. A fixed height here
                     // means the list opens into a box that cannot hold it and
                     // nothing appears to happen.
-                    height: Math.max(Math.max(28, Math.round(Cfg.fontPixelSize * 1.6)),
-                                     shownPick.implicitHeight)
+                    readonly property int lineHeight:
+                        Math.max(28, Math.round(Cfg.fontPixelSize * 1.6))
+                    height: Math.max(lineHeight, shownPick.implicitHeight)
                     z: shownPick.open ? 10 : 0
+
+                    // A fixed-height line to centre on. Centring on the ITEM
+                    // instead moves everything down as soon as the picker
+                    // expands, because the item is what grew.
+                    Item {
+                        id: shownLine
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        height: parent.lineHeight
+                    }
 
                     Text {
                         id: shownLabel
                         anchors.left: parent.left
                         anchors.right: shownPick.left
                         anchors.rightMargin: Cfg.spacing
-                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenter: shownLine.verticalCenter
                         elide: Text.ElideRight
                         text: "Shown on"
                         color: Cfg.fg
@@ -178,10 +190,19 @@ Item {
                         radius: Cfg.themeRadius
                         color: Qt.rgba(1, 1, 1, 0.05)
 
+                        // Same fixed line as above, for the same reason.
+                        Item {
+                            id: rowLine
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            height: row.lineHeight
+                        }
+
                         Text {
                             anchors.left: parent.left
                             anchors.leftMargin: Cfg.spacing
-                            y: (row.lineHeight - height) / 2
+                            anchors.verticalCenter: rowLine.verticalCenter
                             text: (row.index + 1) + ".  " + row.modelData
                             color: Cfg.fg
                             font.family: Cfg.fontFamily
@@ -189,10 +210,17 @@ Item {
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
+                        // Anchored to the line's TOP, not centred on the Row:
+                        // the Row's implicitHeight is the open picker's, so
+                        // centring it drove `y` negative and floated the whole
+                        // control cluster up over the row above -- which is
+                        // what made two rows' buttons overlap and every click
+                        // land on the wrong one.
                         Row {
                             anchors.right: parent.right
                             anchors.rightMargin: Cfg.spacing
-                            y: (row.lineHeight - implicitHeight) / 2
+                            y: Math.max(0, Math.round(
+                                   (row.lineHeight - sectionPick.rowHeight) / 2))
                             spacing: 4
 
                             // Order within the section. Buttons rather than

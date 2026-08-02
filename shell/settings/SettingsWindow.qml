@@ -806,7 +806,7 @@ FloatingWindow {
                 }
 
                 Loader {
-                    width: parent.width
+                    width: rows.width
                     active: win.page === "modules"
                     visible: active
                     height: active && item ? item.implicitHeight : 0
