@@ -28,23 +28,64 @@ Singleton {
 
     property var window: null
 
+    // The page the last window was showing, so a rebuilt one comes back to it.
+    //
+    // It lives here rather than on the window because the window does not
+    // survive being closed -- see open(). Without it, "reopen where you left
+    // off" would quietly become "reopen on All settings".
+    property string lastPage: "options"
+
     Component {
         id: windowComponent
-        SettingsWindow {}
+        SettingsWindow {
+            // If quickshell ever destroys this rather than hiding it, the
+            // singleton must not be left holding the corpse. Cheap, and it makes
+            // the null check in open() mean what it says.
+            Component.onDestruction: if (root.window === this) root.window = null
+        }
     }
 
-    // `page` is optional: with it, open on that page; without it, leave whatever
-    // was showing. Both are wanted. The bar's display pill is a way in to ONE
-    // page and landing anywhere else would make it a worse button than the
-    // popover it replaced, while a keybind meaning "settings" should reopen
-    // where you left off.
+    // `page` is optional: with it, open on that page; without it, come back to
+    // whatever was showing. Both are wanted. The bar's gear pill opens the window
+    // as such and should land where you left it, while its right click is a way
+    // in to ONE page and has to land there.
     //
-    // It is set before `visible`, so the window maps already showing the right
-    // page rather than painting the options list and then replacing it.
+    // The page is set BEFORE `visible`, so the window maps already showing it
+    // rather than painting the options list and then replacing it.
     function open(page) {
+        // A window that is not visible cannot be shown again. It has to be
+        // rebuilt.
+        //
+        // This is measured, not defensive. When the COMPOSITOR closes the
+        // toplevel -- which is how it gets closed, since it opens tiled and has
+        // no titlebar, so you use whatever keybind closes windows -- quickshell
+        // does NOT destroy this object. It sets `visible` to false and keeps it,
+        // so the null check below passes, the assignment `visible = true` is
+        // made, and nothing happens: no visibleChanged, no window. The backing
+        // window is gone and the interface will not build another.
+        //
+        // Reported as "the settings panel will launch only one time, any
+        // subsequent clicks don't launch it", and invisible to every test in
+        // settings-test.sh because they all closed it with the Close button
+        // inside it -- a hide the client asked for, which CAN be undone. Two
+        // different events, one of them recoverable, and the reachable one was
+        // the other.
+        //
+        // Rebuilding costs nothing that is not already lost: closing runs
+        // discardPending(), so there is no staged edit to preserve, and the
+        // schema is cached in its own singleton rather than in the window.
+        if (window !== null && !window.visible) {
+            lastPage = window.page;
+            window.destroy();
+            window = null;
+        }
+
         const existed = window !== null;
-        if (!existed)
-            window = windowComponent.createObject(root);
+        if (!existed) {
+            window = windowComponent.createObject(root, {
+                page: (page !== undefined && page !== "") ? page : lastPage
+            });
+        }
         if (window === null)
             return;
         if (page !== undefined && page !== "") {
@@ -54,6 +95,7 @@ Singleton {
             // to one section with no sign of why.
             window.group = "";
         }
+        lastPage = window.page;
         window.visible = true;
         window.minimized = false;
         // An already-open window has to be fetched by the COMPOSITOR.

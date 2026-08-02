@@ -1310,6 +1310,40 @@ else
 	bad "a second press of the pill summons the window back (away=$T_AWAY back=$T_BACK)"
 fi
 
+# ── closed by the COMPOSITOR, and opened again ──────────────────────────────
+#
+# The close path this file did not have, and the one a person actually uses. The
+# window opens tiled unless a rule floats it, so it has no titlebar -- it gets
+# closed with whatever keybind closes windows, which is an xdg_toplevel.close from
+# the compositor, not the Close button inside it.
+#
+# Those two are not the same event. The button sets `visible = false` and the
+# object survives; a toplevel close DESTROYS it, and the singleton that cached it
+# is then holding a reference to a dead object. Reported live as "the settings
+# panel will launch only one time, any subsequent clicks don't launch it" --
+# against a build where every other assertion in this file passed, because every
+# other assertion closed it with the button.
+WINID="$(win_json | jq -r '.id // empty')"
+if [ -n "$WINID" ]; then
+	hl_dispatch "client,$WINID,kill_client" 2
+	sleep 2
+	if [ -z "$(win_json)" ]; then
+		ok "the compositor can close the settings window"
+	else
+		bad "the compositor can close the settings window"
+	fi
+
+	hl_move "$PILL_X" "$PILL_Y"; sleep 1
+	hl_click "$PILL_X" "$PILL_Y"; sleep 4
+	if [ -n "$(win_json)" ]; then
+		ok "and the pill opens it again afterwards"
+	else
+		bad "and the pill opens it again afterwards"
+	fi
+else
+	bad "the settings window was there to close"
+fi
+
 kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
 
