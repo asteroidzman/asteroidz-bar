@@ -25,8 +25,20 @@ bar_conf_path() { echo "$HL_OUTDIR/bar-config.kdl"; }
 #     bar_conf "" "clock" "" <<'EOF'
 #     panel { enable #true; radius 9 }
 #     EOF
+#
+# A section may name the output it is drawn on, with `@`:
+#
+#     bar_conf "" "clock@DP-1" ""
+#
+# which is the `monitor=` property. Spelled into the section list rather than
+# taken as three more positional arguments, because a call with six positionals
+# of which three are usually empty is unreadable at the call site.
 bar_conf() {
-	local left="$1" center="$2" right="$3"
+	local left="${1%%@*}" center="${2%%@*}" right="${3%%@*}"
+	local lmon="" cmon="" rmon=""
+	case "$1" in *@*) lmon="${1#*@}" ;; esac
+	case "$2" in *@*) cmon="${2#*@}" ;; esac
+	case "$3" in *@*) rmon="${3#*@}" ;; esac
 	{
 		# The artwork in THIS checkout, not whatever is installed. An icon-only
 		# module with no icon renders nothing, takes no width and simply
@@ -36,9 +48,9 @@ bar_conf() {
 		# should measure the tree they are run from.
 		printf 'bar { icon-dir "%s/assets/bar-icons:%s/.local/share:/usr/share" }\n' \
 			"$HL_REPO" "$HOME"
-		printf 'modules {\n\tleft items="%s" monitor=""\n' "$left"
-		printf '\tcenter items="%s" monitor=""\n' "$center"
-		printf '\tright items="%s" monitor=""\n}\n' "$right"
+		printf 'modules {\n\tleft items="%s" monitor="%s"\n' "$left" "$lmon"
+		printf '\tcenter items="%s" monitor="%s"\n' "$center" "$cmon"
+		printf '\tright items="%s" monitor="%s"\n}\n' "$right" "$rmon"
 		# Only when there IS a heredoc. `cat` with nothing on stdin would sit
 		# waiting for the terminal, which in a test run is a hang with no
 		# output to explain it.

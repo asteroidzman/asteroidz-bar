@@ -105,6 +105,18 @@ render "clock" "$WORK/without.png"
 render "media,clock" "$WORK/with.png"
 render "weather,idle" "$WORK/pinned.png"
 
+# ── a section drawn only on the output it names ─────────────────────────────
+#
+# The Modules page writes `monitor=` per section, and settings-test proves the
+# page writes it. Whether the BAR then honours it is a different question and
+# nothing was asking it: a picker that writes a value nothing reads is a picker
+# that does nothing, and both halves pass their own test.
+#
+# Named against an output that is not attached, so the answer cannot be "it
+# happened to match". The same section with no monitor at all is the control.
+render "clock@NOSUCH-1" "$WORK/othermon.png"
+render "clock" "$WORK/thismon.png"
+
 # ── 4. the ship ─────────────────────────────────────────────────────────────
 #
 # It has gone missing three times, and the last two were the same bug wearing
@@ -296,6 +308,17 @@ def panel_span(px, width, rows=range(14, 50)):
 
 im = Image.open(f"{work}/without.png")
 W = im.size[0]
+
+# The section named for an absent output must not be drawn, and the same
+# section unnamed must be -- otherwise "not drawn" proves nothing about the
+# monitor and everything about the module.
+other = panel_span(load("othermon.png"), W)
+this = panel_span(load("thismon.png"), W)
+print(f"panel with monitor=NOSUCH-1: {other}, with monitor unset: {this}")
+if this and not other:
+    print("PASS a section is drawn only on the output it names")
+else:
+    print("FAIL a section is drawn only on the output it names")
 
 a = panel_span(load("without.png"), W)
 b = panel_span(load("with.png"), W)

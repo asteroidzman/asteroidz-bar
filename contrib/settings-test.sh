@@ -1541,6 +1541,39 @@ if [ "${B0_Y:-0}" -gt 0 ] && [ "${B1_Y:-0}" -gt "$B0_Y" ]; then
 	else
 		bad "dragging a module past its neighbour reorders the config (unchanged)"
 	fi
+	# ── and ACROSS sections ─────────────────────────────────────────────────
+	#
+	# The reorder above stays inside one section, which is the easy half: the
+	# drop index comes from one Column's own rows. Crossing sections is what
+	# the arrows cannot do in one motion and is the whole reason drag exists,
+	# and it is a different code path -- updateDrop has to pick the section
+	# first and then the index within it.
+	#
+	# Aimed at the LAST section's rows, from the first, so the drag has to
+	# travel past at least one section boundary to land.
+	cp "$WORK/bar-config.predrag" "$BAR_CONF"
+	sleep 2
+	shot modules-cross
+	CROSS_N="$(grep -cE '^\s*(left|center|right) items="[^"]' "$BAR_CONF")"
+	read -r C0_X C0_Y <<<"$(lowest_button modules-cross 0)"
+	read -r CL_X CL_Y <<<"$(lowest_button modules-cross -1)"
+	# The lowest control run is a "Not shown" chip, not a row; step up to the
+	# last run that is still a module row by asking for the one before it.
+	read -r CP_X CP_Y <<<"$(lowest_button modules-cross -2)"
+	SECT_BEFORE="$(grep -E '^\s*left ' "$BAR_CONF" | head -1)"
+	if [ "${C0_Y:-0}" -gt 0 ] && [ "${CP_Y:-0}" -gt "$C0_Y" ]; then
+		hl_drag "$GRAB_X" "$C0_Y" "$GRAB_X" "$((CP_Y + 6))"
+		sleep 2
+		SECT_AFTER="$(grep -E '^\s*left ' "$BAR_CONF" | head -1)"
+		if [ "$SECT_AFTER" != "$SECT_BEFORE" ]; then
+			ok "dragging a module into another section moves it there"
+		else
+			bad "dragging a module into another section moves it there (left unchanged)"
+		fi
+	else
+		bad "a row in a later section was found to drag onto (got ${C0_Y:-0}, ${CP_Y:-0})"
+	fi
+
 	# Put it back. The ship lives in the left section, so a reorder can move it
 	# -- and the cases after this one press it at a position measured before.
 	cp "$WORK/bar-config.predrag" "$BAR_CONF"
