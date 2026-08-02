@@ -177,6 +177,33 @@ into `~/.config`: that would overwrite a tuned template on every upgrade. The
 Palette page seeds the user copy the first time it is opened and the file is
 absent, which is the one moment where copying cannot destroy anything.
 
+### Layouts
+
+Which layout a tag opens in, on which monitor, with the master factor, the master
+count and the scroller proportions that layout reads. These are `tag` blocks in
+the config, and until this page existed they were reachable only by editing the
+file by hand: `set-config` writes *options*, and a tag rule is not one — it is a
+block with an identity, addressed by index, exactly like a window rule.
+
+So the page is built like the window-rule page rather than like an option group:
+from `get tag-rule-schema` and `get tag-rules`, one collapsed card per rule,
+showing only the fields that rule sets, saved per card. The reasoning under both
+of those is the same and is written out below.
+
+The list is in **file order, not tag order**, and the page says so. Rules apply in
+order and a later one wins, so sorting the nine cards by tag number would produce
+a list in which a rule's position no longer explains the layout a tag ends up in.
+
+A card reuses `RuleFieldRow` unchanged: a tag rule and a window rule are different
+vocabularies over the same shape, and the tag schema names its types with the same
+words (`enum`, `tristate`, `int`, `float`). Nothing in the card knows what `mfact`
+means.
+
+If the compositor predates `get tag-rule-schema` — the bar and the compositor are
+separate packages, and one can be upgraded without the other — the page says that
+outright. An empty list would read as "you have no tag rules", which is a
+different and much more alarming statement.
+
 ### Window rules and keybinds
 
 Two more pages in the sidebar, built the same way — from
@@ -507,9 +534,9 @@ contrib/settings-test.sh   # the settings window: the pill opens it on Displays,
                            #   previews, Apply persists, closing undoes an
                            #   unapplied preview, the Displays page stages and
                            #   its Apply commits, the Wallpaper page writes as
-                           #   you type, the rule and bind editors add through to
-                           #   the config file, and Rebind… reaches the
-                           #   push-to-talk bridge
+                           #   you type, the rule, bind and tag editors add
+                           #   through to the config file, and Rebind… reaches
+                           #   the push-to-talk bridge
 contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
                            #   (no compositor needed; runs in seconds)
 contrib/discord-ptt-test.sh # the push-to-talk bridge: the app id resolves, the

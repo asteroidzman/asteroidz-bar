@@ -273,8 +273,9 @@ NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
 FIRST_GROUP_ROW=0
 DISPLAYS_ROW=$NGROUPS
 WALLPAPER_ROW=$((1 + NGROUPS))
-RULES_ROW=$((2 + NGROUPS))
-BINDS_ROW=$((3 + NGROUPS))
+LAYOUTS_ROW=$((2 + NGROUPS))
+RULES_ROW=$((3 + NGROUPS))
+BINDS_ROW=$((4 + NGROUPS))
 
 SB0=$SB_TOP
 SIDEBAR_X=$((WX + 60))
@@ -1400,6 +1401,55 @@ print(mid[1], mid[0])
 PY
 }
 
+# ── the Layouts page ────────────────────────────────────────────────────────
+#
+# The per-tag layout rules, which until recently were config-only: `set-config`
+# writes options and a tag rule is not one, so nothing served them and no editor
+# could show them.
+go_to "$LAYOUTS_ROW"
+shot layouts
+
+TAGS_BEFORE="$(hl_get "get tag-rules" | jq '.count')"
+if [ "${TAGS_BEFORE:-0}" -gt 0 ]; then
+	ok "the compositor has tag rules to show ($TAGS_BEFORE)"
+else
+	bad "the compositor has tag rules to show ($TAGS_BEFORE)"
+fi
+
+# The page draws a card per rule, so the pane carries ink proportional to them.
+LAYOUT_INK="$(ink layouts "$((WX + 12 + 450 + 12))" "$((WY + 120))" \
+	"$((WX + WW))" "$((WY + WH))")"
+if [ "${LAYOUT_INK:-0}" -gt 2000 ]; then
+	ok "the layouts page is populated (${LAYOUT_INK} ink px)"
+else
+	bad "the layouts page is populated (${LAYOUT_INK} ink px)"
+fi
+
+# "New tag rule" is the lowest control on the page.
+read -r NEWTAG_X NEWTAG_Y <<<"$(lowest_button layouts)"
+if [ "${NEWTAG_X:-0}" -gt 0 ]; then
+	hl_move "$NEWTAG_X" "$NEWTAG_Y"; sleep 1
+	hl_click "$NEWTAG_X" "$NEWTAG_Y"; sleep 3
+	TAGS_AFTER="$(hl_get "get tag-rules" | jq '.count')"
+	if [ "${TAGS_AFTER:-0}" -eq $((TAGS_BEFORE + 1)) ]; then
+		ok "New tag rule adds one ($TAGS_BEFORE -> $TAGS_AFTER)"
+	else
+		bad "New tag rule adds one ($TAGS_BEFORE -> $TAGS_AFTER)"
+	fi
+	if grep -qE '^tag 1 \{' "$HL_CONFIG"; then
+		ok "...written as a \`tag\` block with its id as the argument"
+	else
+		bad "...written as a \`tag\` block with its id as the argument"
+	fi
+	if "$REPO/build/asteroidz" -p -c "$HL_CONFIG" 2>&1 | grep -q 'config OK'; then
+		ok "...and the config still parses"
+	else
+		bad "...and the config still parses"
+	fi
+else
+	bad "the layouts page shows its New tag rule button"
+fi
+
 RULES_Y="$(sidebar_entry_y "$RULES_ROW")"
 hl_move "$SIDEBAR_X" "$RULES_Y"; sleep 1
 hl_click "$SIDEBAR_X" "$RULES_Y"; sleep 2
@@ -1522,7 +1572,7 @@ fi
 # real XDG_CONFIG_HOME, which this harness does not isolate, and a settings test
 # has no business editing the machine's push-to-talk key. save_conf, the menu and
 # the field are covered as units in contrib/discord-ptt-test.sh.
-PTT_ROW=$((5 + NGROUPS))
+PTT_ROW=$((6 + NGROUPS))
 PTT_Y="$(sidebar_entry_y "$PTT_ROW")"
 hl_move "$SIDEBAR_X" "$PTT_Y"; sleep 1
 hl_click "$SIDEBAR_X" "$PTT_Y"; sleep 2

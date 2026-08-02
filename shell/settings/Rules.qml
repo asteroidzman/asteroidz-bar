@@ -30,8 +30,20 @@ Singleton {
     property var actionByName: ({})
     property bool actionsLoaded: false
 
+    // The tag-rule vocabulary, kept apart from the window-rule one.
+    //
+    // They share nothing but a shape: different fields, different keys, and a
+    // `layout` enum that exists in neither the option schema nor the window-rule
+    // one. Merging them into a single `fields` would mean every lookup carrying
+    // which kind it meant.
+    property var tagFields: []
+    property var tagFieldByKey: ({})
+    property var tagFieldGroups: []
+    property bool tagSchemaLoaded: false
+
     // ── the contents ────────────────────────────────────────────────────────
     property var rules: []
+    property var tagRules: []
     property var binds: []
     property var notListed: []
     property bool contentLoaded: false
@@ -51,6 +63,8 @@ Singleton {
             Ipc.request("get window-rule-schema", o => root.takeSchema(o));
         if (!actionsLoaded)
             Ipc.request("get dispatch-actions", o => root.takeActions(o));
+        if (!tagSchemaLoaded)
+            Ipc.request("get tag-rule-schema", o => root.takeTagSchema(o));
         refresh();
     }
 
@@ -80,9 +94,31 @@ Singleton {
         actionsLoaded = true;
     }
 
+    function takeTagSchema(obj) {
+        // Absent rather than empty on a compositor older than the verb, which is
+        // a real state: the bar and the compositor are separate packages, and an
+        // installed bar can be newer. The page says so rather than drawing an
+        // editor with no fields.
+        if (!obj || !obj.fields) {
+            tagSchemaLoaded = false;
+            return;
+        }
+        const map = {};
+        for (const f of obj.fields)
+            map[f.key] = f;
+        tagFields = obj.fields;
+        tagFieldByKey = map;
+        tagFieldGroups = obj.groups || [];
+        tagSchemaLoaded = true;
+    }
+
     function refresh() {
         if (!Ipc.connected)
             return;
+        Ipc.request("get tag-rules", o => {
+            root.tagRules = (o && o.rules) || [];
+            root.generation++;
+        });
         Ipc.request("get window-rules", o => {
             root.rules = (o && o.rules) || [];
             root.contentLoaded = true;
@@ -214,6 +250,35 @@ Singleton {
 
     function submitRules(changes, onDone) {
         submit("set-window-rules", changes, onDone);
+    }
+
+    function submitTagRules(changes, onDone) {
+        submit("set-tag-rules", changes, onDone);
+    }
+
+    // What to call a tag rule in a list: the tag, and what makes it distinct
+    // from the other rules for the same tag -- which is usually the monitor.
+    function tagRuleTitle(rule) {
+        const f = rule.fields || {};
+        let s = "Tag " + (f.id || "?");
+        if (f.name)
+            s += " · " + f.name;
+        if (f.monitor_name)
+            s += " · " + f.monitor_name;
+        else if (f.monitor_model)
+            s += " · " + f.monitor_model;
+        return s;
+    }
+
+    function tagFieldsIn(group) {
+        return tagFields.filter(f => f.group === group);
+    }
+
+    function tagGroupLabel(name) {
+        for (const g of tagFieldGroups)
+            if (g.name === name)
+                return g.label;
+        return name;
     }
 
     function submitBinds(changes, onDone) {

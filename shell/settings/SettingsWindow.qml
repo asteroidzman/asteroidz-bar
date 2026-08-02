@@ -79,7 +79,7 @@ FloatingWindow {
             return search !== "" ? "Search results"
                                  : (Schema.groupLabel(group) || "Settings");
         return ({ displays: "Displays", wallpaper: "Wallpaper",
-                  rules: "Window rules", binds: "Keybinds",
+                  layouts: "Layouts", rules: "Window rules", binds: "Keybinds",
                   palette: "Palette", discord: "Push-to-talk" })[page] || "Settings";
     }
 
@@ -100,6 +100,8 @@ FloatingWindow {
                       + "Changes are applied together, on Apply.",
             wallpaper: "Applied as you change them · press Enter in a field"
                        + " to apply it.",
+            layouts: "Which layout each tag opens in, and the settings that "
+                     + "layout reads. Each rule saves itself.",
             rules: "Rules apply in order and every match applies. "
                    + "Each rule saves itself.",
             binds: "Every chord the compositor knows. Each bind saves itself.",
@@ -548,6 +550,9 @@ FloatingWindow {
                                  { name: "", label: "Wallpaper",
                                    page: "wallpaper",
                                    icon: "asteroidz-bar/settings/wallpaper.svg" },
+                                 { name: "", label: "Layouts",
+                                   page: "layouts",
+                                   icon: "asteroidz-bar/settings/layout.svg" },
                                  { name: "", label: "Window rules",
                                    page: "rules",
                                    icon: "asteroidz-bar/settings/rules.svg" },
@@ -632,7 +637,8 @@ FloatingWindow {
                                 win.page = modelData.page;
                                 win.group = modelData.name;
                                 if (modelData.page === "rules"
-                                        || modelData.page === "binds")
+                                        || modelData.page === "binds"
+                                        || modelData.page === "layouts")
                                     Rules.load();
                                 if (modelData.page === "palette")
                                     Matugen.load();
@@ -793,6 +799,14 @@ FloatingWindow {
                 // The rule and bind editors, each built once and kept, so that
                 // an expanded card and a half-typed regex survive a trip to the
                 // options page and back.
+                Loader {
+                    width: rows.width
+                    active: win.page === "layouts"
+                    visible: active
+                    height: active && item ? item.implicitHeight : 0
+                    sourceComponent: LayoutsPage {}
+                }
+
                 Loader {
                     width: rows.width
                     active: win.page === "rules"

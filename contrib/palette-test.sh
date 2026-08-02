@@ -223,7 +223,7 @@ PY
 # There is no "All settings" row: a freshly opened window selects the first
 # group, so the accent pill the scan above found is row 0.
 NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
-PALETTE_ROW=$((4 + NGROUPS))
+PALETTE_ROW=$((5 + NGROUPS))
 PALETTE_Y=$((SB_TOP + PALETTE_ROW * (SB_H + 2) + SB_H / 2))
 hl_move $((WX + 60)) "$PALETTE_Y"; sleep 1
 hl_click $((WX + 60)) "$PALETTE_Y"; sleep 3

@@ -103,6 +103,8 @@ install_data(
 		'shell/settings/DisplaysPage.qml',
 		'shell/settings/WallpaperPage.qml',
 		'shell/settings/Rules.qml',
+		'shell/settings/LayoutsPage.qml',
+		'shell/settings/TagCard.qml',
 		'shell/settings/RulesPage.qml',
 		'shell/settings/BindsPage.qml',
 		'shell/settings/RuleCard.qml',
