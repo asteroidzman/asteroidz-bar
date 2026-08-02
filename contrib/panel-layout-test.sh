@@ -140,9 +140,11 @@ else:
 PILL_X=$((HL_WIDTH - 8 - 12 - 18))
 PILL_Y=$((9 + 24))
 
-# One click opens the settings window on the Displays page.
+# RIGHT click, which opens the settings window straight on the Displays page.
+# A left click opens it on All settings -- the pill's icon is a gear -- and the
+# arrangement canvas measured below is only on Displays.
 hl_move "$PILL_X" "$PILL_Y"; sleep 1
-hl_click "$PILL_X" "$PILL_Y"; sleep 4
+hl_click "$PILL_X" "$PILL_Y" rclick; sleep 4
 
 read -r WX WY WW WH <<<"$(win_box)"
 if [ "${WW:-0}" -gt 300 ]; then

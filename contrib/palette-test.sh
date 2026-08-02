@@ -212,14 +212,11 @@ PY
 )"
 
 # All settings, one row per option group, then Displays, Wallpaper, rules,
-# binds, palette. The pill opens the window on Displays, so the pill the scan
-# above found is that row, not the first one -- row 0 has to be worked back to
-# from a known index or every position below is several rows too high.
+# binds, palette. A left click on the pill selects "All settings", so the accent
+# pill the scan above found is row 0.
 NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
-DISPLAYS_ROW=$((1 + NGROUPS))
 PALETTE_ROW=$((5 + NGROUPS))
-SB0=$((SB_TOP - DISPLAYS_ROW * (SB_H + 2)))
-PALETTE_Y=$((SB0 + PALETTE_ROW * (SB_H + 2) + SB_H / 2))
+PALETTE_Y=$((SB_TOP + PALETTE_ROW * (SB_H + 2) + SB_H / 2))
 hl_move $((WX + 60)) "$PALETTE_Y"; sleep 1
 hl_click $((WX + 60)) "$PALETTE_Y"; sleep 3
 shot palette

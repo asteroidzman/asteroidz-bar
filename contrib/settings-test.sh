@@ -175,10 +175,8 @@ fi
 # ── the sidebar, measured once ──────────────────────────────────────────────
 #
 # Every entry is the same height and the Column's spacing is 2, so one measured
-# pill gives the pitch and -- with the index of the entry that is selected -- the
-# origin. Which entry that is has to be told, not assumed: the pill opens the
-# window on Displays, so what the scan finds is the Displays row and treating it
-# as row 0 would put every computed position several rows too high.
+# pill gives both the pitch and the origin: "All settings" is row 0 and is what a
+# left click selects, so the accent pill this finds IS row 0.
 shot opened
 
 read -r SB_TOP SB_H <<<"$(python3 - "$WORK/opened.png" "${ACCENT:-#000000}" \
@@ -227,8 +225,7 @@ WALLPAPER_ROW=$((2 + NGROUPS))
 RULES_ROW=$((3 + NGROUPS))
 BINDS_ROW=$((4 + NGROUPS))
 
-# The top of row 0, worked back from the row that is actually selected.
-SB0=$((SB_TOP - DISPLAYS_ROW * (SB_H + 2)))
+SB0=$SB_TOP
 SIDEBAR_X=$((WX + 60))
 
 sidebar_entry_y() { # sidebar_entry_y <index>  ->  the row's vertical centre
@@ -248,10 +245,15 @@ else
 	bad "the sidebar was located (row 0 at $SB0, ${SB_H}px rows, window at $WY)"
 fi
 
-# ── 1b. it opens on the Displays page ───────────────────────────────────────
+# ── 1b. right click goes straight to Displays ───────────────────────────────
 #
-# The pill's icon is a monitor and it asks for `displays` by name, so landing on
-# the options list would make it a worse button than the popover it replaced.
+# The pill's icon is a GEAR, so a left click opens the window as such and lands
+# on All settings -- anything else would be a button whose icon promises one page
+# of six. Right click is the shortcut to the page this module used to be, and it
+# has to work on an already-open window, which is the case that is easy to get
+# wrong: `open()` sets the page before `visible`, and a window that is already
+# visible would keep whatever it was showing if the order were the other way
+# round.
 #
 # Asserted from the page's CONTENT rather than from which sidebar row is lit. The
 # highlight only says what the window thinks it is showing; the arrangement canvas
@@ -295,11 +297,15 @@ print(grp[0], len(grp))
 PY
 }
 
-read -r ARR_TOP ARR_H <<<"$(accent_block opened)"
+hl_move "$PILL_X" "$PILL_Y"; sleep 1
+hl_click "$PILL_X" "$PILL_Y" rclick; sleep 3
+shot rightclicked
+
+read -r ARR_TOP ARR_H <<<"$(accent_block rightclicked)"
 if [ "${ARR_H:-0}" -gt 40 ]; then
-	ok "the pill opens straight onto the Displays page (monitor tile ${ARR_H}px at y $ARR_TOP)"
+	ok "right click goes straight to Displays (monitor tile ${ARR_H}px at y $ARR_TOP)"
 else
-	bad "the pill opens straight onto the Displays page (monitor tile ${ARR_H}px at y $ARR_TOP)"
+	bad "right click goes straight to Displays (monitor tile ${ARR_H}px at y $ARR_TOP)"
 fi
 
 # ── 1c. the Displays page stages, and Apply commits ─────────────────────────
@@ -403,7 +409,7 @@ PY
 }
 
 BEFORE_SCALE="$(mon_scale)"
-mapfile -t DROWS < <(form_rows opened)
+mapfile -t DROWS < <(form_rows rightclicked)
 
 # Resolution, Refresh, Scale, VRR, [HDR,] ICC profile. Scale is the one to
 # drive: it is the only picker guaranteed to have more than one value on a
@@ -995,8 +1001,8 @@ shot reopened
 
 # Measured again rather than reused: the window was unmapped and remapped, and
 # nothing promises the compositor put it back at the same coordinates. Same scan
-# as section 1, and the same caveat -- the pill asks for `displays`, so what this
-# finds is the Displays row, not the first one.
+# as section 1: a left click reopens on the page that was showing when it closed,
+# which was All settings, so this is row 0 again.
 read -r SB_TOP SB_H <<<"$(python3 - "$WORK/reopened.png" "${ACCENT:-#000000}" \
 		"$WX" "$WY" "$WW" "$WH" <<'PY'
 import sys
@@ -1033,7 +1039,7 @@ print(grp[0], grp[-1] - grp[0] + 1)
 PY
 )"
 
-SB0=$((SB_TOP - DISPLAYS_ROW * (SB_H + 2)))
+SB0=$SB_TOP
 SIDEBAR_X=$((WX + 60))
 
 if [ "${SB_H:-0}" -gt 10 ] && [ "$SB0" -gt "$WY" ]; then

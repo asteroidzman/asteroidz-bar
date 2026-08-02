@@ -12,10 +12,16 @@
 // screen. It was also capped at 700px with nothing to scroll, so the wallpaper
 // browser was a 220px box inside a surface that could not grow.
 //
-// Left click opens the Displays page, because that is what this icon means and
-// what the pill was for. Right click opens the settings window as such, on
-// whatever page was last showing -- the same window, reached from the same pill,
-// without pretending the icon promises it.
+// A GEAR, not a monitor, and the icon is the whole argument. This pill opens
+// every setting the compositor has -- options, window rules, keybinds, the
+// palette, push-to-talk -- and a monitor icon promises one page of that. It was
+// the right icon while the pill WAS the display panel and the wrong one the
+// moment it stopped being.
+//
+// So left click opens the window as such, on whatever page was last showing
+// (All settings the first time). Right click goes straight to Displays: the
+// module is still `display` in the bar's module list, that is what this pill was
+// for, and the shortcut costs nothing.
 
 import QtQuick
 import ".."
@@ -30,15 +36,15 @@ Pill {
     // error at load rather than at click.
     property var bar: null
 
-    icons: ["waybar-display/display.svg"]
+    icons: ["asteroidz-bar/gear.svg"]
     iconTint: Cfg.fg
     paddingX: 0
     fixedWidth: iconSize + 2 * Cfg.borderWidth + 1
 
     onClicked: button => {
         if (button === Qt.LeftButton)
-            Settings.open("displays");
-        else if (button === Qt.RightButton)
             Settings.open();
+        else if (button === Qt.RightButton)
+            Settings.open("displays");
     }
 }

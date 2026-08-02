@@ -61,8 +61,14 @@ outside it; the panel that let you change a mode could not survive you looking a
 the result. It was also capped at 700px with nothing to scroll, so the wallpaper
 browser was a 220px box inside a surface that could not grow.
 
-Left click opens the Displays page, which is what the icon means. Right click
-opens the window on whatever page you left it on.
+The icon is a **gear**, not a monitor, and that is the whole argument for it:
+this pill opens every setting the compositor has, and a monitor icon promises one
+page of six. It was the right icon while the pill *was* the display panel and the
+wrong one the moment it stopped being.
+
+Left click opens the window as such, on whatever page you left it on — All
+settings the first time. Right click goes straight to Displays, which is what
+this pill used to be.
 
 ### Displays and Wallpaper
 
