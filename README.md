@@ -140,6 +140,25 @@ top — one redundant draw per overridden monitor at startup, in exchange for a
 monitor whose name has not arrived from the compositor yet still having a
 wallpaper instead of being black until `xdg-output` answers.
 
+### Changing on its own, or not
+
+**Change** is `random`, `sequential` or `static`, and **Every (min)** is only
+shown for the first two — a period is meaningless when nothing cycles, and a
+control that does nothing is worse than an absent one because it invites you to
+set it and then ignores you.
+
+`static` is a first-class choice rather than "set the interval to zero". Leaving
+a wallpaper alone is an ordinary thing to want, and expressing it as an interval
+made the way to say it "type a number into a field that then sits there claiming
+to mean something".
+
+The cycling itself is not done here — `wallpaper-cycle-daemon.sh` and
+`cycle-wallpaper.sh` do it, reading the same `wallpaper.conf` — so both honour
+`order=static`. In the daemon so it idles rather than waking, advancing and
+being refused; in the cycler as well because that script is also what a hotkey
+or a menu entry runs, and "next wallpaper" on a wallpaper set never to change
+should do nothing rather than something.
+
 ### Dynamic wallpapers
 
 An Apple dynamic wallpaper is one HEIC holding several images plus a timetable

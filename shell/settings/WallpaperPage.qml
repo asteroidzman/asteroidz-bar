@@ -98,24 +98,32 @@ Item {
         }
 
         FormRow {
-            label: "Cycle (min)"
+            label: "Change"
             width: parent.width
-            control: Field {
-                placeholder: "0 = off"
-                value: String(Math.round(Wallpaper.interval / 60))
-                onCommitted: v =>
-                    Wallpaper.setKey("interval",
-                                     String(Math.round(Number(v) * 60)))
+            control: Picker {
+                // `static` is a first-class choice rather than "set the
+                // interval to zero". Leaving a wallpaper alone is a normal
+                // thing to want -- and with it expressed as an interval, the
+                // way to say it was to type a number into a field that then
+                // sat there claiming to mean something.
+                values: ["random", "sequential", "static"]
+                current: Wallpaper.order
+                onPicked: v => Wallpaper.setKey("order", v)
             }
         }
 
         FormRow {
-            label: "Order"
+            label: "Every (min)"
             width: parent.width
-            control: Picker {
-                values: ["random", "sequential"]
-                current: Wallpaper.order
-                onPicked: v => Wallpaper.setKey("order", v)
+            // A period is meaningless when nothing is cycling, and a control
+            // that does nothing is worse than an absent one: it invites you to
+            // set it and then ignores you.
+            visible: Wallpaper.order !== "static"
+            control: Field {
+                value: String(Math.round(Wallpaper.interval / 60))
+                onCommitted: v =>
+                    Wallpaper.setKey("interval",
+                                     String(Math.round(Number(v) * 60)))
             }
         }
 
