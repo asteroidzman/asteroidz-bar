@@ -98,7 +98,8 @@ FloatingWindow {
         return ({
             displays: "Arrange your screens and set their mode. "
                       + "Changes are applied together, on Apply.",
-            wallpaper: "Applied as you change them.",
+            wallpaper: "Applied as you change them · press Enter in a field"
+                       + " to apply it.",
             rules: "Rules apply in order and every match applies. "
                    + "Each rule saves itself.",
             binds: "Every chord the compositor knows. Each bind saves itself.",
@@ -642,34 +643,14 @@ FloatingWindow {
                 }
             }
 
-            // Which files the settings come from, and which of them can be
-            // written. This is the answer to "why is that greyed out", in the
-            // one place a person looks for it.
-            Column {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: Cfg.panelPadding
-                spacing: 1
-
-                Repeater {
-                    model: Schema.files
-                    delegate: Text {
-                        required property var modelData
-                        width: parent.width
-                        elide: Text.ElideMiddle
-                        text: modelData.path.split("/").pop()
-                              + (modelData.writable ? "" :
-                                 " · " + (modelData.reason || "read-only"))
-                        color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b,
-                                       Cfg.fg.a * (modelData.writable
-                                                   ? 0.5 : 0.35))
-                        font.family: Cfg.fontFamily
-                        font.pointSize: Math.max(7, Cfg.fontSize * 0.72)
-                        font.hintingPreference: Font.PreferFullHinting
-                    }
-                }
-            }
+            // No file list here any more.
+            //
+            // It named every config file and whether it was writable, as a
+            // standing answer to "why is that greyed out". But that question is
+            // asked about one option, at the moment it is greyed -- and the row
+            // that is greyed already answers it in place, with the file and the
+            // reason. A permanent list at the foot of the sidebar was answering
+            // it for options nobody was looking at.
         }
 
         // ── the sheet everything else is on ─────────────────────────────────

@@ -20,27 +20,20 @@ Item {
 
     implicitHeight: col.implicitHeight
 
+    // Every time the page opens, because the folder is a directory on disk that
+    // anything may have written to since -- the cycle daemon, a download, a
+    // screenshot. Nothing watches it, and a browser showing a folder as it was
+    // an hour ago is a browser that cannot find the file you just saved.
+    Component.onCompleted: Wallpaper.rescan()
+
     Column {
         id: col
         width: parent.width
         spacing: Cfg.spacing
 
-        // Says which model this page is in, because the page beside it in the
-        // sidebar is in the opposite one.
-        //
-        // Two opposite models in one window is fine. Two opposite models with
-        // nothing saying which is which is not, and was reported as "there is no
-        // apply button so it's not clear how to apply the settings".
-        Text {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: "Applied as you change them · press Enter in a field to apply it"
-            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
-            font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
-            font.hintingPreference: Font.PreferFullHinting
-        }
-
+        // No intro line here. The page heading carries it -- every page has a
+        // subtitle now -- and this said the same sentence a second time, one
+        // line below it.
         FormRow {
             label: "Folder"
             width: parent.width

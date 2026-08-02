@@ -73,7 +73,20 @@ Singleton {
         }
     }
 
-    onFolderChanged: scan.running = true
+    // Rescan, on demand.
+    //
+    // `onFolderChanged` alone was not enough, and the failure was total rather
+    // than partial: `folder` defaults to ~/Pictures, and a wallpaper.conf with
+    // no `folder=` line -- which is the common case, since nothing else in this
+    // desktop writes one -- never changes it. The signal never fired, the scan
+    // never ran, and the browser was empty forever. Reported as "the wallpaper
+    // selector doesn't refresh from the folder"; it had never refreshed once.
+    function rescan() {
+        scan.running = true;
+    }
+
+    onFolderChanged: rescan()
+    Component.onCompleted: rescan()
 
     // Write one key back to wallpaper.conf. The file is the interface every
     // other piece of this desktop already uses -- the cycle daemon, the
