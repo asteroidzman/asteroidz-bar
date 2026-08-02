@@ -44,17 +44,8 @@ Pill {
             // Straight through, no confirmation. Locking loses nothing, and a
             // "really lock?" step would make the one safe entry the slowest.
             confirm: "",
-            // The scripts moved out of ~/.config/waybar -- named for a bar that
-            // no longer runs -- and the old path is still tried, because this
-            // is the entry whose failure is silent: an execDetached that finds
-            // nothing simply does not lock, and you find that out by walking
-            // away from an unlocked screen.
-            run: () => Quickshell.execDetached([
-                "sh", "-c",
-                "if [ -x ~/.config/asteroidz/scripts/lock.sh ]; then "
-                + "exec ~/.config/asteroidz/scripts/lock.sh; "
-                + "else exec ~/.config/waybar/scripts/lock.sh; fi"
-            ])
+            run: () => Quickshell.execDetached(
+                ["sh", "-c", "~/.config/asteroidz/scripts/lock.sh"])
         },
         {
             id: "logout",
