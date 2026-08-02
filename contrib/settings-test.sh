@@ -104,6 +104,11 @@ else
 fi
 
 # ── 1. the way in ───────────────────────────────────────────────────────────
+#
+# One click. The display pill used to open a popover with an "All settings…"
+# button in it, and this test used to click through both -- which meant the way
+# in to the settings window could only be tested by first testing a panel that no
+# longer exists. The pill IS the way in now.
 
 PILL_X=$((HL_WIDTH - 8 - 12 - 18))
 PILL_Y=$((9 + 24))
@@ -112,44 +117,7 @@ PILL_Y=$((9 + 24))
 # hit-test, so the first click of a session lands nowhere while every later one
 # works -- which reads as "the pill is dead".
 hl_move "$PILL_X" "$PILL_Y"; sleep 1
-hl_click "$PILL_X" "$PILL_Y"; sleep 2
-shot popover
-
-# The popover's box, and the tab row inside it.
-#
-# The tab row is located from the SELECTED TAB, which is the accent colour --
-# not by offsetting from the popover's top edge. That offset is what an earlier
-# version of this test did and it was wrong by seven pixels: the scan for the
-# panel started below the bar at a fixed y, so the "top" it reported was the scan
-# floor rather than the surface, and the click landed under the button. The
-# accent block is the row itself, measured.
-#
-# The bar's surface is height + 2 * margin_y tall (48 + 18 = 66) and the popover
-# sits `gap` below it, so 68 is the first row that can only be popover.
-read -r PL PT PR PB <<<"$(python3 - "$WORK/popover.png" <<'PY'
-import sys
-from PIL import Image
-im = Image.open(sys.argv[1]).convert("RGB")
-px = im.load(); w, h = im.size
-xs = []; ys = []
-for y in range(68, h):
-    for x in range(w):
-        r, g, b = px[x, y]
-        # darker than the #9db8d8 wallpaper: only a panel can be here
-        if r + g + b < 400:
-            xs.append(x); ys.append(y)
-if not xs:
-    print("0 0 0 0")
-else:
-    print(min(xs), min(ys), max(xs), max(ys))
-PY
-)"
-
-if [ "$PR" -gt 0 ]; then
-	ok "the display popover is up (${PL},${PT}..${PR},${PB})"
-else
-	bad "the display popover is up"
-fi
+hl_click "$PILL_X" "$PILL_Y"; sleep 3
 
 ACCENT="$(hl_get "get bar-config" | python3 -c '
 import json, sys
@@ -157,48 +125,6 @@ c = (json.load(sys.stdin).get("theme") or {}).get("focus_bg")
 if isinstance(c, list) and len(c) >= 3:
     print("#%02x%02x%02x" % tuple(max(0, min(255, round(v * 255))) for v in c[:3]))
 ' 2>/dev/null)"
-
-# The selected tab: the topmost run of accent-coloured pixels wide enough to be a
-# pill rather than a glyph's antialiased fringe.
-read -r TBT TBB <<<"$(python3 - "$WORK/popover.png" "${ACCENT:-#000000}" <<'PY'
-import sys
-from PIL import Image
-im = Image.open(sys.argv[1]).convert("RGB")
-px = im.load(); w, h = im.size
-acc = sys.argv[2].lstrip("#")
-if len(acc) != 6:
-    print("0 0"); raise SystemExit
-want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
-# Tight tolerance: at 30 this matched the blue fringe of antialiased WHITE text
-# and found a row of glyphs instead of the pill.
-rows = [y for y in range(68, h)
-        if sum(1 for x in range(w)
-               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))) > 20]
-if not rows:
-    print("0 0"); raise SystemExit
-grp = [rows[0]]
-for y in rows[1:]:
-    if y - grp[-1] <= 2:
-        grp.append(y)
-    else:
-        break
-print(grp[0], grp[-1])
-PY
-)"
-
-if [ "${TBB:-0}" -gt "${TBT:-0}" ]; then
-	ok "the tab row is at y ${TBT}..${TBB}"
-else
-	bad "the tab row is at y ${TBT}..${TBB}"
-fi
-
-# The button's right edge is one panel-padding in from the panel's, and its width
-# comes from its label at 78% of the theme font -- so 45px in from the right edge
-# is inside it for any font this theme can produce.
-SET_X=$((PR - 45))
-SET_Y=$(((TBT + TBB) / 2))
-hl_move "$SET_X" "$SET_Y"; sleep 1
-hl_click "$SET_X" "$SET_Y"; sleep 3
 
 win_json() {
 	hl_get "get all-clients" | python3 -c '
@@ -211,9 +137,9 @@ for c in json.load(sys.stdin).get("clients", []):
 
 WIN="$(win_json)"
 if [ -n "$WIN" ]; then
-	ok "\"All settings…\" opens a toplevel titled \"asteroidz settings\""
+	ok "the display pill opens a toplevel titled \"asteroidz settings\""
 else
-	bad "\"All settings…\" opens a toplevel titled \"asteroidz settings\""
+	bad "the display pill opens a toplevel titled \"asteroidz settings\""
 fi
 
 read -r WX WY WW WH <<<"$(printf '%s' "$WIN" | python3 -c '
@@ -245,6 +171,457 @@ if [ "$WIN_ICON" = "asteroidz-settings" ]; then
 else
 	bad "the window carries the ship as its icon name (got '$WIN_ICON')"
 fi
+
+# ── the sidebar, measured once ──────────────────────────────────────────────
+#
+# Every entry is the same height and the Column's spacing is 2, so one measured
+# pill gives the pitch and -- with the index of the entry that is selected -- the
+# origin. Which entry that is has to be told, not assumed: the pill opens the
+# window on Displays, so what the scan finds is the Displays row and treating it
+# as row 0 would put every computed position several rows too high.
+shot opened
+
+read -r SB_TOP SB_H <<<"$(python3 - "$WORK/opened.png" "${ACCENT:-#000000}" \
+		"$WX" "$WY" "$WW" "$WH" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+acc = sys.argv[2].lstrip("#")
+wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
+if len(acc) != 6:
+    print("0 0"); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+# The sidebar is the left fifth or so, floored at fontPixelSize * 8.
+r = wx + max(int(ww * 0.22), 170)
+rows = [y for y in range(wy, wy + wh)
+        if sum(1 for x in range(wx, r)
+               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))) > 40]
+if not rows:
+    print("0 0"); raise SystemExit
+# The LARGEST run, not the first.
+#
+# The window is tiled and the compositor draws a focused border around it in the
+# same accent, so the first run of accent rows is two pixels of border at the very
+# top of the frame -- which is what this found, and a 2px "row height" put every
+# computed sidebar position off the end of the list. Exactly one entry is selected
+# at a time and every entry is the same height, so the tallest run is the pill.
+groups = []
+for y in rows:
+    if groups and y - groups[-1][-1] <= 2:
+        groups[-1].append(y)
+    else:
+        groups.append([y])
+grp = max(groups, key=len)
+print(grp[0], grp[-1] - grp[0] + 1)
+PY
+)"
+
+# 0 = All settings, then one row per option group, then the pages that are not
+# options. The group count comes from the schema rather than being hard-coded, so
+# adding a group does not silently start clicking the wrong row.
+NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
+ALL_ROW=0
+DISPLAYS_ROW=$((1 + NGROUPS))
+WALLPAPER_ROW=$((2 + NGROUPS))
+RULES_ROW=$((3 + NGROUPS))
+BINDS_ROW=$((4 + NGROUPS))
+
+# The top of row 0, worked back from the row that is actually selected.
+SB0=$((SB_TOP - DISPLAYS_ROW * (SB_H + 2)))
+SIDEBAR_X=$((WX + 60))
+
+sidebar_entry_y() { # sidebar_entry_y <index>  ->  the row's vertical centre
+	echo $((SB0 + $1 * (SB_H + 2) + SB_H / 2))
+}
+
+go_to() { # go_to <row index>
+	local y
+	y="$(sidebar_entry_y "$1")"
+	hl_move "$SIDEBAR_X" "$y"; sleep 1
+	hl_click "$SIDEBAR_X" "$y"; sleep 2
+}
+
+if [ "${SB_H:-0}" -gt 10 ] && [ "$SB0" -gt "$WY" ]; then
+	ok "the sidebar was located (row 0 at $SB0, ${SB_H}px rows)"
+else
+	bad "the sidebar was located (row 0 at $SB0, ${SB_H}px rows, window at $WY)"
+fi
+
+# ── 1b. it opens on the Displays page ───────────────────────────────────────
+#
+# The pill's icon is a monitor and it asks for `displays` by name, so landing on
+# the options list would make it a worse button than the popover it replaced.
+#
+# Asserted from the page's CONTENT rather than from which sidebar row is lit. The
+# highlight only says what the window thinks it is showing; the arrangement canvas
+# is the page.
+#
+# Found by the SELECTED MONITOR'S TILE, which the canvas paints in the accent. The
+# canvas fill itself is not usable for this: it is rgba(0,0,0,0.25) over the
+# window colour, and the window colour here is already nearly black, so the band
+# that looks unmistakable on paper is a delta of about three levels. The tile is
+# the accent -- the highest-contrast thing on the page -- and it is tall, which is
+# what separates it from the Apply button, the only other accent block that can
+# appear in this pane.
+accent_block() { # accent_block <shot>  ->  "<top> <height>" of the tallest one
+	python3 - "$WORK/$1.png" "${ACCENT:-#000000}" "$WX" "$WY" "$WW" "$WH" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+acc = sys.argv[2].lstrip("#")
+wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
+if len(acc) != 6:
+    print("0 0"); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+# The content pane only: the sidebar's selected entry is accent too.
+l = wx + max(int(ww * 0.22), 170) + 4
+r = min(im.size[0], wx + ww - 4)
+top, bot = wy + 2, min(im.size[1], wy + wh - 2)
+rows = [y for y in range(top, bot)
+        if sum(1 for x in range(l, r)
+               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))) > 20]
+if not rows:
+    print("0 0"); raise SystemExit
+groups = []
+for y in rows:
+    if groups and y - groups[-1][-1] <= 2:
+        groups[-1].append(y)
+    else:
+        groups.append([y])
+grp = max(groups, key=len)
+print(grp[0], len(grp))
+PY
+}
+
+read -r ARR_TOP ARR_H <<<"$(accent_block opened)"
+if [ "${ARR_H:-0}" -gt 40 ]; then
+	ok "the pill opens straight onto the Displays page (monitor tile ${ARR_H}px at y $ARR_TOP)"
+else
+	bad "the pill opens straight onto the Displays page (monitor tile ${ARR_H}px at y $ARR_TOP)"
+fi
+
+# ── 1c. the Displays page stages, and Apply commits ─────────────────────────
+#
+# The one assertion this page cannot do without. Every other control in this
+# window previews live, and this page deliberately does not: passing THROUGH a
+# resolution on the way to the one you wanted would mode-set to each, and a mode
+# set is a black screen for a moment. A picker that applied per click was the
+# original bug, and it is invisible from the QML.
+#
+# Scale, not resolution: the harness output has one mode, so a resolution picker
+# has one entry and picking it changes nothing measurable. Scale is a free number
+# the compositor applies to any output.
+mon_scale() {
+	hl_get "get all-monitors" \
+		| jq -r --arg m "$HL_MON" '.monitors[] | select(.name==$m) | .scale'
+}
+
+# The page's form rows: "<top> <bottom> <control-centre-x>" each, top to bottom.
+#
+# Found in the pixels rather than computed, and that is not caution. Above the
+# first row sit an intro paragraph that wraps to a font-dependent number of
+# lines, a canvas whose height is font-derived, and a summary line -- so an
+# offset from the top of the pane is wrong by a different amount at every theme.
+#
+# Everything here is measured against the pane's own background rather than
+# against a brightness threshold. The sibling version of this in click-test.sh
+# assumed a dark panel on a light wallpaper, which was true of a popover over the
+# desktop and is not true of a toplevel: this window is drawn on panelColor,
+# whatever the theme made that, and the headless theme makes it bright.
+#
+# A row is a run of label text with a filled control rect on the same scanline.
+# The controls share one column, so the rows are the lines whose widest non-
+# background run starts at the column most of them agree on -- which is what
+# separates a FormRow from the arrangement hint, a line of text crossing a widget
+# that would otherwise read as a row and shift every index by one.
+form_rows() { # form_rows <shot>
+	python3 - "$WORK/$1.png" "$WX" "$WY" "$WW" "$WH" <<'PY'
+import sys
+from collections import Counter
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+wx, wy, ww, wh = (int(v) for v in sys.argv[2:6])
+# The content pane: right of the sidebar, below the header, above the footer.
+x0 = wx + max(int(ww * 0.22), 170) + 20
+x1 = min(im.size[0], wx + ww - 20)
+y0, y1 = wy + 75, min(im.size[1], wy + wh - 20)
+
+sample = [px[x, y] for y in range(y0, y1, 2) for x in range(x0, x1, 2)]
+if not sample:
+    raise SystemExit
+bg = Counter(sample).most_common(1)[0][0]
+
+def near(c, other, tol):
+    return all(abs(a - b) <= tol for a, b in zip(c, other))
+
+def text(c):
+    # Glyphs are drawn in the foreground colour, which is as far from the
+    # surface as anything on the page gets.
+    return not near(c, bg, 40)
+
+def runs(y):
+    out, start = [], None
+    for x in range(x0, x1):
+        if not near(px[x, y], bg, 3):
+            if start is None:
+                start = x
+        else:
+            if start is not None and x - start > 40:
+                out.append((start, x))
+            start = None
+    if start is not None and x1 - start > 40:
+        out.append((start, x1))
+    return out
+
+ys = [y for y in range(y0, y1) if sum(1 for x in range(x0, x1) if text(px[x, y])) > 3]
+groups = []
+for y in ys:
+    if groups and y - groups[-1][-1] <= 2:
+        groups[-1].append(y)
+    else:
+        groups.append([y])
+groups = [g for g in groups if len(g) > 4]
+
+cand = []
+for g in groups:
+    mid = (g[0] + g[-1]) // 2
+    rs = runs(mid)
+    if rs:
+        # the widest run on the line is the control
+        s, e = max(rs, key=lambda r: r[1] - r[0])
+        cand.append((g[0], g[-1], s, e))
+
+if cand:
+    col = Counter(s for _, _, s, _ in cand).most_common(1)[0][0]
+    for a, b, s, e in cand:
+        if abs(s - col) <= 4:
+            print(a, b, (s + e) // 2)
+PY
+}
+
+BEFORE_SCALE="$(mon_scale)"
+mapfile -t DROWS < <(form_rows opened)
+
+# Resolution, Refresh, Scale, VRR, [HDR,] ICC profile. Scale is the one to
+# drive: it is the only picker guaranteed to have more than one value on a
+# virtual output, whose mode list the compositor may report as a single entry.
+# Counted from the TOP and stopping at Scale, because the HDR row is present only
+# on an output that reports itself capable -- so every index after it is
+# conditional and the first three are not.
+if [ "${#DROWS[@]}" -ge 3 ]; then
+	read -r SY0 SY1 CTRL_X <<<"${DROWS[2]}"
+	SCALE_Y=$(((SY0 + SY1) / 2))
+	ROW_H=$((SY1 - SY0 + 18))
+	echo "  ..   Scale row at y=$SCALE_Y, control at x=$CTRL_X"
+
+	hl_move "$CTRL_X" "$SCALE_Y"; sleep 1
+	hl_click "$CTRL_X" "$SCALE_Y"; sleep 2
+	shot listopen
+
+	# The FIRST row of the open list, positioned from the picker's own header.
+	#
+	# "Two rows down" is what this did first, and it picked the value that was
+	# already current: the list opens four pixels under a header whose height is
+	# font-derived, so an offset built from the label's glyph extent lands a row
+	# out. Nothing failed -- the staging assertion below passes just as happily
+	# when nothing was staged at all, which is precisely why the value that
+	# followed it could not be applied and the Apply assertion failed instead,
+	# one step removed from the cause.
+	#
+	# So the header is measured instead. It is the first run of non-background
+	# rows in the control column at the picker's own y, and the list rows are the
+	# same height as it -- `Picker.rowHeight` draws both -- so the first row's
+	# centre is one header-height plus the 4px gap below the header's bottom edge.
+	# Scale's values start at 0.75 and the current value is 1, so row 0 is always
+	# a change. It is put back afterwards.
+	read -r HDR_TOP HDR_BOT <<<"$(python3 - "$WORK/listopen.png" "$CTRL_X" "$SCALE_Y" \
+			"$WX" "$WY" "$WW" "$WH" <<'PY'
+import sys
+from collections import Counter
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+cx, sy = int(sys.argv[2]), int(sys.argv[3])
+wx, wy, ww, wh = (int(v) for v in sys.argv[4:8])
+l = wx + max(int(ww * 0.22), 170) + 20
+r = min(im.size[0], wx + ww - 20)
+top, bot = wy + 75, min(im.size[1], wy + wh - 10)
+bg = Counter(px[x, y] for y in range(top, bot, 2)
+             for x in range(l, r, 2)).most_common(1)[0][0]
+def isbg(c):
+    return all(abs(a - b) <= 3 for a, b in zip(c, bg))
+# sy is inside the header (it is the row's text centre); walk both ways.
+a = sy
+while a > top and not isbg(px[cx, a - 1]):
+    a -= 1
+b = sy
+while b < bot - 1 and not isbg(px[cx, b + 1]):
+    b += 1
+print(a, b)
+PY
+)"
+	HDR_H=$((HDR_BOT - HDR_TOP + 1))
+	hl_click "$CTRL_X" $((HDR_BOT + 4 + HDR_H / 2)); sleep 3
+
+	AFTER_PICK="$(mon_scale)"
+	if [ "$AFTER_PICK" = "$BEFORE_SCALE" ]; then
+		ok "picking a scale stages it instead of applying ($BEFORE_SCALE unchanged)"
+	else
+		bad "picking a scale stages it instead of applying ($BEFORE_SCALE -> $AFTER_PICK)"
+	fi
+
+	# Apply. The accent-filled button at the foot of the page.
+	#
+	# It is drawn in the accent ONLY while something is staged, so finding it is
+	# the assertion the check above cannot make: "the value did not change" is
+	# also true of a pick that never registered, and this is what tells the two
+	# apart before the click that depends on it.
+	#
+	# The LOWEST accent run in the pane, not any of them -- the monitor tile above
+	# is accent too, and is much bigger.
+	shot staged
+	read -r AP_X AP_Y <<<"$(python3 - "$WORK/staged.png" "${ACCENT:-#000000}" \
+			"$WX" "$WY" "$WW" "$WH" "$ARR_TOP" "$ARR_H" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+acc = sys.argv[2].lstrip("#")
+wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
+arr_top, arr_h = (int(v) for v in sys.argv[7:9])
+if len(acc) != 6:
+    print("0 0"); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+# The content pane only: the sidebar's selected entry is accent too. And below
+# the arrangement canvas, whose selected tile is the largest accent block here.
+x0 = wx + max(int(ww * 0.22), 170) + 20
+x1 = min(im.size[0], wx + ww - 20)
+y0 = max(wy + 75, arr_top + arr_h + 4)
+y1 = min(im.size[1], wy + wh - 10)
+best = None
+for y in range(y0, y1):
+    start = None
+    for x in range(x0, x1 + 1):
+        hit = x < x1 and all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))
+        if hit and start is None:
+            start = x
+        elif not hit and start is not None:
+            if x - start > 30:
+                best = (y, (start + x) // 2)
+            start = None
+print(best[1], best[0]) if best else print("0 0")
+PY
+)"
+
+	if [ "${AP_X:-0}" -gt 0 ]; then
+		hl_move "$AP_X" "$AP_Y"; sleep 1
+		hl_click "$AP_X" "$AP_Y"; sleep 3
+		AFTER_APPLY="$(mon_scale)"
+		if [ "$AFTER_APPLY" != "$BEFORE_SCALE" ]; then
+			ok "Apply commits the staged scale ($BEFORE_SCALE -> $AFTER_APPLY)"
+		else
+			bad "Apply commits the staged scale (still $AFTER_APPLY)"
+		fi
+	else
+		bad "the pick registered and lit Apply (no accent button in the pane)"
+	fi
+else
+	bad "the Displays page shows its form rows (found ${#DROWS[@]})"
+fi
+
+# Put the output back, or every later screenshot is measured on a rescaled
+# monitor and the window coordinates read from `get all-clients` stop agreeing
+# with the pixels.
+hl_dispatch "set_output_scale,$HL_MON,$BEFORE_SCALE" 2
+
+# ── 1d. the Wallpaper page applies as you type ──────────────────────────────
+#
+# The opposite model to the page beside it, and the assertion is that it really
+# is the opposite: no Apply, the value lands when the field is committed. The
+# proof is outside the bar -- a line in wallpaper.conf, which is the file the
+# shell's own wallpaper reads.
+go_to "$WALLPAPER_ROW"
+shot wallpaperpage
+
+BEFORE_CONF="$(grep '^folder=' "$WORK/wallpaper.conf" 2>/dev/null)"
+mapfile -t WROWS < <(form_rows wallpaperpage)
+if [ "${#WROWS[@]}" -ge 1 ]; then
+	read -r WY0 WY1 WCTRL <<<"${WROWS[0]}"
+	FLD_Y=$(((WY0 + WY1) / 2))
+	hl_move "$WCTRL" "$FLD_Y"; sleep 1
+	hl_click "$WCTRL" "$FLD_Y"; sleep 1
+	shot wpfocus
+
+	# A focused field has to LOOK focused.
+	#
+	# "You can type stuff in but it is not clear you're actually focused on the
+	# field" was reported separately from keys not arriving, and it is a different
+	# bug: TextInput draws its own caret from activeFocus, and in a popover that
+	# depends on whether the popup's window is active rather than on where the
+	# keys are going. Field draws an accent outline and forces the caret on, keyed
+	# to `keysHere` -- which answers with the popover's keyTarget in a popover and
+	# with Qt's own focus in an ordinary window. This is the ordinary-window half,
+	# and it is the only half left: every Field in this shell is in this window.
+	#
+	# Measured as accent pixels gained in the FIELD'S OWN ROW, not in the pane.
+	# The pair of shots straddles nothing but the click, but the pane below holds
+	# the wallpaper browser, whose selected tile carries an accent border -- and
+	# whose model is this very directory, which every `shot` in this file adds a
+	# PNG to. A pane-wide count would move with the thumbnails and could pass on a
+	# newly-arrived tile instead of on an outline.
+	FOCUS_ACCENT="$(python3 - "$WORK/wallpaperpage.png" "$WORK/wpfocus.png" \
+			"${ACCENT:-#000000}" "$WX" "$((WY0 - 8))" "$WW" \
+			"$((WY1 - WY0 + 17))" <<'PY'
+import sys
+from PIL import Image
+a = Image.open(sys.argv[1]).convert("RGB")
+b = Image.open(sys.argv[2]).convert("RGB")
+pa, pb = a.load(), b.load()
+acc = sys.argv[3].lstrip("#")
+wx, wy, ww, wh = (int(v) for v in sys.argv[4:8])
+if len(acc) != 6:
+    print(0); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+def near(c, tol=20):
+    return all(abs(x - y) <= tol for x, y in zip(c, want))
+x0 = wx + max(int(ww * 0.22), 170) + 4
+x1 = min(a.size[0], b.size[0], wx + ww - 4)
+y0, y1 = wy + 2, min(a.size[1], b.size[1], wy + wh - 2)
+before = sum(1 for y in range(y0, y1) for x in range(x0, x1) if near(pa[x, y]))
+after = sum(1 for y in range(y0, y1) for x in range(x0, x1) if near(pb[x, y]))
+print(after - before)
+PY
+)"
+	if [ "${FOCUS_ACCENT:-0}" -gt 100 ]; then
+		ok "a focused field is outlined in the accent (+${FOCUS_ACCENT}px)"
+	else
+		bad "a focused field is outlined in the accent (+${FOCUS_ACCENT}px)"
+	fi
+
+	for k in Q Q Q; do "$HL_WLVKBD" press "$k" >/dev/null 2>&1; sleep 0.3; done
+	"$HL_WLVKBD" press ENTER >/dev/null 2>&1
+	sleep 2
+	AFTER_CONF="$(grep '^folder=' "$WORK/wallpaper.conf" 2>/dev/null)"
+	if [ "$AFTER_CONF" != "$BEFORE_CONF" ]; then
+		ok "committing the Folder field writes wallpaper.conf ($AFTER_CONF)"
+	else
+		bad "committing the Folder field writes wallpaper.conf (still '$AFTER_CONF')"
+	fi
+	# Back, so the browser below still has this run's images in it.
+	printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WORK" "$WORK/wall.png" \
+		> "$WORK/wallpaper.conf"
+else
+	bad "the Wallpaper page shows its form rows (found ${#WROWS[@]})"
+fi
+
+# ── on to the options ───────────────────────────────────────────────────────
+#
+# Everything below is about the schema-driven half of the window, which is not
+# what the pill opens onto any more.
+go_to "$ALL_ROW"
 
 # ── 2. it is populated ──────────────────────────────────────────────────────
 #
@@ -432,6 +809,17 @@ else
 	bad "the toggle was located"
 fi
 
+# The baseline for "a preview does not touch the config file", taken HERE rather
+# than before the bar started.
+#
+# The Displays page above legitimately writes to it: an output setting is applied
+# by a dispatch, and the compositor persists that itself, rewriting the `output`
+# block in whichever file declares it -- which in this harness is this file. That
+# is the documented behaviour of output_persist and it is not what this assertion
+# is about. Comparing against the file as it was at startup made a correct write
+# on one page fail an assertion about a different page's preview path.
+CONFIG_BEFORE="$(cat "$HL_CONFIG")"
+
 hl_move "$TG_X" "$TG_Y"; sleep 1
 hl_click "$TG_X" "$TG_Y"; sleep 2
 
@@ -586,9 +974,7 @@ fi
 # works at all, which is a real question -- the window object is kept and reused,
 # and `discardPending` ran on the way out.
 hl_move "$PILL_X" "$PILL_Y"; sleep 1
-hl_click "$PILL_X" "$PILL_Y"; sleep 2
-hl_move "$SET_X" "$SET_Y"; sleep 1
-hl_click "$SET_X" "$SET_Y"; sleep 3
+hl_click "$PILL_X" "$PILL_Y"; sleep 3
 
 WIN="$(win_json)"
 if [ -n "$WIN" ]; then
@@ -607,10 +993,10 @@ else:
 ')"
 shot reopened
 
-# The sidebar entries, derived from ONE measurement rather than a stack of
-# assumed heights. "All settings" is selected on open and is the first entry, so
-# the accent pill gives both the origin and the row pitch; every other entry is
-# k rows below it. The Column's spacing is 2.
+# Measured again rather than reused: the window was unmapped and remapped, and
+# nothing promises the compositor put it back at the same coordinates. Same scan
+# as section 1, and the same caveat -- the pill asks for `displays`, so what this
+# finds is the Displays row, not the first one.
 read -r SB_TOP SB_H <<<"$(python3 - "$WORK/reopened.png" "${ACCENT:-#000000}" \
 		"$WX" "$WY" "$WW" "$WH" <<'PY'
 import sys
@@ -647,24 +1033,14 @@ print(grp[0], grp[-1] - grp[0] + 1)
 PY
 )"
 
-if [ "${SB_H:-0}" -gt 10 ]; then
-	ok "the sidebar selection was located (top ${SB_TOP}, ${SB_H}px rows)"
-else
-	bad "the sidebar selection was located (top ${SB_TOP}, ${SB_H}px rows)"
-fi
-
-sidebar_entry_y() { # sidebar_entry_y <index>  ->  the row's vertical centre
-	echo $((SB_TOP + $1 * (SB_H + 2) + SB_H / 2))
-}
-
+SB0=$((SB_TOP - DISPLAYS_ROW * (SB_H + 2)))
 SIDEBAR_X=$((WX + 60))
 
-# 0 = All settings, then one row per option group, then Window rules and
-# Keybinds. The group count comes from the schema rather than being hard-coded,
-# so adding a group does not silently start clicking the wrong row.
-NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
-RULES_ROW=$((1 + NGROUPS))
-BINDS_ROW=$((2 + NGROUPS))
+if [ "${SB_H:-0}" -gt 10 ] && [ "$SB0" -gt "$WY" ]; then
+	ok "the sidebar selection was located (row 0 at $SB0, ${SB_H}px rows)"
+else
+	bad "the sidebar selection was located (row 0 at $SB0, ${SB_H}px rows)"
+fi
 
 # The lowest small control in the content area. On an empty rules page that is
 # "New rule": the intro paragraph is above it and a status line may appear
@@ -843,7 +1219,7 @@ fi
 # real XDG_CONFIG_HOME, which this harness does not isolate, and a settings test
 # has no business editing the machine's push-to-talk key. save_conf, the menu and
 # the field are covered as units in contrib/discord-ptt-test.sh.
-PTT_ROW=$((4 + NGROUPS))
+PTT_ROW=$((6 + NGROUPS))
 PTT_Y="$(sidebar_entry_y "$PTT_ROW")"
 hl_move "$SIDEBAR_X" "$PTT_Y"; sleep 1
 hl_click "$SIDEBAR_X" "$PTT_Y"; sleep 2
@@ -903,9 +1279,9 @@ fi
 
 # ── reopening it ────────────────────────────────────────────────────────────
 #
-# Pressing "All settings…" a second time did nothing, and the reason was not a
-# bug in the window: it was still open, on the tag it was opened from. A client
-# cannot raise itself on Wayland -- there is no protocol for it -- so the press
+# Pressing the pill a second time did nothing, and the reason was not a bug in
+# the window: it was still open, on the tag it was opened from. A client cannot
+# raise itself on Wayland -- there is no protocol for it -- so the press
 # correctly reused the existing window, from the far side of a tag switch, which
 # is indistinguishable from nothing happening.
 #
@@ -920,14 +1296,12 @@ print(json.load(sys.stdin)["monitors"][0]["active_tags"])'; }
 hl_dispatch "view,2" 1
 T_AWAY="$(acttags)"
 hl_move "$PILL_X" "$PILL_Y"; sleep 1
-hl_click "$PILL_X" "$PILL_Y"; sleep 2
-hl_move "$SET_X" "$SET_Y"; sleep 1
-hl_click "$SET_X" "$SET_Y"; sleep 3
+hl_click "$PILL_X" "$PILL_Y"; sleep 3
 T_BACK="$(acttags)"
 if [ "$T_AWAY" = "[2]" ] && [ "$T_BACK" = "[1]" ]; then
-	ok "a second \"All settings…\" summons the window back from another tag"
+	ok "a second press of the pill summons the window back from another tag"
 else
-	bad "a second \"All settings…\" summons the window back (away=$T_AWAY back=$T_BACK)"
+	bad "a second press of the pill summons the window back (away=$T_AWAY back=$T_BACK)"
 fi
 
 kill "$QS" 2>/dev/null

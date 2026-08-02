@@ -385,7 +385,11 @@ FloatingWindow {
                         .concat(Schema.groups.map(
                             g => ({ name: g.name, label: g.label,
                                     page: "options" })))
-                        .concat([{ name: "", label: "Window rules",
+                        .concat([{ name: "", label: "Displays",
+                                   page: "displays" },
+                                 { name: "", label: "Wallpaper",
+                                   page: "wallpaper" },
+                                 { name: "", label: "Window rules",
                                    page: "rules" },
                                  { name: "", label: "Keybinds",
                                    page: "binds" },
@@ -534,6 +538,26 @@ FloatingWindow {
                 width: scroll.width - (scroll.contentHeight > scroll.height
                                        ? Cfg.spacing + 4 : 0)
                 spacing: Cfg.spacing
+
+                // The monitors. Kept once built, like the editors below: an
+                // arrangement dragged but not applied is exactly the kind of
+                // half-finished state that must survive a glance at another
+                // page.
+                Loader {
+                    width: rows.width
+                    active: win.page === "displays"
+                    visible: active
+                    height: active && item ? item.implicitHeight : 0
+                    sourceComponent: DisplaysPage {}
+                }
+
+                Loader {
+                    width: rows.width
+                    active: win.page === "wallpaper"
+                    visible: active
+                    height: active && item ? item.implicitHeight : 0
+                    sourceComponent: WallpaperPage {}
+                }
 
                 // The rule and bind editors, each built once and kept, so that
                 // an expanded card and a half-typed regex survive a trip to the
@@ -696,13 +720,21 @@ FloatingWindow {
         // ── the apply bar ───────────────────────────────────────────────────
         // Only on the options page.
         //
-        // Not a simplification -- the two apply models are genuinely different
-        // and showing one bar for both would lie about at least one of them.
-        // Options preview live and commit together; rules and binds are addressed
-        // by INDEX and a write renumbers everything after a removal, so batching
-        // two cards' edits would send the second against an index the first
-        // invalidated. Each card saves itself, and the bar that promises
-        // otherwise is absent rather than misleading.
+        // Not a simplification -- the apply models are genuinely different and
+        // showing one bar for all of them would lie about at least two.
+        //
+        //   options    preview live, commit together, written to a config file.
+        //   rules and binds are addressed by INDEX and a write renumbers
+        //              everything after a removal, so batching two cards' edits
+        //              would send the second against an index the first
+        //              invalidated. Each card saves itself.
+        //   displays   nothing previews -- a mode set is a black screen -- and
+        //              Apply sends dispatches, not a config write. That page
+        //              draws its own Apply, saying its own terms.
+        //   wallpaper and push-to-talk apply on the spot, and have nothing to
+        //              batch.
+        //
+        // The bar that would promise otherwise is absent rather than misleading.
         Rectangle {
             id: applyBar
             anchors.left: sidebar.right

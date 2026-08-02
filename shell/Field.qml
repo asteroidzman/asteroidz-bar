@@ -149,7 +149,7 @@ Rectangle {
 
     // "There is an uncommitted edit in here, and Enter is what applies it."
     //
-    // The two fields in the wallpaper tab apply on Enter and nothing said so --
+    // The two fields on the wallpaper page apply on Enter and nothing said so --
     // reported alongside the missing focus highlight. Shown only while focused
     // AND changed, so it is an instruction at the moment it is actionable rather
     // than decoration that is always there.

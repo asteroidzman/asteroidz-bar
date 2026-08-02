@@ -159,23 +159,7 @@ fi
 PILL_X=$((HL_WIDTH - 8 - 12 - 18))
 PILL_Y=$((9 + 24))
 hl_move "$PILL_X" "$PILL_Y"; sleep 1
-hl_click "$PILL_X" "$PILL_Y"; sleep 2
-shot popover
-
-read -r PL PT PR PB <<<"$(python3 - "$WORK/popover.png" <<'PY'
-import sys
-from PIL import Image
-im = Image.open(sys.argv[1]).convert("RGB")
-px = im.load(); w, h = im.size
-xs = []; ys = []
-for y in range(68, h):
-    for x in range(w):
-        r, g, b = px[x, y]
-        if r + g + b < 400:
-            xs.append(x); ys.append(y)
-print(min(xs), min(ys), max(xs), max(ys)) if xs else print("0 0 0 0")
-PY
-)"
+hl_click "$PILL_X" "$PILL_Y"; sleep 3
 
 ACCENT="$(hl_get "get bar-config" | python3 -c '
 import json, sys
@@ -183,33 +167,6 @@ c = (json.load(sys.stdin).get("theme") or {}).get("focus_bg")
 if isinstance(c, list) and len(c) >= 3:
     print("#%02x%02x%02x" % tuple(max(0, min(255, round(v * 255))) for v in c[:3]))
 ' 2>/dev/null)"
-
-read -r TBT TBB <<<"$(python3 - "$WORK/popover.png" "${ACCENT:-#000000}" <<'PY'
-import sys
-from PIL import Image
-im = Image.open(sys.argv[1]).convert("RGB")
-px = im.load(); w, h = im.size
-acc = sys.argv[2].lstrip("#")
-if len(acc) != 6:
-    print("0 0"); raise SystemExit
-want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
-rows = [y for y in range(68, h)
-        if sum(1 for x in range(w)
-               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want))) > 20]
-if not rows:
-    print("0 0"); raise SystemExit
-grp = [rows[0]]
-for y in rows[1:]:
-    if y - grp[-1] <= 2:
-        grp.append(y)
-    else:
-        break
-print(grp[0], grp[-1])
-PY
-)"
-
-hl_move $((PR - 45)) $(((TBT + TBB) / 2)); sleep 1
-hl_click $((PR - 45)) $(((TBT + TBB) / 2)); sleep 3
 
 WIN="$(hl_get "get all-clients" | python3 -c '
 import json, sys
@@ -254,9 +211,15 @@ print(grp[0], grp[-1] - grp[0] + 1)
 PY
 )"
 
+# All settings, one row per option group, then Displays, Wallpaper, rules,
+# binds, palette. The pill opens the window on Displays, so the pill the scan
+# above found is that row, not the first one -- row 0 has to be worked back to
+# from a known index or every position below is several rows too high.
 NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
-PALETTE_ROW=$((3 + NGROUPS))   # All settings, groups…, rules, binds, palette
-PALETTE_Y=$((SB_TOP + PALETTE_ROW * (SB_H + 2) + SB_H / 2))
+DISPLAYS_ROW=$((1 + NGROUPS))
+PALETTE_ROW=$((5 + NGROUPS))
+SB0=$((SB_TOP - DISPLAYS_ROW * (SB_H + 2)))
+PALETTE_Y=$((SB0 + PALETTE_ROW * (SB_H + 2) + SB_H / 2))
 hl_move $((WX + 60)) "$PALETTE_Y"; sleep 1
 hl_click $((WX + 60)) "$PALETTE_Y"; sleep 3
 shot palette

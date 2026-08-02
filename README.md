@@ -46,10 +46,40 @@ a default, and it would still not see a palette written after startup.
 
 ## Settings
 
-`All settings…`, at the top right of the display panel, opens a real window with
-every configuration option the compositor accepts: 95 of them, each with the
-compositor's own one-line explanation, grouped, searchable, and showing which
-file the current value came from.
+The **display pill** on the bar opens a real window with every configuration
+option the compositor accepts: 95 of them, each with the compositor's own
+one-line explanation, grouped, searchable, and showing which file the current
+value came from — plus the monitors, the wallpaper, the window rules, the
+keybinds, the palette and push-to-talk.
+
+That pill used to open a popover holding the monitors and the wallpaper, with a
+button in its corner leading here. Both of those are pages in this window now and
+the pill is the button. A popover is dismissed by the first click outside it, and
+every way of judging a display change — looking at another window, dragging
+something onto the second screen, reading a frame rate off a game — is a click
+outside it; the panel that let you change a mode could not survive you looking at
+the result. It was also capped at 700px with nothing to scroll, so the wallpaper
+browser was a 220px box inside a surface that could not grow.
+
+Left click opens the Displays page, which is what the icon means. Right click
+opens the window on whatever page you left it on.
+
+### Displays and Wallpaper
+
+These two are not schema-driven and do not go through `set-config`, which is why
+they are hand-written pages rather than option groups. An output is hardware
+state: it is applied by a dispatch (`set_output_mode`, `set_output_scale`,
+`set_output_position`, `set_output_vrr`, `set_output_hdr`, `set_output_icc`) and
+the compositor persists it itself, rewriting the `output` block in whichever file
+already declares that monitor.
+
+They also sit in **opposite apply models**, and each page says which it is in.
+Displays stages everything behind its own Apply — it has to, because passing
+*through* a resolution on the way to the one you wanted would mode-set to each,
+and a mode set is a black screen for a moment. Wallpaper applies as you go, which
+is the only way picking a wallpaper can work: you choose it by seeing it. The
+window's global apply bar is hidden on both, because it promises "preview live,
+Apply writes to disk" and neither page does that.
 
 **Nothing about any individual option lives in this repo.** asteroidz publishes a
 machine-readable schema — type, range, enum members, default, group, label,
@@ -455,19 +485,23 @@ contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included
 contrib/tray-test.sh       # the tray, on a private D-Bus session
 contrib/media-test.sh      # the media module, with a player and no sound
 contrib/notify-test.sh     # the bell, against a stubbed swaync
-contrib/click-test.sh      # what the bar DOES when clicked: popovers, dropdowns,
-                           #   plugin menus, and staged-vs-applied display edits
-contrib/panel-layout-test.sh # the display panel's boxes fit the text in them,
+contrib/click-test.sh      # what the bar DOES when clicked: popovers open and
+                           #   dismiss, plugin menus, plugin forms and their
+                           #   fields, the power menu's confirmation
+contrib/panel-layout-test.sh # the settings window's boxes fit the text in them,
                            #   at three font sizes
 contrib/palette-test.sh    # the matugen palette page, fully sandboxed: its
                            #   template, mapping file and matugen binary are all
                            #   redirected, so it cannot re-theme the desktop it
                            #   runs beside
-contrib/settings-test.sh   # the settings window: it opens, it is populated,
-                           #   search narrows it, a click previews, Apply persists,
-                           #   closing undoes an unapplied preview, the rule and
-                           #   bind editors add through to the config file, and
-                           #   Rebind… reaches the push-to-talk bridge
+contrib/settings-test.sh   # the settings window: the pill opens it on Displays,
+                           #   it is populated, search narrows it, a click
+                           #   previews, Apply persists, closing undoes an
+                           #   unapplied preview, the Displays page stages and
+                           #   its Apply commits, the Wallpaper page writes as
+                           #   you type, the rule and bind editors add through to
+                           #   the config file, and Rebind… reaches the
+                           #   push-to-talk bridge
 contrib/plugin-lifecycle-test.sh # a plugin dies with the bar that started it
                            #   (no compositor needed; runs in seconds)
 contrib/discord-ptt-test.sh # the push-to-talk bridge: the app id resolves, the
@@ -488,19 +522,32 @@ light wallpaper and measures pixels.
 
 `click-test.sh` drives the bar with a real pointer (`zwlr_virtual_pointer_v1`)
 because every interaction bug so far was "verified" by reading the QML and
-every one of those readings was wrong. Its sharpest check is that the panel
-**repaints** rather than stretches. A popover that resizes while it is mapped
-can hang the client outright: Qt and quickshell each send an
+every one of those readings was wrong.
+
+It used to open the display pill's popover and drive the form inside it. That
+popover is gone, so those assertions went with it rather than being pointed at
+something else, and the ones that were never about displays moved: the
+open/Escape/toggle/click-away group now drives the **power** pill, which is a
+pill with a menu on it and nothing more, and the staged-vs-applied and
+wallpaper-field checks are in `settings-test.sh` against the pages that inherited
+them.
+
+One deleted check is worth recording, because the bug it guarded is still real
+and is simply no longer reachable from the bar. A popover that resizes while it
+is mapped can hang the client outright: Qt and quickshell each send an
 `xdg_popup.reposition` with its own token, xdg-shell lets the compositor "skip
 all but the last one", and Qt never paints again once its token goes
 unanswered — it just leaves the previous frame stretched over the new surface
 size. The panel still grows, so a size assertion alone passes on the broken
-build; only the glyph height gives it away. `Popover.qml` now keeps the surface
-a fixed box and moves the panel inside it, which is why a dropdown can open
-without touching the window size at all.
+build; only the glyph height gives it away. `Popover.qml` keeps the surface a
+fixed box and moves the panel inside it. The only control that grew a popover
+while mapped was the display panel's `Picker`, and no popover has one now — a
+`Picker` in the settings window is in a toplevel, where resizing is free.
 
-`click-test.sh` also covers the thing that made **every text field in a panel
-inert**: Folder and Cycle on the Wallpaper tab, and the Display tab's ICC path.
+`click-test.sh` still covers the thing that made **every text field in a panel
+inert** — at the time, Folder and Cycle on the Wallpaper tab and the Display
+tab's ICC path; today, a plugin's form fields, which is where that keyboard path
+still runs.
 Keys go to whatever holds keyboard focus, which is the *bar's* layer surface
 (`Bar.qml` raises `WlrKeyboardFocus.Exclusive` while a popover is up). The popup
 deliberately never grabs focus — Qt refuses to create a grabbing popup here and
@@ -524,31 +571,31 @@ showed it, and it is why the first attempted fix changed no behaviour at all.
 A field also has to **look** focused, which is a separate bug from the keys not
 arriving and was reported separately: "you can type stuff in but it is not clear
 that you're actually focused on the field". `TextInput` draws its own caret from
-`activeFocus`, which here depends on whether the *popup's* window is active — so
-it appeared and vanished for reasons having nothing to do with where the keys
-were going. `Field` now draws an accent outline, brightens its fill, and forces
-the caret on, all keyed to `keysHere` — being the popover's `keyTarget`, which is
-the one signal that actually decides. A `⏎` appears at the right edge while the
-field is focused *and* changed, so the instruction shows up exactly when it is
-actionable.
+`activeFocus`, which in a popover depends on whether the *popup's* window is
+active — so it appeared and vanished for reasons having nothing to do with where
+the keys were going. `Field` draws an accent outline, brightens its fill, and
+forces the caret on, all keyed to `keysHere`, which answers with the popover's
+`keyTarget` in a popover and with Qt's own focus in an ordinary window. A `⏎`
+appears at the right edge while the field is focused *and* changed, so the
+instruction shows up exactly when it is actionable.
 
-And the two tabs are in **opposite models**, which nothing used to say. The
-Display tab stages everything behind Apply/Revert — it has to, because passing
-*through* a resolution on the way to the one you wanted would mode-set to each,
-and a mode set is a black screen for a moment. The Wallpaper tab applies as you
-go, which is the only way picking a wallpaper can work: you choose it by seeing
-it. So each tab now states its own model — "Changes wait for Apply" against
-"Applied as you change them · ⏎ in a field to apply it" — because two opposite
-models in one panel is fine and two opposite models with nothing saying which is
-which is not.
+That assertion lives in `settings-test.sh`, not here, and the move is a fact
+about the shell rather than a preference: **every `Field` in it is now in the
+settings window.** A plugin form row is not one — it is a label and a value
+`Text` with a `▌` appended, because a row is a plain object a module hands the
+popover — so measuring the outline on a focused plugin row reported four pixels
+of accent, which is the caret.
 
-Two things about the test. It finds the second tab **by colour** — the selected
-tab is the topmost accent block, so the other one is just past its right edge —
-because guessing an offset from `panel_box` put the click above the panel in one
-harness and inside the tab row in another, and the tab silently never switched.
-And its real assertion is that **`wallpaper.conf` changed**, not that pixels moved:
-nothing else in the panel writes `folder=`, so a mis-aimed click can only make it
-fail, never falsely pass.
+The two pages that came out of those tabs are in **opposite models**, which
+nothing used to say, and each states its own — "Changes wait for Apply" against
+"Applied as you change them · press Enter in a field to apply it". Two opposite
+models in one window is fine; two opposite models with nothing saying which is
+which is not, and it was reported as "there is no apply button so it's not clear
+how to apply the settings".
+
+The Wallpaper page's real assertion is that **`wallpaper.conf` changed**, not
+that pixels moved: nothing else writes `folder=`, so a mis-aimed click can only
+make it fail, never falsely pass.
 
 `settings-test.sh` drives the settings window the same way, and every assertion
 in it is a fact from **outside** the bar: a toplevel in the compositor's client
@@ -622,20 +669,29 @@ misses looks exactly like a control that refused:
   button row is left-aligned and the toggles are hard right, so the side is what
   tells them apart.
 
-`panel-layout-test.sh` checks the other half: not what the panel does, but
+`panel-layout-test.sh` checks the other half: not what the window does, but
 whether its boxes fit the text in them. The display tabs were `width: 100` with
 a centred `Text` carrying no width, no elide and no clip, so at the shipped
 theme "Wallpaper" overflowed its pill on both sides, ate the gap to the tab
 beside it, and was painted over by that tab's fill — reported as two bugs, text
 cut off and tabs touching, from one cause.
 
+Those tabs are gone; the bug they were made of is not, because it is not about
+tabs. So the test follows the UI rather than the widget: it opens the settings
+window and measures the header's **Close** button, which `SmallButton` sizes from
+its label — the component exists for this, and its header comment names the
+`width: 84` buttons it replaced. The tab-row assertions are deleted rather than
+reworded, because a test kept alive by pointing it at something else is how a
+suite ends up reporting on pixels nobody chose.
+
 It runs at **three font sizes on purpose**, and that is the whole design. Every
 bug of this kind is a fixed pixel constant meeting a theme-sized glyph, so a
 test at one font size tests the one case that happened to fit: run against the
-old code it passes cleanly at `Ubuntu 11`, where "Wallpaper" really does fit
-inside 100px, and fails at 16 and 24. Anything sized from a constant now comes
+old code it passed cleanly at `Ubuntu 11`, where "Wallpaper" really does fit
+inside 100px, and failed at 16 and 24. Anything sized from a constant now comes
 from `Cfg.fontPixelSize` instead, which is what `FormRow` and `Picker` were
-already doing.
+already doing. The window is re-themed with itself open, so this is also the
+assertion that it relays out rather than keeping the metrics it was built with.
 
 It also checks that the arrangement canvas does not sit on its own
 "drag to arrange" hint. `zoom` is `min(width/bounds, height/bounds)`, so
@@ -647,14 +703,14 @@ out in what is left.
 
 Three things about how it measures, all learned the hard way.
 
-The accent tolerance is tight (14, not 30) because white text on a dark tab is
+The accent tolerance is tight (14, not 30) because white text on a dark fill is
 subpixel antialiased and its blue fringe lands within 30 of the accent on every
-channel — a loose match reported the far edge of the *next* tab's label as this
-tab's right edge.
+channel — a loose match reported the far edge of the *next* label as this box's
+right edge.
 
-The pill is measured on the row carrying the **most** accent, not the middle
-row: the middle row runs straight through the label, so the fill is interrupted
-by every glyph and the longest unbroken run is the space between two letters.
+A box is measured on the row carrying the **widest** run, not the middle row:
+the middle row runs straight through the label, so the fill is interrupted by
+every glyph and the longest unbroken run is the space between two letters.
 
 The hint is found **geometrically, not by colour**. The obvious approach — the
 hint is dim, the monitor name is bright — ignores that the name is antialiased,

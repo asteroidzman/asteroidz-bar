@@ -48,7 +48,7 @@ cat >> "$HL_CONFIG" <<'EOF'
 theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
 bar { enable false; height 48; position "top"; margin { x 8; y 9 }
 	panel { enable true; radius 9; padding 12; blur true; shadow true }
-	modules-left ""; modules-center ""; modules-right "display" }
+	modules-left ""; modules-center ""; modules-right "power" }
 EOF
 hl_dispatch "reload_config" 1
 sleep 1
@@ -137,8 +137,17 @@ elif isinstance(c, str):
     print(c)
 ' 2>/dev/null)"
 
-# The display pill: the only module, so it is at the right edge of the right
-# panel, one pill-height down.
+# ── a popover opens, and can be dismissed ───────────────────────────────────
+#
+# Driven through the POWER pill, which is a pill with a menu on it and nothing
+# more. It used to be the display pill, and that was never about displays: what
+# is measured here is Popover.qml -- opening, Escape, the pill toggling its own
+# panel, a click landing outside. The display pill stopped having a popover when
+# its two tabs became pages in the settings window, so the test moved to a pill
+# that still has one rather than following the module that no longer does.
+#
+# The pill is the only module, so it is at the right edge of the right panel, one
+# pill-height down. Every module here is an icon-only pill of the same width.
 PILL_X=$((HL_WIDTH - 8 - 12 - 18))
 PILL_Y=$((9 + 24))
 
@@ -157,9 +166,9 @@ shot opened
 OPENED="$(panel_pixels opened)"
 
 if [ "$OPENED" -gt $((IDLE + 400)) ]; then
-	ok "clicking the display pill opens its panel ($IDLE -> $OPENED px)"
+	ok "clicking a pill opens its panel ($IDLE -> $OPENED px)"
 else
-	bad "clicking the display pill opens its panel ($IDLE -> $OPENED px)"
+	bad "clicking a pill opens its panel ($IDLE -> $OPENED px)"
 fi
 
 # Escape closes it.
@@ -213,8 +222,7 @@ else
 	bad "clicking away closes it ($AWAY px)"
 fi
 
-# Text lines inside the panel, top to bottom: "<top> <bottom>" each. A menu row
-# is text with no control beside it, so form_rows cannot find one.
+# Text lines inside the panel, top to bottom: "<top> <bottom>" each.
 text_lines() { # text_lines <shot> <panel-left> <panel-right>
 	python3 - "$WORK/$1.png" "$2" "$3" <<'PY'
 import sys
@@ -236,95 +244,6 @@ for g in groups:
 PY
 }
 
-# ── the dropdowns inside the panel ──────────────────────────────────────────
-#
-# A Picker opening its list makes the panel taller, and a popup that resizes
-# itself while it is mapped USED TO HANG THE WHOLE CLIENT: Qt and quickshell
-# each send an xdg_popup.reposition, the compositor is entitled to answer only
-# the last one ("the compositor may skip all but the last one" -- xdg-shell),
-# Qt's token goes unanswered and it never paints again. The give-away was that
-# the panel still LOOKED alive: the old frame stayed on screen stretched to the
-# new surface size, so the text simply got taller. That is what the glyph-height
-# check below is for -- "the panel grew" alone passes on the broken build.
-
-# The form rows of an open panel: "<label-top> <label-bottom> <control-centre-x>"
-# per row, top to bottom.
-#
-# Found in the pixels rather than computed from the layout, because a popup that
-# does not fit centred under its pill gets slid sideways by the compositor -- so
-# arithmetic from the pill's position lands somewhere else entirely.
-#
-# A row is a run of label text with a filled control rect on the same scanline.
-# The controls all share one column, so the rows are the lines whose run starts
-# at the column most of them agree on: that is what separates a FormRow from the
-# "drag to arrange" hint, which sits on a scanline crossing the whole arrangement
-# widget and would otherwise read as a row and shift every index by one.
-form_rows() { # form_rows <shot> <panel-left> <panel-right>
-	python3 - "$WORK/$1.png" "$2" "$3" <<'PY'
-import sys
-from collections import Counter
-from PIL import Image
-im = Image.open(sys.argv[1]).convert("RGB")
-px = im.load(); w, h = im.size
-# Inside the panel only. The wallpaper is lighter than any text threshold, so
-# a full-width scan calls every scanline a line of text.
-x0 = max(0, int(sys.argv[2]))
-x1 = min(w, int(sys.argv[3]) + 1)
-y0, y1 = 60, h
-
-# The slab colour, taken over the WHOLE panel rather than per scanline. On a
-# form row the control rect is wider than the label column beside it, so the
-# most common colour on that one line is the CONTROL -- which inverted the
-# search and returned the label column as the thing to click.
-alldark = [px[x, y] for y in range(y0, y1, 2) for x in range(x0, x1, 2)
-           if sum(px[x, y]) < 400]
-slab = Counter(alldark).most_common(1)[0][0] if alldark else (0, 0, 0)
-
-def isslab(c):
-    return all(abs(a - b) <= 6 for a, b in zip(c, slab))
-
-def runs(y):
-    out, start = [], None
-    for x in range(x0, x1):
-        c = px[x, y]
-        if (not isslab(c)) and sum(c) < 400:
-            if start is None:
-                start = x
-        else:
-            if start is not None and x - start > 40:
-                out.append((start, x))
-            start = None
-    if start is not None and x1 - start > 40:
-        out.append((start, x1))
-    return out
-
-# text lines anywhere in the panel
-ys = [y for y in range(60, h) if any(sum(px[x, y]) > 460 for x in range(x0, x1))]
-groups = []
-for y in ys:
-    if groups and y - groups[-1][-1] <= 2:
-        groups[-1].append(y)
-    else:
-        groups.append([y])
-groups = [g for g in groups if len(g) > 4]
-
-cand = []
-for g in groups:
-    mid = (g[0] + g[-1]) // 2
-    rs = runs(mid)
-    if rs:
-        # the widest run on the line is the control
-        s, e = max(rs, key=lambda r: r[1] - r[0])
-        cand.append((g[0], g[-1], s, e))
-
-if cand:
-    col = Counter(s for _, _, s, _ in cand).most_common(1)[0][0]
-    for a, b, s, e in cand:
-        if abs(s - col) <= 4:
-            print(a, b, (s + e) // 2)
-PY
-}
-
 # The panel's own bounding box, so nothing here depends on where the compositor
 # decided to put a popup that does not fit centred under its pill.
 panel_box() { # panel_box <shot>
@@ -342,367 +261,6 @@ for y in range(100, h, 2):
 print(min(xs), min(ys), max(xs), max(ys)) if xs else print(0, 0, 0, 0)
 PY
 }
-
-hl_click "$PILL_X" "$PILL_Y"
-sleep 3
-shot panel
-read -r PL PT PR PB <<<"$(panel_box panel)"
-BEFORE_PX="$(panel_pixels panel)"
-
-mapfile -t LINES < <(form_rows panel "$PL" "$PR")
-# Resolution, Refresh, Scale, VRR, ICC profile. Scale is the one to drive: it
-# is the only picker guaranteed to have more than one value on a virtual
-# output, whose mode list the compositor may report as a single entry.
-if [ "${#LINES[@]}" -ge 3 ]; then
-	read -r SY0 SY1 CTRL_X <<<"${LINES[2]}"
-	SCALE_Y=$(((SY0 + SY1) / 2))
-	echo "  ..   Scale row at y=$SCALE_Y, control at x=$CTRL_X (panel $PL,$PT-$PR,$PB)"
-
-	# how tall is a label glyph run before anything is clicked
-	read -r RY0 RY1 _ <<<"${LINES[0]}"
-	H_BEFORE=$((RY1 - RY0 + 1))
-
-	hl_move "$CTRL_X" "$SCALE_Y"
-	sleep 1
-	hl_click "$CTRL_X" "$SCALE_Y"
-	sleep 3
-	shot dropdown
-	AFTER_PX="$(panel_pixels dropdown)"
-
-	if [ "$AFTER_PX" -gt $((BEFORE_PX + 1500)) ]; then
-		ok "the Scale dropdown opens ($BEFORE_PX -> $AFTER_PX px)"
-	else
-		bad "the Scale dropdown opens ($BEFORE_PX -> $AFTER_PX px)"
-	fi
-
-	# ...and the panel REDREW rather than being stretched to the new size.
-	read -r QL _ QR _ <<<"$(panel_box dropdown)"
-	mapfile -t LINES2 < <(form_rows dropdown "$QL" "$QR")
-	if [ "${#LINES2[@]}" -ge 1 ]; then
-		read -r AY0 AY1 _ <<<"${LINES2[0]}"
-		H_AFTER=$((AY1 - AY0 + 1))
-	else
-		H_AFTER=0
-	fi
-	if [ "$H_AFTER" -gt 0 ] &&
-		[ $((H_AFTER > H_BEFORE ? H_AFTER - H_BEFORE : H_BEFORE - H_AFTER)) -le 2 ]; then
-		ok "the panel repaints instead of stretching (${H_BEFORE}px -> ${H_AFTER}px text)"
-	else
-		bad "the panel repaints instead of stretching (${H_BEFORE}px -> ${H_AFTER}px text)"
-	fi
-
-	# Picking a value closes the list again, which is the other half of the
-	# widget and the half that needs the popup to redraw a SECOND time.
-	ROW_H=$((SY1 - SY0 + 18))
-	hl_click "$CTRL_X" $((SCALE_Y + ROW_H * 2))
-	sleep 3
-	shot picked
-	PICKED_PX="$(panel_pixels picked)"
-	if [ "$PICKED_PX" -lt $((AFTER_PX - 1000)) ]; then
-		ok "picking a value closes the list ($AFTER_PX -> $PICKED_PX px)"
-	else
-		bad "picking a value closes the list ($AFTER_PX -> $PICKED_PX px)"
-	fi
-else
-	bad "the display panel shows its form rows (found ${#LINES[@]} labels)"
-fi
-
-
-# ── a text field in a panel can actually be typed into ──────────────────────
-#
-# It could not. Keys go to whatever holds keyboard focus, which is the BAR's
-# layer surface (Bar.qml raises WlrKeyboardFocus.Exclusive while a popover is
-# up); the popup deliberately never grabs focus, because Qt refuses to create a
-# grabbing popup here and falls back silently; and Bar.qml routed every key to
-# Popover.handleKey, which only knew about the MENU ROWS model. For a panel
-# `rows` is empty, focusedRow stayed -1, and every keystroke past Escape was
-# dropped. Folder, Cycle and the Display tab's ICC path were all inert.
-#
-# Bar.qml now forwards to Popover.keyTarget, which a Field claims for itself when
-# clicked -- via QsWindow.window, because the visual parent chain does not reach
-# the window at all and a walk up `parent` silently set nothing.
-#
-# Asserted through the FILE the field writes as well as the pixels: text
-# appearing in a box proves the keyboard arrived, and only the file proves the
-# commit path behind it works too.
-
-hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200)); sleep 2
-hl_move "$PILL_X" "$PILL_Y"; sleep 1
-hl_click "$PILL_X" "$PILL_Y"; sleep 3
-shot wp_open
-read -r WL WT WR WB <<<"$(panel_box wp_open)"
-
-# The Wallpaper tab, found by COLOUR rather than by arithmetic from the panel
-# edge. The selected tab is the topmost accent-coloured block in the panel, and
-# the other tab sits immediately to its right past Cfg.spacing. Guessing an
-# offset from the panel box does not work: panel_box here reports a top edge that
-# excludes the shadow, a standalone probe's did not, and the same "+22" landed
-# inside the tab row in one and above the panel in the other -- so the tab never
-# switched, WROWS[0] was the DISPLAY tab's Resolution picker, and the assertions
-# below failed against a build where the field worked perfectly.
-tab_pill() { # tab_pill <shot> <accent-hex>  ->  "left right top bottom"
-	python3 - "$WORK/$1.png" "$2" <<'__PY__'
-import sys
-from PIL import Image
-im = Image.open(sys.argv[1]).convert("RGB")
-px = im.load(); w, h = im.size
-acc = sys.argv[2].lstrip("#")
-if len(acc) != 6:
-    print("0 0 0 0"); raise SystemExit
-want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
-def near(c, tol=14):
-    return all(abs(a - b) <= tol for a, b in zip(c, want))
-rows = {}
-for y in range(60, h):
-    xs = [x for x in range(w) if near(px[x, y])]
-    if len(xs) > 20:
-        rows[y] = xs
-if not rows:
-    print("0 0 0 0"); raise SystemExit
-groups = []
-for y in sorted(rows):
-    if groups and y - groups[-1][-1] <= 2:
-        groups[-1].append(y)
-    else:
-        groups.append([y])
-g = groups[0]
-mid = max(g, key=lambda y: len(rows[y]))
-xs = sorted(rows[mid])
-best = cur = [xs[0]]
-for x in xs[1:]:
-    if x - cur[-1] <= 1:
-        cur.append(x)
-    else:
-        if len(cur) > len(best):
-            best = cur
-        cur = [x]
-if len(cur) > len(best):
-    best = cur
-print(best[0], best[-1], g[0], g[-1])
-__PY__
-}
-
-read -r TBL TBR TBT TBB <<<"$(tab_pill wp_open "${ACCENT:-#000000}")"
-if [ "${TBR:-0}" -le 0 ]; then
-	bad "the panel's tab row is on screen"
-fi
-# Just past the selected pill's right edge, plus half the next pill.
-hl_click $((TBR + 40)) $(((TBT + TBB) / 2)); sleep 2
-shot wp_tab
-
-# It really switched: the accent pill moved right, because the selection did.
-read -r NBL _ _ _ <<<"$(tab_pill wp_tab "${ACCENT:-#000000}")"
-if [ "${NBL:-0}" -gt "${TBL:-0}" ]; then
-	ok "clicking the second tab switches to it (accent moved $TBL -> $NBL)"
-else
-	bad "clicking the second tab switches to it (accent still at ${NBL:-0})"
-fi
-
-# The Folder field, positioned from the TAB ROW rather than from form_rows.
-#
-# form_rows was built for the Display tab: it takes the widest dark run on a
-# scanline as the control, and consensus over the rows to find the column. In the
-# wallpaper tab the Folder field holds a long path, whose glyphs fragment that
-# run, and it reported one row where there are three. Rather than teach it a
-# second shape, this anchors off the tab pill measured above -- the first form row
-# sits Cfg.spacing below the tab row, one row-height tall.
-#
-# The arithmetic is self-validating: the assertion below is that wallpaper.conf
-# changed, and nothing else in the panel writes `folder=`. A mis-aimed click can
-# only make this FAIL, never falsely pass.
-FY=$((TBB + 8 + 17))
-FCX=$((WL + 300))
-BEFORE_CONF="$(grep '^folder=' "$WORK/wallpaper.conf" 2>/dev/null)"
-
-hl_move "$FCX" "$FY"; sleep 1
-hl_click "$FCX" "$FY"; sleep 1
-shot wp_focus
-for k in Q Q Q; do "$HL_WLVKBD" press "$k" >/dev/null 2>&1; sleep 0.3; done
-sleep 0.5
-shot wp_typed
-
-# The field has to LOOK focused. "You can type stuff in but it is not clear
-# you're actually focused on the field" was reported separately from the keys not
-# arriving, and it is a different bug: TextInput draws its own caret from
-# activeFocus, which here depends on whether the POPUP's window is active and so
-# has nothing to do with where keys are going. Field now draws an accent outline
-# and forces the caret on, both keyed to being the popover's keyTarget -- the one
-# signal that actually decides.
-#
-# Measured as accent pixels gained in the panel, which is what an outline is.
-FOCUS_ACCENT="$(python3 - "$WORK/wp_tab.png" "$WORK/wp_focus.png" "${ACCENT:-#000000}" "$WL" "$WT" "$WR" "$WB" <<'__PY__'
-import sys
-from PIL import Image
-a = Image.open(sys.argv[1]).convert("RGB").load()
-b = Image.open(sys.argv[2]).convert("RGB").load()
-acc = sys.argv[3].lstrip("#")
-l, t, r, bo = (int(v) for v in sys.argv[4:8])
-if len(acc) != 6:
-    print(0); raise SystemExit
-want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
-def near(c, tol=20):
-    return all(abs(x - y) <= tol for x, y in zip(c, want))
-before = sum(1 for y in range(t, bo) for x in range(l, r) if near(a[x, y]))
-after = sum(1 for y in range(t, bo) for x in range(l, r) if near(b[x, y]))
-print(after - before)
-__PY__
-)"
-if [ "${FOCUS_ACCENT:-0}" -gt 100 ]; then
-	ok "a focused field is outlined in the accent (+${FOCUS_ACCENT}px)"
-else
-	bad "a focused field is outlined in the accent (+${FOCUS_ACCENT}px)"
-fi
-
-TYPED_DIFF="$(python3 - "$WORK/wp_focus.png" "$WORK/wp_typed.png" "$WL" "$WT" "$WR" "$WB" <<'__PY__'
-import sys
-from PIL import Image
-a = Image.open(sys.argv[1]).convert("RGB").load()
-b = Image.open(sys.argv[2]).convert("RGB").load()
-l, t, r, bo = (int(v) for v in sys.argv[3:7])
-print(sum(1 for y in range(t, bo) for x in range(l, r) if a[x, y] != b[x, y]))
-__PY__
-)"
-if [ "${TYPED_DIFF:-0}" -gt 300 ]; then
-	ok "typing into a panel's text field reaches it (${TYPED_DIFF}px changed)"
-else
-	bad "typing into a panel's text field reaches it (${TYPED_DIFF}px changed)"
-fi
-
-# And the file. A field that shows keystrokes and writes nothing is the same bug
-# one layer further on -- and this is the assertion that proves the click landed
-# on the Folder field specifically.
-"$HL_WLVKBD" press ENTER >/dev/null 2>&1
-sleep 1
-AFTER_CONF="$(grep '^folder=' "$WORK/wallpaper.conf" 2>/dev/null)"
-if [ -n "$AFTER_CONF" ] && [ "$AFTER_CONF" != "$BEFORE_CONF" ]; then
-	ok "Enter commits it to wallpaper.conf"
-else
-	bad "Enter commits it to wallpaper.conf (still '$AFTER_CONF')"
-fi
-
-hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200)); sleep 2
-
-# ── the display panel stages, and Apply commits ─────────────────────────────
-#
-# The panel used to act on every pick. Choosing 2560x1440 from a list of a
-# dozen modes therefore mode-set to everything scrolled past on the way, and a
-# mode set is a black screen for a moment. Edits now collect and go together.
-#
-# Both halves are asserted, because either alone passes on a broken build: a
-# panel that applies nothing ever would pass "picking does not apply", and the
-# old immediate-apply panel would pass "the scale changed after Apply".
-
-hl_dispatch "set_output_scale,$HL_MON,1" 1
-BEFORE_SCALE="$(hl_get "get all-monitors" | python3 -c '
-import json, sys
-n = sys.argv[1]
-for m in json.load(sys.stdin)["monitors"]:
-    if m["name"] == n: print(m.get("scale")); break
-' "$HL_MON")"
-
-# The dropdown test above leaves the panel OPEN, so open it blind and this
-# click CLOSES it -- and every measurement below then reads bare wallpaper.
-hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200))
-sleep 2
-hl_click "$PILL_X" "$PILL_Y"
-sleep 3
-shot stage_open
-read -r AL AT AR AB <<<"$(panel_box stage_open)"
-mapfile -t AROWS < <(form_rows stage_open "$AL" "$AR")
-
-if [ "${#AROWS[@]}" -ge 3 ]; then
-	read -r AY0 AY1 ACX <<<"${AROWS[2]}"          # Scale
-	SY=$(((AY0 + AY1) / 2))
-	hl_move "$ACX" "$SY"; sleep 1
-	hl_click "$ACX" "$SY"                          # open the list
-	sleep 3
-	shot stage_list
-	# The FIRST row of the open list, which for Scale is 0.75 -- deliberately
-	# not the row for the current value. Picker only emits `picked` when the
-	# value actually changes, so landing on the current one stages nothing and
-	# this test would pass while proving nothing. Rows are Cfg.fontPixelSize *
-	# 1.5 tall and the list starts just under the header.
-	PICKROW=$((SY + 38))
-	hl_click "$ACX" "$PICKROW"
-	sleep 3
-
-	AFTER_PICK="$(hl_get "get all-monitors" | python3 -c '
-import json, sys
-n = sys.argv[1]
-for m in json.load(sys.stdin)["monitors"]:
-    if m["name"] == n: print(m.get("scale")); break
-' "$HL_MON")"
-
-	if [ "$AFTER_PICK" = "$BEFORE_SCALE" ]; then
-		ok "picking a value stages it instead of applying ($BEFORE_SCALE unchanged)"
-	else
-		bad "picking a value stages it instead of applying ($BEFORE_SCALE -> $AFTER_PICK)"
-	fi
-
-	# The Apply button: accent-coloured while there are staged changes, and the
-	# LOWEST accent block in the panel -- the tab pill and the picker's selected
-	# row share that colour.
-	shot staged
-	read -r SL ST SR SB <<<"$(panel_box staged)"
-	read -r APX APY <<<"$(python3 - "$WORK/staged.png" "${ACCENT:-#000000}" "$SL" "$SR" <<'PY'
-import sys
-from PIL import Image
-im = Image.open(sys.argv[1]).convert("RGB")
-px = im.load(); w, h = im.size
-acc = sys.argv[2].lstrip("#")
-x0, x1 = int(sys.argv[3]), min(w, int(sys.argv[4]) + 1)
-if len(acc) != 6:
-    print(0, 0); raise SystemExit
-want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
-def near(c):
-    return all(abs(a - b) <= 30 for a, b in zip(c, want))
-rows = {}
-for y in range(60, h):
-    xs = [x for x in range(x0, x1) if near(px[x, y])]
-    if len(xs) > 30:
-        rows[y] = (min(xs), max(xs))
-if not rows:
-    print(0, 0); raise SystemExit
-groups = []
-for y in sorted(rows):
-    if groups and y - groups[-1][-1] <= 2:
-        groups[-1].append(y)
-    else:
-        groups.append([y])
-g = groups[-1]                      # lowest accent block = Apply
-a, b = rows[g[0]][0], rows[g[0]][1]
-print((a + b) // 2, (g[0] + g[-1]) // 2)
-PY
-)"
-
-	if [ "${APY:-0}" -gt 0 ]; then
-		hl_move "$APX" "$APY"; sleep 1
-		hl_click "$APX" "$APY"
-		sleep 3
-		AFTER_APPLY="$(hl_get "get all-monitors" | python3 -c '
-import json, sys
-n = sys.argv[1]
-for m in json.load(sys.stdin)["monitors"]:
-    if m["name"] == n: print(m.get("scale")); break
-' "$HL_MON")"
-		if [ "$AFTER_APPLY" != "$BEFORE_SCALE" ]; then
-			ok "Apply commits the staged change ($BEFORE_SCALE -> $AFTER_APPLY)"
-		else
-			bad "Apply commits the staged change (still $AFTER_APPLY)"
-		fi
-	else
-		bad "the Apply button is on screen (no accent block found)"
-	fi
-else
-	bad "the display panel shows its form rows for the Apply test"
-fi
-
-# Put the output back. Applying a scale really does rescale the layout, so
-# every pill below moves -- leaving 0.75 in place made the plugin tests click
-# empty wallpaper and fail for reasons that had nothing to do with plugins.
-hl_dispatch "set_output_scale,$HL_MON,1" 2
-hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200))
-sleep 2
 
 # ── a plugin's menu ─────────────────────────────────────────────────────────
 #
@@ -826,6 +384,13 @@ if [ "${#ROWS[@]}" -ge 2 ]; then
 	read -r SL _ SR _ <<<"$(panel_box psub)"
 	mapfile -t SROWS < <(text_lines psub "$SL" "$SR")
 	if [ "${#SROWS[@]}" -ge 6 ]; then
+		# No focus-outline assertion here, and that is not an omission.
+		# `Field.qml` draws one, and a plugin form row is not a Field -- it
+		# is a label and a value Text with a "▌" appended, because a row is
+		# a plain object a module hands the popover. The outline moved to
+		# settings-test.sh, which drives a real Field. Measuring it here
+		# reported +4px of accent for a focused row: the caret.
+		#
 		# The SECOND field, typed into after clicking it. Every keystroke
 		# rebuilds the rows array (that is how a row's text changes), and
 		# the popover used to re-aim at the first field whenever that
@@ -849,6 +414,7 @@ if [ "${#ROWS[@]}" -ge 2 ]; then
 		hl_click $(((SL + SR) / 2)) $(((TY0 + TY1) / 2))
 		sleep 1
 		shot ptimes_before
+
 		for k in 2 0 8 8; do "$HL_WLVKBD" press "$k" >/dev/null 2>&1; sleep 0.3; done
 		sleep 1
 		shot ptimes_after

@@ -3,7 +3,7 @@ pragma Singleton
 // The settings window, at most one of it.
 //
 // A singleton because the window has to be reachable from anywhere that wants to
-// offer a way in -- the display panel today, a keybind later -- and because two
+// offer a way in -- the bar's display pill today, a keybind later -- and because two
 // of them staging different edits against the same compositor is a way to lose
 // changes with no warning.
 //
@@ -33,17 +33,32 @@ Singleton {
         SettingsWindow {}
     }
 
-    function open() {
+    // `page` is optional: with it, open on that page; without it, leave whatever
+    // was showing. Both are wanted. The bar's display pill is a way in to ONE
+    // page and landing anywhere else would make it a worse button than the
+    // popover it replaced, while a keybind meaning "settings" should reopen
+    // where you left off.
+    //
+    // It is set before `visible`, so the window maps already showing the right
+    // page rather than painting the options list and then replacing it.
+    function open(page) {
         const existed = window !== null;
         if (!existed)
             window = windowComponent.createObject(root);
         if (window === null)
             return;
+        if (page !== undefined && page !== "") {
+            window.page = page;
+            // Options is the only page that also selects a GROUP, and a stale
+            // group left over from an earlier visit would filter the list down
+            // to one section with no sign of why.
+            window.group = "";
+        }
         window.visible = true;
         window.minimized = false;
         // An already-open window has to be fetched by the COMPOSITOR.
         //
-        // This is what made a second "All settings…" look broken. The window was
+        // This is what made a second press of the pill look broken. The window was
         // still there, on whichever tag it was opened from, and a client cannot
         // raise itself on Wayland -- there is no protocol for it. So the press
         // reused the existing window, correctly, and from the far side of a tag

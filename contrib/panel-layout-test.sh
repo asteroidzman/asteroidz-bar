@@ -1,23 +1,32 @@
 #!/usr/bin/env bash
-# panel-layout-test.sh — the display panel's boxes fit the text in them.
+# panel-layout-test.sh — the settings window's boxes fit the text in them.
 #
-# click-test.sh drives the panel and checks what it DOES. Nothing checked what
-# it looked like, and that is where it was broken: the tabs were `width: 100`
-# with a centred Text that had no width, no elide and no clip, so at the shipped
-# theme "Wallpaper" overflowed its pill on both sides, ate the 4px gap between
-# the two tabs, and was then painted over by the neighbouring rect. One cause,
-# two symptoms -- "text is cut off" and "the tabs touch each other".
+# settings-test.sh drives the window and checks what it DOES. Nothing checks what
+# it looks like, and that is where its ancestor was broken: the display panel's
+# tabs were `width: 100` with a centred Text that had no width, no elide and no
+# clip, so at the shipped theme "Wallpaper" overflowed its pill on both sides, ate
+# the 4px gap between the two tabs, and was then painted over by the neighbouring
+# rect. One cause, two symptoms -- "text is cut off" and "the tabs touch each
+# other".
 #
-# Run at a LARGE font on purpose. Every one of these bugs is a fixed pixel
-# constant meeting a theme-sized glyph, so a test at the default font is a test
-# of the one case that happened to fit. At "Ubuntu 24" the old code overflows by
-# a wide margin and every assertion here fails; at "Ubuntu 11" the boxes must
-# still not collapse below their floors.
+# Those tabs are gone: both of them are pages in the settings window now, reached
+# from the sidebar. The bug they were made of is not gone, because it is not about
+# tabs -- it is a fixed pixel constant meeting a theme-sized glyph, and this
+# window is full of places that could have one. So the subject moved with the UI:
 #
-# What is asserted, and why each is the pixels rather than the QML:
-#   1. the selected tab pill has a gap after it -- tabs touching IS the bug
-#   2. no glyph ink reaches the pill's edge columns -- clipping IS the bug
-#   3. the same holds at a small font, where the floors take over
+#   1. the header's Close button is sized from its LABEL (SmallButton exists for
+#      exactly this; its header comment names the `width: 84` buttons it replaced)
+#   2. no glyph ink reaches that button's edge columns -- clipping IS the bug
+#   3. the arrangement canvas does not sit on its own hint
+#
+# What is NOT here any more: the tab-row assertions. They are deleted rather than
+# reworded because the row they measured does not exist, and a test kept alive by
+# pointing it at something else is how a suite ends up reporting on pixels nobody
+# chose.
+#
+# Run at a LARGE font on purpose. A test at the default font is a test of the one
+# case that happened to fit. At "Ubuntu 24" a fixed-width button clips badly; at
+# "Ubuntu 11" the boxes must still not collapse below their floors.
 #
 # Reading the QML is how the original bugs got shipped; see click-test.sh's
 # header, which says the same thing about behaviour.
@@ -58,6 +67,10 @@ cp "$HL_CONFIG" "$WORK/config.pristine.kdl"
 # The bar is started ONCE and re-themed between rounds by reload_config, which
 # the compositor pushes to the bar over `watch bar-config`. Restarting it per
 # font would cost 8s of settle each time and orphan the plugin children.
+#
+# Re-theming with the window OPEN is deliberate: everything measured here is
+# bound to Cfg, so this is also the assertion that the window relays out rather
+# than keeping the metrics it was built with.
 apply_font() { # apply_font "Ubuntu 24"
 	cp "$WORK/config.pristine.kdl" "$HL_CONFIG"
 	cat >> "$HL_CONFIG" <<EOF
@@ -74,7 +87,7 @@ sleep 1
 
 # A guard, not decoration. Every failure so far in developing this test was the
 # bar coming up with no compositor to talk to -- it logs one WARN and then draws
-# a panel full of defaults, which looks close enough to a real one that the
+# a window full of defaults, which looks close enough to a real one that the
 # assertions fail for a reason that has nothing to do with the layout. Do NOT
 # override HL_OUTDIR to keep the screenshots: a reused directory can hold a live
 # gvfs mount, hl_start's rm -rf then fails, no socket is created, and this is
@@ -108,56 +121,99 @@ elif isinstance(c, str):
 ' 2>/dev/null
 }
 
+# The window's frame, from the compositor rather than from the pixels. Every
+# measurement below is relative to it, and it moves: the window is tiled, so a
+# font change that resizes the bar can reflow the layout under it.
+win_box() {
+	hl_get "get all-clients" | python3 -c '
+import json, sys
+for c in json.load(sys.stdin).get("clients", []):
+    if c.get("title") == "asteroidz settings":
+        print(c["x"], c["y"], c["width"], c["height"]); break
+else:
+    print(0, 0, 0, 0)
+'
+}
+
 # The display pill: the only module, so it is at the right edge of the right
 # panel, one pill-height down. Same arithmetic as click-test.sh.
 PILL_X=$((HL_WIDTH - 8 - 12 - 18))
 PILL_Y=$((9 + 24))
 
-# The selected tab: the accent-coloured block nearest the TOP of the panel.
+# One click opens the settings window on the Displays page.
+hl_move "$PILL_X" "$PILL_Y"; sleep 1
+hl_click "$PILL_X" "$PILL_Y"; sleep 4
+
+read -r WX WY WW WH <<<"$(win_box)"
+if [ "${WW:-0}" -gt 300 ]; then
+	ok "the settings window is open (${WW}x${WH} at ${WX},${WY})"
+else
+	bad "the settings window is open (${WW}x${WH} at ${WX},${WY})"
+	kill "$QS" 2>/dev/null
+	echo; echo "$PASS passed, $FAIL failed"
+	exit 1
+fi
+
+# The Close button in the header: "<left> <right> <top> <bot> <width> <edge-ink>".
 #
-# Not "the widest" and not "the only one" -- the Apply button and the Picker's
-# selected row are accent too, and the Arrange widget paints the selected
-# monitor in it. Topmost is the tab, because the tab row is the first thing in
-# the panel.
-measure_tab() { # measure_tab <shot> <accent-hex>
-	python3 - "$WORK/$1.png" "$2" <<'PY'
+# Found as the topmost filled box in the RIGHT END of the header band, which is
+# what it is: the header holds a search field on the left and this button hard
+# right, and on the Displays page the search field is hidden -- so the button is
+# the only thing at that end. Its fill is rgba(1,1,1,0.08) over the window colour,
+# a small delta, so this works against the SURFACE rather than against a
+# brightness threshold.
+#
+# Both bounds are load-bearing and neither was there first. A band 16% of the
+# window tall reaches past the header into the page, and the tallest box in THAT
+# is the arrangement canvas -- duly reported as a 323x55 "button" with ink at its
+# edges, which failed at two fonts out of three and passed at the third for no
+# reason at all. Topmost-in-the-right-end is the description that only fits the
+# button.
+measure_close() { # measure_close <shot> <wx> <wy> <ww> <wh>
+	python3 - "$WORK/$1.png" "$2" "$3" "$4" "$5" <<'PY'
 import sys
+from collections import Counter
 from PIL import Image
 
 im = Image.open(sys.argv[1]).convert("RGB")
 px = im.load(); w, h = im.size
-acc = sys.argv[2].lstrip("#")
-if len(acc) != 6:
-    print("ERR no-accent"); raise SystemExit
-want = tuple(int(acc[i:i+2], 16) for i in (0, 2, 4))
+wx, wy, ww, wh = (int(v) for v in sys.argv[2:6])
 
-# TIGHT. The fill is flat, so it matches exactly; the tolerance only has to
-# absorb the colour pipeline. It must NOT be loose: white text on a dark tab is
-# subpixel-antialiased, and its blue fringe measures around (48,109,187) --
-# within 30 of a (42,111,214) accent on every channel. A tolerance of 30
-# therefore reported the far edge of the NEXT tab's label as the near tab's
-# right edge, and the pill came out 160px wide instead of 98.
-def near(c, ref=None, tol=14):
-    return all(abs(a - b) <= tol for a, b in zip(c, ref if ref is not None else want))
+x0 = max(wx + max(int(ww * 0.22), 170), wx + ww - max(200, int(ww * 0.20)))
+x1 = min(w, wx + ww - 2)
+# From below the compositor's 2px focus border to past the tallest header a
+# theme can produce.
+y0 = wy + 8
+y1 = min(h, wy + 8 + 90)
+if x1 <= x0 or y1 <= y0:
+    print("ERR empty-band"); raise SystemExit
+
+sample = [px[x, y] for y in range(y0, y1) for x in range(x0, x1, 2)]
+bg = Counter(sample).most_common(1)[0][0]
+
+def isbg(c, tol=4):
+    return all(abs(a - b) <= tol for a, b in zip(c, bg))
 
 def lum(c):
     return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
 
-# Accent runs below the bar, which ends well above y=60 at this geometry.
-#
-# NOT below y=120: the tab row is the first thing in the panel and at this
-# geometry it lands around y=70..105, so a scan starting at 120 skips it
-# entirely and returns the Arrange widget's selected monitor tile -- which is
-# the same accent, is 126px tall, and reports a 0px gap and edge ink because it
-# is a monitor rectangle with a label centred in it. That produced three
-# convincing failures against a build whose tabs were correct.
+# Rows carrying a wide non-background run; the button is the widest such run on
+# each of its own rows.
 rows = {}
-for y in range(60, h):
-    xs = [x for x in range(w) if near(px[x, y])]
-    if len(xs) > 20:
-        rows[y] = xs
+for y in range(y0, y1):
+    runs, start = [], None
+    for x in range(x0, x1 + 1):
+        solid = x < x1 and not isbg(px[x, y])
+        if solid and start is None:
+            start = x
+        elif not solid and start is not None:
+            if x - start > 20:
+                runs.append((start, x - 1))
+            start = None
+    if runs:
+        rows[y] = max(runs, key=lambda r: r[1] - r[0])
 if not rows:
-    print("ERR no-accent-block"); raise SystemExit
+    print("ERR no-button"); raise SystemExit
 
 groups = []
 for y in sorted(rows):
@@ -165,73 +221,36 @@ for y in sorted(rows):
         groups[-1].append(y)
     else:
         groups.append([y])
-
-g = groups[0]                       # topmost accent block = the selected tab
+g = groups[0]                       # the header sits above everything else
 top, bot = g[0], g[-1]
 
-# Probe on the row carrying the MOST accent, not the middle one. The middle row
-# runs straight through the label, so the fill is interrupted by every glyph and
-# the longest unbroken run is the space between two letters -- which measured
-# the pill at 17px. The fullest row is one clear of both the corner radius and
-# the text, which is exactly the row whose width IS the pill's width.
-mid = max(g, key=lambda y: len(rows[y]))
+# The row with the widest run is one clear of both the corner radius and the
+# glyphs, so its width IS the button's width.
+mid = max(g, key=lambda y: rows[y][1] - rows[y][0])
+left, right = rows[mid]
 
-# The LONGEST CONTIGUOUS run, not min..max of every accent pixel on the line.
-# A stray match anywhere to the right -- a fringe pixel, the Arrange tile on a
-# line that happens to overlap -- silently swallows the gap into the pill.
-xs = sorted(rows[mid])
-best = cur = [xs[0]]
-for x in xs[1:]:
-    if x - cur[-1] <= 1:
-        cur.append(x)
-    else:
-        if len(cur) > len(best):
-            best = cur
-        cur = [x]
-if len(cur) > len(best):
-    best = cur
-left, right = best[0], best[-1]
-
-# The panel background, sampled directly BELOW the pill: above it is the panel's
-# top edge, only a few pixels away, where a sample lands in the shadow or the
-# wallpaper.
-slab = px[left, min(h - 1, bot + 6)]
-
-# The gap: how many columns of bare panel background sit between this pill and
-# the next. COUNTED over a fixed window rather than walked until something else
-# appears -- the first column past the fill is the pill's own antialiased edge,
-# which is neither the fill nor the background, so a walk that stops at the
-# first non-background pixel always reports zero. The unselected tab's fill is
-# rgba(1,1,1,0.06) over the popover colour and is not background either, so it
-# contributes nothing and the window may safely overshoot into it.
-gap = sum(1 for x in range(right + 1, min(w, right + 17))
-          if near(px[x, mid], slab, 10))
-
-# Ink at the pill's edges. A glyph is far brighter than either the accent fill
-# or the panel background (the label is focus-fg, near white; accent luminance
-# is about 100 and background about 15), so brightness alone separates them
-# without needing to know the foreground colour. The pill's own rounded-corner
-# antialiasing is a mid-tone and stays well under the threshold.
-INK = 170
+# Ink at the button's edges. The label is drawn in the foreground colour, which
+# is far from both the button fill and the surface; the corner antialiasing is a
+# mid-tone between the two and stays under the threshold.
+fill = px[(left + right) // 2, top + 1]
 def has_ink(x):
     if not (0 <= x < w):
         return False
-    return any(lum(px[x, y]) > INK for y in range(top, bot + 1))
+    return any(abs(lum(px[x, y]) - lum(fill)) > 60 for y in range(top, bot + 1))
 
-edge_ink = [x for x in (left, left + 1, right - 1, right,
-                        left - 2, left - 1, right + 1, right + 2)
-            if has_ink(x)]
+edge_ink = [x for x in (left, left + 1, right - 1, right) if has_ink(x)]
 
-print("OK", left, right, top, bot, right - left + 1, gap, len(edge_ink))
+print("OK", left, right, top, bot, right - left + 1, len(edge_ink))
 PY
 }
 
 # The monitor tile and the hint beneath it: "<tile-top> <tile-bot> <hint-top>
 # <hint-rows>".
 #
-# The tile is the SECOND accent block from the top -- the first is the selected
-# tab pill. With one output that output is selected, so its tile carries the
-# accent and is the only thing in the canvas findable by colour.
+# Inside the CONTENT PANE only. There are two accent blocks in this window -- the
+# selected sidebar entry and the selected monitor's tile -- and the sidebar one is
+# higher up, so a whole-window scan taking the topmost would measure a sidebar row
+# and call it a monitor. The pane starts right of the sidebar.
 #
 # The hint is found in the columns to the LEFT of the tile, which is the only
 # place it can be told apart from anything else.
@@ -246,14 +265,15 @@ PY
 # The hint is left-aligned in the canvas and the tiles are centred in it, so the
 # strip between the canvas edge and the tile's left edge holds hint ink and
 # nothing else. Geometry, not colour.
-measure_hint() { # measure_hint <shot> <accent-hex>
-	python3 - "$WORK/$1.png" "$2" <<'PY'
+measure_hint() { # measure_hint <shot> <accent-hex> <wx> <wy> <ww> <wh>
+	python3 - "$WORK/$1.png" "$2" "$3" "$4" "$5" "$6" <<'PY'
 import sys
 from PIL import Image
 
 im = Image.open(sys.argv[1]).convert("RGB")
 px = im.load(); w, h = im.size
 acc = sys.argv[2].lstrip("#")
+wx, wy, ww, wh = (int(v) for v in sys.argv[3:7])
 if len(acc) != 6:
     print("ERR no-accent"); raise SystemExit
 want = tuple(int(acc[i:i+2], 16) for i in (0, 2, 4))
@@ -264,30 +284,47 @@ def near(c, tol=14):
 def lum(c):
     return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
 
+x0 = wx + max(int(ww * 0.22), 170) + 4
+x1 = min(w, wx + ww - 4)
+y0, y1 = wy + 2, min(h, wy + wh - 2)
+
 rows = {}
-for y in range(60, h):
-    xs = [x for x in range(w) if near(px[x, y])]
+for y in range(y0, y1):
+    xs = [x for x in range(x0, x1) if near(px[x, y])]
     if len(xs) > 20:
         rows[y] = xs
+if not rows:
+    print("ERR no-tile"); raise SystemExit
+
 groups = []
 for y in sorted(rows):
     if groups and y - groups[-1][-1] <= 2:
         groups[-1].append(y)
     else:
         groups.append([y])
-if len(groups) < 2:
-    print("ERR only-%d-accent-blocks" % len(groups)); raise SystemExit
 
-tile = groups[1]
+# The tallest accent block in the pane is the monitor tile: the only other one
+# that can appear here is the Apply button, which is a single row high and is not
+# even accent-filled while nothing is staged.
+tile = max(groups, key=len)
 tile_top, tile_bot = tile[0], tile[-1]
 tile_xs = rows[max(tile, key=lambda y: len(rows[y]))]
-tx0, tx1 = min(tile_xs), max(tile_xs)
+tx0 = min(tile_xs)
 
 # The strip left of the tile, inside the canvas. The canvas background is the
-# darkest thing in the panel (rgba(0,0,0,0.25) over the popover colour), so any
-# ink here is the hint.
-strip0 = max(0, tx0 - 130)
-strip1 = max(0, tx0 - 5)
+# darkest thing on the page (rgba(0,0,0,0.25) over the window colour), so any ink
+# here is the hint.
+#
+# The WHOLE width left of the tile, not a fixed 130px window. That constant came
+# from the popover, where the canvas was barely wider than the tiles; here the
+# canvas spans a pane several times as wide, the tiles are centred in it, and the
+# hint is left-aligned at the canvas edge -- hundreds of pixels outside a window
+# anchored to the tile. It reported "no text found under the tile" at every font,
+# on a build drawing the hint correctly.
+strip0 = x0 + 16
+strip1 = max(strip0 + 1, tx0 - 5)
+if strip1 - strip0 < 10:
+    print("ERR no-strip"); raise SystemExit
 bg = px[strip0 + 2, tile_top + 4]   # canvas background, beside the tile's top
 
 def is_ink(c):
@@ -298,7 +335,7 @@ def is_ink(c):
 # exists to catch.
 first = -1
 count = 0
-for y in range(tile_top, min(h, tile_bot + 90)):
+for y in range(tile_top, min(y1, tile_bot + 90)):
     n = sum(1 for x in range(strip0, strip1) if is_ink(px[x, y]))
     if n > 6:
         count += 1
@@ -309,52 +346,48 @@ print("OK", tile_top, tile_bot, first, count)
 PY
 }
 
-round() { # round "<font>" <expected-min-gap>
-	local font="$1" mingap="$2" tag
+round() { # round "<font>"
+	local font="$1" tag
 	tag="$(echo "$font" | tr ' ' '_')"
 
 	apply_font "$font"
-	sleep 3
+	sleep 4
 	local acc; acc="$(accent_of)"
 
-	hl_move "$PILL_X" "$PILL_Y"; sleep 1
-	hl_click "$PILL_X" "$PILL_Y"
-	sleep 3
+	read -r WX WY WW WH <<<"$(win_box)"
+	if [ "${WW:-0}" -lt 300 ]; then
+		bad "[$font] the settings window is still up (${WW}x${WH})"
+		return
+	fi
 	shot "panel_$tag"
 
-	local out; out="$(measure_tab "panel_$tag" "$acc")"
+	# ── the Close button is sized from its label ─────────────────────────
+	local out; out="$(measure_close "panel_$tag" "$WX" "$WY" "$WW" "$WH")"
 	# shellcheck disable=SC2086
 	set -- $out
 	if [ "${1:-ERR}" != "OK" ]; then
-		bad "[$font] the tab row is on screen (${out})"
-		hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200)); sleep 2
-		return
-	fi
-	local __round_shot="panel_$tag"
-	local left=$2 right=$3 top=$4 bot=$5 width=$6 gap=$7 ink=$8
-	echo "  ..   [$font] tab pill ${width}x$((bot - top + 1)) at x=$left..$right, gap=${gap}px, edge-ink=$ink"
-
-	if [ "$gap" -ge "$mingap" ]; then
-		ok "[$font] the tabs do not touch (${gap}px gap, want >= $mingap)"
+		bad "[$font] the header button is on screen (${out})"
 	else
-		bad "[$font] the tabs do not touch (${gap}px gap, want >= $mingap)"
-	fi
+		local left=$2 right=$3 top=$4 bot=$5 width=$6 ink=$7
+		local height=$((bot - top + 1))
+		echo "  ..   [$font] Close button ${width}x${height} at x=$left..$right, edge-ink=$ink"
 
-	if [ "$ink" -eq 0 ]; then
-		ok "[$font] the tab label is not clipped (no ink at the pill edge)"
-	else
-		bad "[$font] the tab label is not clipped ($ink edge columns carry ink)"
-	fi
+		if [ "$ink" -eq 0 ]; then
+			ok "[$font] the button label is not clipped (no ink at the edge)"
+		else
+			bad "[$font] the button label is not clipped ($ink edge columns carry ink)"
+		fi
 
-	# The pill has to be wider than it is tall for these two words at any
-	# font. A pill that collapsed to its height floor while the text grew is
-	# exactly the state the fixed 100 produced, and it can pass the ink check
-	# by eliding everything away.
-	local height=$((bot - top + 1))
-	if [ "$width" -gt "$height" ]; then
-		ok "[$font] the tab pill grew with the text (${width}px wide, ${height}px tall)"
-	else
-		bad "[$font] the tab pill grew with the text (${width}px wide, ${height}px tall)"
+		# "Close" is wider than it is tall at any font, so a button that
+		# collapsed to its height floor while the text grew -- which is what
+		# a fixed width produces -- fails here. The ink check alone cannot
+		# catch that: a clipped label can elide away to nothing and leave a
+		# clean edge.
+		if [ "$width" -gt "$height" ]; then
+			ok "[$font] the button grew with its text (${width}px wide, ${height}px tall)"
+		else
+			bad "[$font] the button grew with its text (${width}px wide, ${height}px tall)"
+		fi
 	fi
 
 	# ── the arrangement canvas does not sit on its own hint ──────────────
@@ -365,13 +398,9 @@ round() { # round "<font>" <expected-min-gap>
 	#
 	# `zoom` is min(width/bounds, height/bounds), so whenever the layout's
 	# bounding box is proportionally NARROWER than the canvas the zoom is
-	# height-limited and the tiles use every vertical pixel there is. The canvas
-	# aspect is ~3.0 and a single 1920x1080 output is 1.78, so this reproduces on
-	# the ordinary one-output harness -- 7px of overlap, pre-fix. (I first built
-	# this with a second virtual output stacked below, on the assumption that one
-	# output was too wide to trigger it. That was wrong, and the extra machinery
-	# failed on both builds for reasons of its own.)
-	local hout; hout="$(measure_hint "$__round_shot" "$acc")"
+	# height-limited and the tiles use every vertical pixel there is. That
+	# reproduces on the ordinary one-output harness -- 7px of overlap, pre-fix.
+	local hout; hout="$(measure_hint "panel_$tag" "$acc" "$WX" "$WY" "$WW" "$WH")"
 	# shellcheck disable=SC2086
 	set -- $hout
 	if [ "${1:-ERR}" != "OK" ]; then
@@ -387,19 +416,11 @@ round() { # round "<font>" <expected-min-gap>
 			bad "[$font] the hint sits below the tiles, not under them (hint $hint_top, tile ends $tile_bot)"
 		fi
 	fi
-
-	hl_click $((HL_WIDTH / 4)) $((HL_HEIGHT - 200)); sleep 2
 }
 
-# Cfg.spacing defaults to 8 and the config above does not override it, so the
-# gap is 8px at every font -- it is a token, not a proportion. Want 4 of those 8
-# to read as bare background: one column at each end is the antialiased edge of
-# the pill beside it, and the panel is composited over a blur.
-round "Ubuntu 16" 4
-round "Ubuntu 24" 4
-round "Ubuntu 11" 4
-
-
+round "Ubuntu 16"
+round "Ubuntu 24"
+round "Ubuntu 11"
 
 kill "$QS" 2>/dev/null
 

@@ -99,6 +99,8 @@ install_data(
 		'shell/settings/Slider.qml',
 		'shell/settings/ColorField.qml',
 		'shell/settings/SmallButton.qml',
+		'shell/settings/DisplaysPage.qml',
+		'shell/settings/WallpaperPage.qml',
 		'shell/settings/Rules.qml',
 		'shell/settings/RulesPage.qml',
 		'shell/settings/BindsPage.qml',

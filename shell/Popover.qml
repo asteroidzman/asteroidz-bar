@@ -20,8 +20,13 @@ PopupWindow {
 
     // [{ text, icon, enabled, separator, submenu, checked, input, value }]
     property var rows: []
-    // A whole component instead of rows: the display panel is a form, and a
-    // form is not expressible as a list of one-line targets.
+    // A whole component instead of rows, for a panel that is a form rather
+    // than a list of one-line targets.
+    //
+    // Nothing in the bar uses this today: the display panel was the only one,
+    // and it is a pair of pages in the settings window now. It is kept because
+    // the alternative to a form in a popover is not "no form" -- it is a form
+    // squeezed into `rows`, which is the shape this exists to avoid.
     property Component panel: null
     property string title: ""
     // Set while a field is being typed into; see Bar.qml, which raises the
