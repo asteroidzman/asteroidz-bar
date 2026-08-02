@@ -30,36 +30,16 @@ import "settings"
 Singleton {
     id: root
 
-    // The same file the wallpaper scripts write, so whatever sets it -- the
-    // cycle daemon, a menu, a hotkey -- is picked up here without any of them
-    // needing to know about this shell.
+    // What is on screen, on disk, so anything else on the desktop can read it
+    // without asking this process. The shell is the only thing that WRITES it
+    // now -- the cycle daemon and the wallpaper scripts that used to are gone,
+    // absorbed into this file.
     //
     // Overridable so a test can point the shell at a wallpaper of its own
     // without touching (or being touched by) the real desktop's.
-    // It lived at ~/.config/waybar/wallpaper.conf, named for a bar that has
-    // not run here since 2026-07-25. The old path is still used when it is the
-    // only one that exists, because the cycle daemon and the wallpaper scripts
-    // read the same file: if this moved on its own, the bar would write one
-    // file while the daemon cycled off another, and picking a wallpaper would
-    // appear to do nothing until the next interval put the old one back.
-    //
-    // Prefer-new, fall-back-old, and whichever side is upgraded first still
-    // agrees with the other.
-    readonly property string newConfPath:
-        Quickshell.env("HOME") + "/.config/asteroidz-bar/wallpaper.conf"
-    readonly property string legacyConfPath:
-        Quickshell.env("HOME") + "/.config/waybar/wallpaper.conf"
-
-    readonly property string confPath: {
-        const override = Quickshell.env("ASTEROIDZ_BAR_WALLPAPER_CONF");
-        if (override)
-            return override;
-        const found = Paths.resolve([newConfPath, legacyConfPath]);
-        if (found.startsWith("file://"))
-            return found.slice(7);
-        // Neither exists yet: the new one is what gets created.
-        return newConfPath;
-    }
+    readonly property string confPath:
+        Quickshell.env("ASTEROIDZ_BAR_WALLPAPER_CONF")
+        || (Quickshell.env("HOME") + "/.config/asteroidz-bar/wallpaper.conf")
 
     property string path: ""
     property string mode: "fill"

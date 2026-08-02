@@ -38,33 +38,6 @@ Image {
     property color tint: "transparent"
     readonly property bool tinted: tint.a > 0
 
-    // What this artwork used to be called.
-    //
-    // The asset directories were named for waybar, which this shell replaced:
-    // `waybar-weather/sunny.svg` is now `asteroidz-bar/weather/sunny.svg`. The
-    // packaged files moved with the name, so this is not for them -- it is for
-    // somebody's OWN artwork. The search path includes ~/.local/share and
-    // /usr/share, so a hand-made `~/.local/share/waybar-weather/sunny.svg` has
-    // always been able to beat the packaged one, and a rename that silently
-    // stopped honouring it would look exactly like the override never worked.
-    //
-    // Tried after the current name at every root, so it is a fallback and not a
-    // second first choice.
-    function legacyNames(n) {
-        const slash = n.indexOf("/");
-        if (slash < 0)
-            return [];
-        const dir = n.slice(0, slash);
-        const rest = n.slice(slash + 1);
-        if (dir !== "asteroidz-bar")
-            return [];
-        // "asteroidz-bar/weather/sunny.svg" -> "waybar-weather/sunny.svg"
-        const cut = rest.indexOf("/");
-        if (cut < 0)
-            return [];
-        return ["waybar-" + rest.slice(0, cut) + "/" + rest.slice(cut + 1)];
-    }
-
     readonly property string resolved: {
         if (name === "")
             return "";
@@ -81,14 +54,7 @@ Image {
         if (name.includes("/")) {
             // relative asset: every root in the search path, in order
             const roots = Cfg.iconDir.split(":").filter(s => s.length > 0);
-            const names = [name].concat(root.legacyNames(name));
-            const out = [];
-            // Roots outermost: a local override of the CURRENT name has to beat
-            // the packaged one, and only then does the old name get a turn.
-            for (const r of roots)
-                for (const n of names)
-                    out.push(r + "/" + n);
-            return Paths.resolve(out);
+            return Paths.resolve(roots.map(r => r + "/" + name));
         }
         // theme name; Quickshell hands back "" when the theme has no such icon
         return Quickshell.iconPath(name, true);

@@ -70,11 +70,6 @@ check(not rem.scheduled_today(med(2), START + timedelta(days=3)),
 check(rem.scheduled_today(med(30, unit="weeks"), START + timedelta(days=1)),
       "an unhandled frequency unit falls back to daily rather than misfiring")
 
-# The old spelling still works, for a file written before the form settled.
-check(not rem.scheduled_today(med(30, key="frequency"),
-                              START + timedelta(days=1)),
-      "a document using the older `frequency` key is still honoured")
-
 # A document with no interval at all is daily, not never.
 check(rem.scheduled_today(
         {"startDate": START.strftime("%Y-%m-%d"), "times": ["12:00"]},
@@ -104,42 +99,22 @@ with tempfile.TemporaryDirectory() as tmp:
     check(names == ["escitalopram"],
           "reload_doses lists only what is scheduled today (%s)" % (names,))
 
-# ── the store moved, and the old one is still read ──────────────────────────
+# ── the store's path ────────────────────────────────────────────────────────
 #
-# It used to be $XDG_STATE_HOME/waybar-medication/medications.json, named for a
-# bar that no longer runs. Somebody's schedule and its history live in that
-# file, so the rename has to carry it across -- and carry it by COPYING, so a
-# migration that fails leaves the only copy where it was.
-with tempfile.TemporaryDirectory() as tmp:
-    os.environ["XDG_STATE_HOME"] = tmp
-    old_dir = os.path.join(tmp, "waybar-medication")
-    os.makedirs(old_dir)
-    old_file = os.path.join(old_dir, "medications.json")
-    doc = {"version": 1, "doseState": {}, "history": [],
-           "medications": [med(1, start=datetime.now().date(), key="frequencyValue")]}
-    open(old_file, "w").write(json.dumps(doc))
-
-    new_file = os.path.join(tmp, "asteroidz-bar", "reminders.json")
-    check(rem.store_path() == new_file,
-          "the store is at the new path")
-    check(os.path.exists(new_file),
-          "...and an old store is migrated to it")
-    check(os.path.exists(old_file),
-          "...by COPYING: the original is still there")
-    check(json.load(open(new_file)) == doc,
-          "...with the schedule and history intact")
-
-    # A second call must not re-copy over whatever has been written since.
-    open(new_file, "w").write(json.dumps({"version": 1, "medications": [], "note": "newer"}))
-    rem.store_path()
-    check(json.load(open(new_file)).get("note") == "newer",
-          "...and once migrated the old file is never read again")
-
-# No store at all is the first-run case: a path to create, not an error.
+# It was $XDG_STATE_HOME/waybar-medication/medications.json, named for a bar
+# that no longer runs. There is no fallback to it: a migration kept past its
+# migration means a stale copy under the old name silently wins forever.
 with tempfile.TemporaryDirectory() as tmp:
     os.environ["XDG_STATE_HOME"] = tmp
     check(rem.store_path() == os.path.join(tmp, "asteroidz-bar", "reminders.json"),
-          "a first run with nothing to migrate points at the new path")
+          "the store is at the new path")
+
+    # An old store next to it is not consulted, and not resurrected.
+    old_dir = os.path.join(tmp, "waybar-medication")
+    os.makedirs(old_dir)
+    open(os.path.join(old_dir, "medications.json"), "w").write('{"medications":[]}')
+    check(rem.store_path() == os.path.join(tmp, "asteroidz-bar", "reminders.json"),
+          "...and an old one beside it changes nothing")
 
 print()
 print("  %d passed, %d failed" % (PASS, FAIL))
