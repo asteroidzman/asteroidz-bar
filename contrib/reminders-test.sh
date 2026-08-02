@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # reminders-test.sh — the reminders plugin's scheduling, as pure logic.
 #
-# No Wayland, no bar, no compositor: `scheduled_today` and `reload_doses` are
+# No Wayland, no bar, no compositor: `scheduled_today` and `reload_occurrences` are
 # ordinary functions over a JSON document, and the bug that prompted this file
 # was invisible to every test that drives the UI. An air filter set to every 30
 # days went off the day after it was created, because the scheduler read
@@ -34,13 +34,13 @@ def check(cond, m):
     ok(m) if cond else bad(m)
 
 START = date(2026, 8, 1)
-def med(freq, unit="days", start=START, key="frequencyValue"):
+def reminder(freq, unit="days", start=START, key="frequencyValue"):
     return {"id": "x", "name": "air filter", "times": ["12:00"],
             key: freq, "frequencyUnit": unit,
             "startDate": start.strftime("%Y-%m-%d"), "enabled": True}
 
 # ── the reported bug ────────────────────────────────────────────────────────
-m30 = med(30)
+m30 = reminder(30)
 check(rem.scheduled_today(m30, START),
       "a 30-day reminder is due on its start date")
 check(not rem.scheduled_today(m30, START + timedelta(days=1)),
@@ -55,19 +55,19 @@ check(rem.scheduled_today(m30, START + timedelta(days=60)),
       "...and due on day 60, so the cycle repeats")
 
 # ── the cases that were already right, which must stay right ────────────────
-check(all(rem.scheduled_today(med(1), START + timedelta(days=i))
+check(all(rem.scheduled_today(reminder(1), START + timedelta(days=i))
           for i in range(5)),
       "a daily reminder is due every day")
 check(not rem.scheduled_today(m30, START - timedelta(days=1)),
       "nothing is due before its start date")
-check(rem.scheduled_today(med(2), START + timedelta(days=2)),
+check(rem.scheduled_today(reminder(2), START + timedelta(days=2)),
       "every-2-days lands on day 2")
-check(not rem.scheduled_today(med(2), START + timedelta(days=3)),
+check(not rem.scheduled_today(reminder(2), START + timedelta(days=3)),
       "...and not on day 3")
 
 # A unit this code does not implement must not silently become "every day at
 # the wrong interval" -- with a non-days unit the modulo is skipped on purpose.
-check(rem.scheduled_today(med(30, unit="weeks"), START + timedelta(days=1)),
+check(rem.scheduled_today(reminder(30, unit="weeks"), START + timedelta(days=1)),
       "an unhandled frequency unit falls back to daily rather than misfiring")
 
 # A document with no interval at all is daily, not never.
@@ -79,25 +79,25 @@ check(rem.scheduled_today(
 # ── end to end, through the real document reader ────────────────────────────
 #
 # scheduled_today can be right while nothing calls it. This goes through
-# reload_doses, which is what actually decides whether the pill lights up.
+# reload_occurrences, which is what actually decides whether the pill lights up.
 with tempfile.TemporaryDirectory() as tmp:
     os.environ["XDG_STATE_HOME"] = tmp
     os.makedirs(os.path.join(tmp, "asteroidz-bar"), exist_ok=True)
     today = datetime.now().date()
-    doc = {"version": 1, "doseState": {}, "history": [],
-           "medications": [
+    doc = {"version": 1, "occurrences": {}, "history": [],
+           "reminders": [
                # Started yesterday on a 30-day cycle: not today's business.
-               med(30, start=today - timedelta(days=1)),
+               reminder(30, start=today - timedelta(days=1)),
                # Daily, started today: today's business.
-               {"id": "d", "name": "escitalopram", "times": ["08:00"],
+               {"id": "d", "name": "water filter", "times": ["08:00"],
                 "frequencyValue": 1, "frequencyUnit": "days",
                 "startDate": today.strftime("%Y-%m-%d"), "enabled": True},
            ]}
     open(rem.store_path(), "w").write(json.dumps(doc))
-    rem.reload_doses()
-    names = sorted({d["name"] for d in rem.doses})
-    check(names == ["escitalopram"],
-          "reload_doses lists only what is scheduled today (%s)" % (names,))
+    rem.reload_occurrences()
+    names = sorted({d["name"] for d in rem.occurrences})
+    check(names == ["water filter"],
+          "reload_occurrences lists only what is scheduled today (%s)" % (names,))
 
 # ── the store's path ────────────────────────────────────────────────────────
 #
@@ -112,9 +112,61 @@ with tempfile.TemporaryDirectory() as tmp:
     # An old store next to it is not consulted, and not resurrected.
     old_dir = os.path.join(tmp, "waybar-medication")
     os.makedirs(old_dir)
-    open(os.path.join(old_dir, "medications.json"), "w").write('{"medications":[]}')
+    open(os.path.join(old_dir, "medications.json"), "w").write('{"reminders":[]}')
     check(rem.store_path() == os.path.join(tmp, "asteroidz-bar", "reminders.json"),
           "...and an old one beside it changes nothing")
+
+# ── an old store is converted, not silently emptied ─────────────────────────
+#
+# This plugin was written for medication and its document said so: medications,
+# doseState, medId, takenAt, taken, dosage, ids prefixed med-. Renaming the
+# vocabulary renamed the KEYS, and a document is not a variable -- nothing in
+# the file changed when the source did.
+#
+# The failure worth a test is not that an old store fails to load. It is that
+# it loads FINE and reads as empty: doc.get("reminders") finds nothing, the
+# plugin draws no reminders, and the next save writes that empty list back over
+# the history. Nothing errors, and afterwards there is nothing to recover from.
+OLD = {
+    "version": 1,
+    "medications": [
+        {"id": "med-3", "name": "air filter", "times": ["12:00"],
+         "dosage": "500mg", "frequencyValue": 30, "frequencyUnit": "days",
+         "startDate": "2026-01-01", "enabled": True},
+    ],
+    "doseState": {
+        "med-3@2026-07-02T12:00": {"medId": "med-3", "status": "taken",
+                                   "takenAt": "2026-07-02T16:00:00Z"},
+    },
+}
+got = rem.migrate_doc(json.loads(json.dumps(OLD)))
+
+check([r["name"] for r in got.get("reminders", [])] == ["air filter"],
+      "an old store's reminders survive the rename")
+check("medications" not in got and "doseState" not in got,
+      "...with the old keys gone, so nothing reads them twice")
+check(got["reminders"][0]["id"] == "rem-3",
+      "...and the id renamed with them")
+check("dosage" not in got["reminders"][0],
+      "...while dosage is dropped, having no general meaning")
+
+occ = got.get("occurrences", {})
+check(list(occ) == ["rem-3@2026-07-02T12:00"],
+      "the history is rekeyed to follow the reminder it belongs to")
+check(occ["rem-3@2026-07-02T12:00"]["reminderId"] == "rem-3",
+      "...and so is the id inside it")
+check(occ["rem-3@2026-07-02T12:00"]["status"] == "done",
+      "...'taken' becomes 'done'")
+check(occ["rem-3@2026-07-02T12:00"]["at"] == "2026-07-02T16:00:00Z",
+      "...and the timestamp is kept, not reset to now")
+
+# Idempotent, because it runs on every read: a store already converted has to
+# come back unchanged rather than losing a layer each time.
+check(rem.migrate_doc(json.loads(json.dumps(got))) == got,
+      "converting an already-converted store changes nothing")
+check(rem.migrate_doc({"reminders": [], "occurrences": {}})
+      == {"reminders": [], "occurrences": {}},
+      "...and a new store is left exactly alone")
 
 print()
 print("  %d passed, %d failed" % (PASS, FAIL))

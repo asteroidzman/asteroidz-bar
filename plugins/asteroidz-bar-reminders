@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reminders as an asteroidz bar plugin: scheduled tasks, done or skipped.
 
-Replaces the compositor's built-in `medication` module. The store is
+Replaces the compositor's built-in `medication` module (its name, not ours). The store is
 
     $XDG_STATE_HOME/asteroidz-bar/reminders.json
 
@@ -10,7 +10,7 @@ bar that no longer runs, and for a narrower job than this now does.
 
 The store is the reason this belongs outside the compositor. Reading it means a
 stat() on every arrange and a JSON parse whenever it changes, and WRITING it --
-which taking a dose does -- means a rewrite-and-rename in the process that owns
+which taking a occurrence does -- means a rewrite-and-rename in the process that owns
 the screen. None of that is compositor work, and the file is small enough that
 a plugin polling it costs nothing.
 
@@ -40,21 +40,19 @@ from datetime import datetime, timedelta, timezone
 
 ICON = "asteroidz-bar/reminders.svg"
 
-# What a finished task is CALLED, which is not what the store calls it. On disk
-# a task is "taken" and its timestamp is `takenAt`, because that is the schema
-# the waybar plugin wrote and there are existing files full of it; renaming a
-# stored value to improve a menu label would be trading somebody's history for
-# a word. The menu says "done".
-STATUS_WORD = {"taken": "done", "skipped": "skipped"}
+# What a finished task is called, in the menu and on disk -- the same word in
+# both, now that the store is this plugin's own rather than one inherited from
+# a medication tracker.
+STATUS_WORD = {"done": "done", "skipped": "skipped"}
 POLL_SECONDS = 20
 POSTPONE_MINUTES = int(os.environ.get("ASTEROIDZ_REMINDER_POSTPONE") or "15")
-# How long after its time a dose still counts as due rather than missed. Matches
+# How long after its time a occurrence still counts as due rather than missed. Matches
 # the built-in module's window.
 DUE_WINDOW_HOURS = 12
 
 lock = threading.Lock()
-doses = []          # [{key,name,time,scheduled,status,postponed_until,due}]
-menu_level = None   # None = top, otherwise the dose key being shown
+occurrences = []          # [{key,name,time,scheduled,status,postponed_until,due}]
+menu_level = None   # None = top, otherwise the occurrence key being shown
 
 
 def store_path():
@@ -63,10 +61,65 @@ def store_path():
     return os.path.join(base, "asteroidz-bar", "reminders.json")
 
 
+def migrate_doc(doc):
+    """Rename a store written when this was a medication plugin.
+
+    Renaming the plugin's vocabulary renamed its KEYS, and a document is not a
+    variable: nothing in the file changed when the source did. Without this,
+    doc.get("reminders") on an old store returns nothing, the plugin shows an
+    empty list -- and the next save writes that empty list back over however
+    long the user has been keeping it. Silent, and unrecoverable.
+
+    Done on every read rather than as a one-shot upgrade, because the old file
+    is still the file: a machine that syncs this store from another one still
+    running the previous version needs converting every time, not once.
+
+    `dosage` is dropped rather than renamed. It only ever meant "500mg", and
+    there is nothing general it becomes.
+    """
+    if not isinstance(doc, dict) or "medications" not in doc:
+        return doc
+
+    def rename_id(v):
+        return "rem-" + v[len("med-"):] \
+            if isinstance(v, str) and v.startswith("med-") else v
+
+    out = dict(doc)
+    out["reminders"] = []
+    for m in doc.get("medications") or []:
+        if not isinstance(m, dict):
+            continue
+        r = {k: v for k, v in m.items() if k != "dosage"}
+        if "id" in r:
+            r["id"] = rename_id(r["id"])
+        out["reminders"].append(r)
+    out.pop("medications", None)
+
+    # Keyed "<id>@<when>", so the id half has to move with the reminder it
+    # names -- a key still saying med-3 matches nothing afterwards, and its
+    # history is orphaned as thoroughly as if it had been deleted.
+    occ = {}
+    for key, v in (doc.get("doseState") or {}).items():
+        head, sep, tail = key.partition("@")
+        nkey = rename_id(head) + sep + tail
+        if isinstance(v, dict):
+            v = dict(v)
+            if "medId" in v:
+                v["reminderId"] = rename_id(v.pop("medId"))
+            if "takenAt" in v:
+                v["at"] = v.pop("takenAt")
+            if v.get("status") == "taken":
+                v["status"] = "done"
+        occ[nkey] = v
+    out["occurrences"] = occ
+    out.pop("doseState", None)
+    return out
+
+
 def load_doc():
     try:
         with open(store_path()) as f:
-            return json.load(f)
+            return migrate_doc(json.load(f))
     except (OSError, ValueError):
         return None
 
@@ -96,15 +149,15 @@ def save_doc(doc):
         return False
 
 
-def scheduled_today(med, day):
+def scheduled_today(reminder, day):
     """Is this reminder scheduled on `day`?"""
-    start = med.get("startDate")
+    start = reminder.get("startDate")
     if start:
         try:
             s = datetime.strptime(start[:10], "%Y-%m-%d").date()
             if day < s:
                 return False
-            unit = med.get("frequencyUnit", "days")
+            unit = reminder.get("frequencyUnit", "days")
             # `frequencyValue` is the name the form WRITES and the name the
             # editor reads back. This read `frequency`, which nothing has ever
             # written, so it got the default 1 every time, never reached the
@@ -112,7 +165,7 @@ def scheduled_today(med, day):
             # fired every day whatever its interval said. An air filter set to
             # 30 days went off the day after it was created.
             #
-            freq = int(med.get("frequencyValue", 1) or 1)
+            freq = int(reminder.get("frequencyValue", 1) or 1)
             if unit == "days" and freq > 1:
                 return (day - s).days % freq == 0
         except ValueError:
@@ -120,25 +173,25 @@ def scheduled_today(med, day):
     return True
 
 
-def reload_doses():
+def reload_occurrences():
     doc = load_doc()
     if doc is None:
         with lock:
-            doses.clear()
+            occurrences.clear()
         return
     today = datetime.now().date()
     daykey = today.strftime("%Y-%m-%d")
-    dose_state = doc.get("doseState") or {}
+    occ_state = doc.get("occurrences") or {}
     now = datetime.now()
     out = []
-    for med in doc.get("medications") or []:
-        if not scheduled_today(med, today):
+    for reminder in doc.get("reminders") or []:
+        if not scheduled_today(reminder, today):
             continue
-        name = med.get("name", "")
-        mid = med.get("id", name)
-        for t in med.get("times") or []:
-            key = f"{mid}@{daykey}T{t}"
-            st = dose_state.get(key) or {}
+        name = reminder.get("name", "")
+        rid = reminder.get("id", name)
+        for t in reminder.get("times") or []:
+            key = f"{rid}@{daykey}T{t}"
+            st = occ_state.get(key) or {}
             status = st.get("status", "")
             postponed = st.get("postponedUntil")
             try:
@@ -152,7 +205,7 @@ def reload_doses():
                     eff = eff.astimezone().replace(tzinfo=None)
                 except ValueError:
                     pass
-            done = status in ("taken", "skipped")
+            done = status in ("done", "skipped")
             due = (not done and eff <= now
                    and now - eff < timedelta(hours=DUE_WINDOW_HOURS))
             out.append({"key": key, "name": name, "time": t, "scheduled": sched,
@@ -160,15 +213,15 @@ def reload_doses():
                         "pending": not done and eff > now})
     out.sort(key=lambda d: d["time"])
     with lock:
-        doses[:] = out
+        occurrences[:] = out
 
 
 def render():
     with lock:
-        ndue = sum(1 for d in doses if d["due"])
-        nxt = next((d for d in doses if d["pending"]), None)
-        due_one = next((d for d in doses if d["due"]), None)
-        total = len(doses)
+        ndue = sum(1 for d in occurrences if d["due"])
+        nxt = next((d for d in occurrences if d["pending"]), None)
+        due_one = next((d for d in occurrences if d["due"]), None)
+        total = len(occurrences)
     if total == 0:
         # Nothing scheduled: the module has nothing to say, so it says nothing
         # rather than sitting there as an empty pill.
@@ -191,20 +244,19 @@ def mark(key, status):
     doc = load_doc()
     if doc is None:
         return
-    ds = doc.setdefault("doseState", {})
+    ds = doc.setdefault("occurrences", {})
     entry = ds.setdefault(key, {})
     entry["status"] = status
     entry.pop("postponedUntil", None)
     with lock:
-        d = next((x for x in doses if x["key"] == key), None)
+        d = next((x for x in occurrences if x["key"] == key), None)
     if d:
         hist = doc.setdefault("history", [])
         hist.insert(0, {
-            "medId": key.split("@", 1)[0],
+            "reminderId": key.split("@", 1)[0],
             "name": d["name"],
-            "dosage": "",
             "scheduled": iso_utc(d["scheduled"]),
-            "takenAt": iso_utc(datetime.now()) if status == "taken" else None,
+            "at": iso_utc(datetime.now()) if status == "done" else None,
             "status": status,
         })
         # capped exactly as the plugin that created this store capped it
@@ -213,11 +265,11 @@ def mark(key, status):
 
 
 def clear(key):
-    """Undo a take/skip: the dose goes back to pending."""
+    """Undo a take/skip: the occurrence goes back to pending."""
     doc = load_doc()
     if doc is None:
         return
-    ds = doc.setdefault("doseState", {})
+    ds = doc.setdefault("occurrences", {})
     ds.pop(key, None)
     save_doc(doc)
 
@@ -226,18 +278,18 @@ def postpone(key):
     doc = load_doc()
     if doc is None:
         return
-    ds = doc.setdefault("doseState", {})
+    ds = doc.setdefault("occurrences", {})
     ds.setdefault(key, {})["postponedUntil"] = iso_utc(
         datetime.now() + timedelta(minutes=POSTPONE_MINUTES))
     save_doc(doc)
 
 
 def new_id():
-    return "med-" + uuid.uuid4().hex[:16]
+    return "rem-" + uuid.uuid4().hex[:16]
 
 
-def medications():
-    return (load_doc() or {}).get("medications") or []
+def all_reminders():
+    return (load_doc() or {}).get("reminders") or []
 
 
 # The form's draft, held HERE rather than in the bar.
@@ -257,7 +309,7 @@ def days_in_month(year, month):
     return 30 if month in (4, 6, 9, 11) else 31
 
 
-def form_rows(med=None):
+def form_rows(reminder=None):
     """A schedule as rows: a name to type, and numbers to choose.
 
     Times and dates are STEPPERS, not text. A menu row is a poor text field --
@@ -268,7 +320,7 @@ def form_rows(med=None):
     Labels stay short: a popover latches its width when it opens, so a form
     stepped into from a short menu has no more room than that menu had.
     """
-    m = med or {}
+    m = reminder or {}
     now = datetime.now()
     start = m.get("startDate") or now.strftime("%Y-%m-%d")
     try:
@@ -326,10 +378,10 @@ def form_rows(med=None):
     return rows
 
 
-def draft_load(med):
+def draft_load(reminder):
     """Start a draft from an existing reminder, or empty for a new one."""
-    draft["times"] = list((med or {}).get("times") or [])
-    draft["id"] = (med or {}).get("id")
+    draft["times"] = list((reminder or {}).get("times") or [])
+    draft["id"] = (reminder or {}).get("id")
     draft["fields"] = {}
 
 
@@ -374,31 +426,31 @@ def save_from_fields(fields, med_id=None):
     day = num("day", datetime.now().day, 1, days_in_month(year, month))
     start = "%04d-%02d-%02d" % (year, month, day)
 
-    doc = load_doc() or {"version": 1, "medications": [], "doseState": {},
+    doc = load_doc() or {"version": 1, "reminders": [], "occurrences": {},
                          "history": [], "snoozeMinutes": POSTPONE_MINUTES}
-    meds = doc.setdefault("medications", [])
-    for m in meds:
+    reminders = doc.setdefault("reminders", [])
+    for m in reminders:
         if med_id and m.get("id") == med_id:
             m.update(name=name, times=sorted(times), frequencyValue=freq,
                      frequencyUnit="days", startDate=start, enabled=True)
             break
     else:
-        meds.append({"id": med_id or new_id(), "name": name,
-                     "dosage": "", "times": sorted(times),
+        reminders.append({"id": med_id or new_id(), "name": name,
+                     "times": sorted(times),
                      "frequencyValue": freq, "frequencyUnit": "days",
                      "startDate": start, "enabled": True})
     save_doc(doc)
     return True
 
 
-def delete_medication(med_id):
+def delete_reminder(reminder_id):
     doc = load_doc()
     if doc is None:
         return
-    doc["medications"] = [m for m in (doc.get("medications") or [])
+    doc["reminders"] = [m for m in (doc.get("reminders") or [])
                           if m.get("id") != med_id]
-    # its dose state goes too, or a deleted reminder keeps ticking
-    doc["doseState"] = {k: v for k, v in (doc.get("doseState") or {}).items()
+    # its occurrence state goes too, or a deleted reminder keeps ticking
+    doc["occurrences"] = {k: v for k, v in (doc.get("occurrences") or {}).items()
                         if not k.startswith(med_id + "@")}
     save_doc(doc)
 
@@ -407,24 +459,24 @@ def menu():
     global menu_level
     rows = []
     with lock:
-        snapshot = list(doses)
+        snapshot = list(occurrences)
         level = menu_level
     if level is None:
         if not snapshot:
             rows.append({"text": "nothing scheduled today", "value": "",
                          "enabled": False})
         for d in snapshot:
-            mark_ch = {"taken": "✓", "skipped": "–"}.get(
+            mark_ch = {"done": "✓", "skipped": "–"}.get(
                 d["status"], "●" if d["due"] else "○")
-            # EVERY dose drills down, taken ones included -- you may want to
-            # undo a mistaken "taken", and a row that silently does nothing is
+            # EVERY occurrence drills down, finished ones included -- you may want to
+            # undo a mistaken "done", and a row that silently does nothing is
             # worse than one that opens a panel saying so.
             rows.append({"text": f"{mark_ch}  {d['time']}  {d['name']}",
                          "value": "d:" + d["key"], "submenu": True})
         rows.append({"separator": True})
         rows.append({"text": "Add reminder…", "value": "add",
                      "submenu": True})
-        if medications():
+        if all_reminders():
             rows.append({"text": "Manage reminders", "value": "manage",
                          "submenu": True})
         return {"menu": {"item": "", "rows": rows}}
@@ -441,7 +493,7 @@ def menu():
     if level == "manage":
         rows.append({"text": "Reminders", "value": "", "enabled": False})
         rows.append({"separator": True})
-        for m in medications():
+        for m in all_reminders():
             rows.append({"text": f"{m.get('name','')}  "
                                  f"({', '.join(m.get('times') or [])})",
                          "value": "m:" + m.get("id", ""), "submenu": True})
@@ -450,17 +502,17 @@ def menu():
         return {"menu": {"item": "", "rows": rows}}
 
     if level.startswith("edit:"):
-        mid = level[5:]
-        med = next((m for m in medications() if m.get("id") == mid), None)
-        if not med:
+        rid = level[5:]
+        reminder = next((m for m in all_reminders() if m.get("id") == rid), None)
+        if not reminder:
             return {"menu": {"item": "", "rows": []}}
-        rows.append({"text": f"Edit {med.get('name','')}", "value": "",
+        rows.append({"text": f"Edit {reminder.get('name','')}", "value": "",
                      "enabled": False})
         rows.append({"separator": True})
-        rows += form_rows(med)
+        rows += form_rows(reminder)
         rows.append({"separator": True})
-        rows.append({"text": "Save", "value": "save:" + mid})
-        rows.append({"text": "Remove", "value": "rm:" + mid})
+        rows.append({"text": "Save", "value": "save:" + rid})
+        rows.append({"text": "Remove", "value": "rm:" + rid})
         rows.append({"text": "‹  Back", "value": "manage", "submenu": True})
         return {"menu": {"item": "", "rows": rows}}
 
@@ -513,7 +565,7 @@ def exit_with_the_bar():
 
     os._exit, not sys.exit: this runs on a daemon thread and sys.exit only
     raises SystemExit in the calling thread, while main() sleeps on regardless.
-    Doses are written to disk as they are taken, so there is no state to lose.
+    Every change is written to disk as it happens, so there is no state to lose.
     """
     os._exit(0)
 
@@ -528,7 +580,7 @@ def reader():
         kind = ev.get("event")
         if kind == "click":
             menu_level = None
-            reload_doses()
+            reload_occurrences()
             emit(menu())
         elif kind == "menu":
             v = ev.get("value") or ""
@@ -544,7 +596,7 @@ def reader():
                 menu_level = v
                 emit(menu())
             elif v.startswith("m:"):
-                draft_load(next((m for m in medications()
+                draft_load(next((m for m in all_reminders()
                                  if m.get("id") == v[2:]), None))
                 menu_level = v
                 emit(menu())
@@ -560,20 +612,20 @@ def reader():
                 draft["times"] = [x for x in draft["times"] if x != t]
                 emit(menu())
             elif v.startswith("save:"):
-                mid = v[5:] or None
-                if save_from_fields(fields, mid):
+                rid = v[5:] or None
+                if save_from_fields(fields, rid):
                     draft_load(None)
-                    reload_doses()
+                    reload_occurrences()
                     emit(render())
-                    menu_level = "manage" if mid else None
+                    menu_level = "manage" if rid else None
                     emit(menu())
                 else:
                     # Rejected: keep the form up with what was typed rather
                     # than closing and losing it.
                     emit(menu())
             elif v.startswith("rm:"):
-                delete_medication(v[3:])
-                reload_doses()
+                delete_reminder(v[3:])
+                reload_occurrences()
                 emit(render())
                 menu_level = "manage"
                 emit(menu())
@@ -587,8 +639,8 @@ def reader():
                 elif verb == "undo":
                     clear(key)
                 else:
-                    mark(key, "taken" if verb == "take" else "skipped")
-                reload_doses()
+                    mark(key, "done" if verb == "take" else "skipped")
+                reload_occurrences()
                 emit(render())
                 # An empty menu closes the panel, which is right after acting.
                 menu_level = None
@@ -599,7 +651,7 @@ def reader():
 def main():
     threading.Thread(target=reader, daemon=True).start()
     while True:
-        reload_doses()
+        reload_occurrences()
         emit(render())
         time.sleep(POLL_SECONDS)
 
