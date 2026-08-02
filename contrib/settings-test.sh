@@ -470,6 +470,80 @@ print(a, b)
 PY
 )"
 	HDR_H=$((HDR_BOT - HDR_TOP + 1))
+
+	# ── Escape closes an open list ──────────────────────────────────────
+	#
+	# Reported live: "when pressing escape while a dropdown is open the dropdown
+	# is not closed". It is a gap this window CREATED. In the bar a Picker was
+	# always inside a popover, and Bar.qml forwarded Escape to Popover.handleKey,
+	# which closed the whole panel and took the list with it. A toplevel has no
+	# surrounding popover, so the key reached nothing at all.
+	#
+	# Measured by the list's ACCENT ROW, not by its fill.
+	#
+	# The fill cannot be used. It is Cfg.popoverColor, and the window under it is
+	# Cfg.panelColor forced opaque -- the same three channels at a different
+	# alpha, so composited they land about two levels apart and any tolerance
+	# loose enough to survive dithering swallows the difference. A first version
+	# counted "rows that are not the pane background" and reported 61 with the
+	# list open and 61 with it closed, which is a test that cannot fail.
+	#
+	# An open list always draws its CURRENT value in the accent, which is the
+	# highest-contrast thing in the window and appears nowhere else in this band:
+	# the monitor tile is above the picker and the Apply button below it.
+	list_accent() { # list_accent <shot>  ->  accent rows just under the picker
+		python3 - "$WORK/$1.png" "${ACCENT:-#000000}" "$CTRL_X" "$SCALE_Y" \
+				"$WX" "$WW" <<'ACCPY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load()
+acc = sys.argv[2].lstrip("#")
+cx, sy = int(sys.argv[3]), int(sys.argv[4])
+wx, ww = int(sys.argv[5]), int(sys.argv[6])
+if len(acc) != 6:
+    print(0); raise SystemExit
+want = tuple(int(acc[i:i + 2], 16) for i in (0, 2, 4))
+x0 = max(0, cx - 40)
+x1 = min(im.size[0], cx + 40)
+y1 = min(im.size[1], sy + 220)
+n = 0
+for y in range(sy, y1):
+    hits = sum(1 for x in range(x0, x1)
+               if all(abs(a - b) <= 14 for a, b in zip(px[x, y], want)))
+    if hits > (x1 - x0) * 0.6:
+        n += 1
+print(n)
+ACCPY
+	}
+
+	OPEN_EXTENT="$(list_accent listopen)"
+	# Pressed TWICE, for the reason click-test.sh gives at length: wlvkbd is a
+	# one-shot client, so the seat advertises a keyboard only while it lives and
+	# the first press can arrive as a release alone. The second is a no-op on an
+	# already-closed list.
+	"$HL_WLVKBD" press ESC >/dev/null 2>&1; sleep 1
+	"$HL_WLVKBD" press ESC >/dev/null 2>&1; sleep 2
+	shot escaped
+	ESC_EXTENT="$(list_accent escaped)"
+
+	# The premise first: if the list was not open, the assertion below is
+	# meaningless however it lands.
+	if [ "${OPEN_EXTENT:-0}" -gt 10 ]; then
+		ok "the dropdown is open to begin with (${OPEN_EXTENT}px of accent)"
+	else
+		bad "the dropdown is open to begin with (${OPEN_EXTENT}px of accent)"
+	fi
+
+	if [ "${OPEN_EXTENT:-0}" -gt 10 ] && [ "${ESC_EXTENT:-999}" -eq 0 ]; then
+		ok "Escape closes an open dropdown ($OPEN_EXTENT -> $ESC_EXTENT px accent)"
+	else
+		bad "Escape closes an open dropdown ($OPEN_EXTENT -> $ESC_EXTENT px accent)"
+	fi
+
+	# Open it again for the pick below, which is what the rest of this section is
+	# about.
+	hl_click "$CTRL_X" "$SCALE_Y"; sleep 2
 	hl_click "$CTRL_X" $((HDR_BOT + 4 + HDR_H / 2)); sleep 3
 
 	AFTER_PICK="$(mon_scale)"

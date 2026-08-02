@@ -91,6 +91,31 @@ Item {
         }
     }
 
+    // Escape closes it too, and this is a Shortcut rather than a Keys handler.
+    //
+    // Keys.onEscapePressed needs ACTIVE focus, not merely `focus: true`, and
+    // there is no dependable way to hold it here: this item lives inside a
+    // Flickable inside a pane, the catcher above is reparented to the window's
+    // contentItem after creation, and whatever was last clicked -- a field, a
+    // slider -- is holding focus anyway. Both were tried and neither fired: the
+    // assertion read "32 -> 32 px accent", the list untouched, against a build
+    // that looked correct.
+    //
+    // A Shortcut is scoped to the WINDOW rather than to an item, which is the
+    // scope this claim actually has: while a list is open in this window, Escape
+    // closes it. `enabled` keeps exactly one of them live, so a page full of
+    // pickers cannot make the sequence ambiguous.
+    //
+    // Reported live, and the gap is one this window created. In the bar a Picker
+    // was always inside a popover, and Bar.qml forwarded Escape to
+    // Popover.handleKey, which closed the whole panel and took the list with it.
+    // A toplevel has no surrounding popover, so the key reached nothing at all.
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.open
+        onActivated: root.open = false
+    }
+
     Rectangle {
         id: listBox
         // Reparented to the window while open, for the same reason as the
