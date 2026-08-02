@@ -203,9 +203,31 @@ Rectangle {
         }
 
         // ── the editor ──────────────────────────────────────────────────────
-        Column {
+        //
+        // Behind a Loader, not merely `visible: false`, and on a page of 89 binds
+        // that is the difference between opening instantly and opening slowly.
+        //
+        // A hidden item is still BUILT. Every card carried a full editor -- a
+        // Picker whose model is the 94 dispatch actions the compositor
+        // publishes, four flag toggles, three fields -- so the page constructed
+        // eighty-nine of them to show one. The compositor was never the cost:
+        // `get binds` answers in 2ms and `get dispatch-actions` in 1ms, both
+        // measured, which is what ruled out the fetch and pointed here.
+        //
+        // At most one card is expanded at a time, so at most one of these exists.
+        Loader {
             width: parent.width
-            visible: root.expanded
+            active: root.expanded
+            visible: active
+            height: active && item ? item.implicitHeight : 0
+            sourceComponent: editorBody
+        }
+    }
+
+    Component {
+        id: editorBody
+
+        Column {
             spacing: 2
 
             Item { width: 1; height: Cfg.spacing }

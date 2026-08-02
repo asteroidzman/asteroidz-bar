@@ -170,9 +170,26 @@ Rectangle {
         }
 
         // ── the editor ──────────────────────────────────────────────────────
-        Column {
+        //
+        // Behind a Loader rather than merely hidden. A hidden item is still
+        // built, and this one is a row per field of a rule that accepts
+        // fifty-three of them -- so a list of seventeen rules constructed
+        // seventeen editors to show one. See BindCard, where the same change is
+        // worth more (eighty-nine cards, each with a picker over ninety-four
+        // dispatch actions) and where the measurements are.
+        Loader {
             width: parent.width
-            visible: root.expanded
+            active: root.expanded
+            visible: active
+            height: active && item ? item.implicitHeight : 0
+            sourceComponent: editorBody
+        }
+    }
+
+    Component {
+        id: editorBody
+
+        Column {
             spacing: 2
 
             Item { width: 1; height: Cfg.spacing }
