@@ -146,9 +146,16 @@ fi
 # Driven through `amsg dispatch`, which is the same dispatch the pill sends.
 # Clicking the actual pixel is click-test.sh's job; what is at stake here is
 # whether the flag reaches the timeout.
-sed -i 's/idle { enable false; dpms-timeout 3 }/idle { enable true; dpms-timeout 3 }/' \
-	"$HL_CONFIG"
-hl_dispatch "reload_config" 1
+# Back on, in the BAR's config -- the same file the disable above writes. This
+# used to sed $HL_CONFIG, from when the compositor stored the idle block; after
+# that moved, the pattern matched nothing, idle stayed off from the previous
+# case, and the timeout that this case is waiting for could never fire. It read
+# as "releasing the inhibit does not start the clock again", which is a claim
+# about the inhibit and was really a claim about the config.
+bar_conf "" "" "" <<'EOF'
+idle { enable #true; dpms-timeout 3 }
+EOF
+sleep 2
 
 hl_dispatch "toggle_idle_inhibit,1" 0.3
 "$HL_WLVKBD" press SPACE >/dev/null 2>&1
@@ -181,9 +188,15 @@ sleep 1
 # turning off inhibitors to stop a browser holding the screen awake must not
 # quietly take their own keep-awake button with it -- and because if either
 # layer stops keeping it, this fails.
-sed -i 's/idle { enable true; dpms-timeout 3 }/idle { enable true; dpms-timeout 3; respect-inhibitors false }/' \
-	"$HL_CONFIG"
-hl_dispatch "reload_config" 1
+# Also the bar's own config now. Left as a sed of $HL_CONFIG this set nothing
+# at all -- and the case still PASSED, because the manual inhibit taken on the
+# next line holds the screen awake whether or not respect-inhibitors was ever
+# turned off. An assertion that cannot tell its own setting from its own
+# precondition is not asserting anything.
+bar_conf "" "" "" <<'EOF'
+idle { enable #true; dpms-timeout 3; respect-inhibitors #false }
+EOF
+sleep 2
 hl_dispatch "toggle_idle_inhibit,1" 0.3
 "$HL_WLVKBD" press SPACE >/dev/null 2>&1
 sleep 6
