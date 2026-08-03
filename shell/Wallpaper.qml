@@ -280,6 +280,18 @@ Singleton {
 
     function setMonitorWallpaper(name, file) {
         setKey("wallpaper." + name, file);
+        // The palette follows THIS picture, not the shared one.
+        //
+        // Only the shared path re-themed, so a per-monitor change swapped the
+        // image and left the desktop toned for a wallpaper that was no longer
+        // on any screen. Nobody noticed while per-monitor was something you set
+        // once from the settings page; Super+Y comes through here now, so every
+        // press did it.
+        //
+        // There is one desktop palette and more than one wallpaper, so it has
+        // to come from somewhere: the one just chosen is the answer that
+        // matches what the person did.
+        rethemeFrom(file);
     }
 
     // What a file's own timetable says, for a page that wants to show it.
@@ -334,14 +346,19 @@ Singleton {
     property bool retheming: true
 
     function retheme() {
-        if (!retheming || path === "")
+        rethemeFrom(path);
+    }
+
+    function rethemeFrom(file) {
+        if (!retheming || !file || file === "")
             return;
         // Guarded against the reload that matugen's own post-hook causes: it
         // dispatches reload_config, the compositor re-reads its config, the bar
         // re-reads its own -- and if that round trip rewrote the wallpaper, this
         // would run again forever. The path has to have actually changed, which
-        // apply() has already established.
-        Matugen.retheme(path);
+        // apply() has already established for the shared one; a per-monitor set
+        // is only ever reached from an explicit action.
+        Matugen.retheme(file);
     }
 
     // A wallpaper the shell picked itself still has to reach the file, or

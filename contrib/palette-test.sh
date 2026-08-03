@@ -646,6 +646,36 @@ fi
 rm -f "$CONVERTED"
 
 cp "$WORK"/palette*.png "${ASTEROIDZ_SHOT_DIR:-/tmp}"/ 2>/dev/null || true
+# ── a per-monitor wallpaper re-themes, from ITS image ───────────────────────
+#
+# There is one desktop palette and, in per-monitor scope, more than one
+# wallpaper -- so something has to nominate the source. It is whichever was set
+# last, which is what the person just did.
+#
+# Only the SHARED path re-themed before. A per-monitor change swapped the
+# picture and left the desktop toned for an image that was no longer on any
+# screen, which nobody noticed while per-monitor was a thing you set once from
+# the settings page. Super+Y comes through here now, so every press did it.
+cp "$WORK/wall.png" "$WORK/permon.png"
+printf 'folder=%s\nwallpaper=%s\nmode=fill\nwallpaper-scope=per-monitor\n' \
+	"$WORK" "$WORK/wall.png" > "$WORK/wallpaper.conf"
+sleep 2
+: > "$MG_CALLS"
+
+qs_ipc() {
+	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+		quickshell -p "$HERE/shell/shell.qml" ipc call wallpaper "$@" 2>/dev/null
+}
+qs_ipc setOn "$HL_MON" "$WORK/permon.png" >/dev/null
+sleep 4
+
+if grep -q "image $WORK/permon.png" "$MG_CALLS"; then
+	ok "setting one monitor's wallpaper re-themes from that image"
+else
+	bad "setting one monitor's wallpaper re-themes from that image"
+	sed 's/^/       /' "$MG_CALLS" | tail -3
+fi
+
 kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
 

@@ -673,9 +673,25 @@ Singleton {
         runRender(wallpaper);
     }
 
+    // An Apply pressed while something else is rendering is QUEUED, not
+    // dropped.
+    //
+    // It used to return silently, and a re-theme sets `busy` without asking --
+    // the wallpaper cycling on a timer, or a keybind changing it. So pressing
+    // Apply during that second or two did nothing at all, with no message,
+    // and pressing it again a moment later worked. Reported exactly that way:
+    // "sometimes you can set it, sometimes you cannot".
+    property string queuedApply: ""
+    property bool hasQueuedApply: false
+
     function apply(wallpaper) {
-        if (busy)
+        if (busy) {
+            queuedApply = wallpaper || "";
+            hasQueuedApply = true;
+            status = "waiting for the palette currently rendering…";
+            statusBad = false;
             return;
+        }
         busy = true;
         status = "";
         statusBad = false;
@@ -701,7 +717,7 @@ Singleton {
             // line 1, which is a TOML error about a file the user never edited
             // and has nothing to do with the toggles they just moved.
             if (templates.length > 0 && off.length === templates.length) {
-                busy = false;
+                endRun();
                 status = "every application is switched off, so nothing was "
                          + "rendered. The template and your choices are saved.";
                 statusBad = true;
@@ -716,7 +732,7 @@ Singleton {
             converted = false;
             runRender(wallpaper);
         } else {
-            busy = false;
+            endRun();
             status = "template written; no wallpaper set, so nothing was rendered";
         }
     }
@@ -769,6 +785,18 @@ Singleton {
         render.running = true;
     }
 
+    // Every path that ends a render comes through here, so a queued Apply
+    // cannot be forgotten by whichever branch happens to finish.
+    function endRun() {
+        busy = false;
+        if (!hasQueuedApply)
+            return;
+        const w = queuedApply;
+        hasQueuedApply = false;
+        queuedApply = "";
+        apply(w);
+    }
+
     // 1024 on the long edge. matugen quantises down to a fraction of that, so
     // the palette is unchanged by the resize, and it keeps the conversion off
     // the several-thousand-pixel original.
@@ -778,7 +806,7 @@ Singleton {
             root.status = "matugen cannot read this image, and neither can the "
                           + "shell: " + why;
             root.statusBad = true;
-            root.busy = false;
+            root.endRun();
             return;
         }
         converted = true;
@@ -798,7 +826,7 @@ Singleton {
 
         onExited: (code, _) => {
             if (code === 0) {
-                root.busy = false;
+                root.endRun();
                 root.status = root.converted
                     ? "palette applied, from a converted copy of the wallpaper"
                     : "palette applied";
@@ -809,7 +837,7 @@ Singleton {
                 root.convertAndRetry();
                 return;
             }
-            root.busy = false;
+            root.endRun();
             root.status = "matugen failed (exit " + code + ")"
                           + root.firstLine(renderErr.text);
             root.statusBad = true;
