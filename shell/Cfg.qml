@@ -113,6 +113,33 @@ Singleton {
     readonly property color panelShadowColor: col(panel, "shadow-color",
                                                   Qt.rgba(0, 0, 0, 0.70))
 
+    // ── notifications ───────────────────────────────────────────────────────
+    //
+    // Gathered here rather than read straight out of BarConfig in each of the
+    // four notification files, which is what they did -- so `380` was written
+    // twice, in the toasts and in the centre, and a change to one silently made
+    // the popup and the panel it opens into different widths.
+    //
+    // The width and the centre's height are sized from the FONT, not fixed.
+    // Every box in this shell that holds text is (see FormRow, Picker, Pill),
+    // and these two were the exceptions: 380px was chosen against a smaller
+    // default font, so raising the theme's size grew the text inside a box
+    // that stayed where it was and the card got tighter the bigger the type
+    // got. 20 ems is about 45 characters of body text, which is a notification
+    // rather than a paragraph.
+    readonly property var notify: BarConfig.groups.notify || ({})
+    readonly property int notifyWidth:
+        num(notify, "width", Math.round(fontPixelSize * 20))
+    readonly property int notifyCentreHeight:
+        num(notify, "centre-height", Math.round(fontPixelSize * 20))
+    readonly property int notifyTimeout: num(notify, "timeout", 5000)
+    readonly property int notifyMaxPopups: num(notify, "max-popups", 4)
+    readonly property bool notifyDnd: flag(notify, "dnd", false)
+    // The artwork's box on a card. Also font-derived, so the icon keeps its
+    // proportion to the text beside it.
+    readonly property int notifyIconSize:
+        num(notify, "icon-size", Math.max(28, Math.round(fontPixelSize * 1.8)))
+
     // ── theme ───────────────────────────────────────────────────────────────
     readonly property color fg: col(theme, "fg", Qt.rgba(1, 1, 1, 1))
     readonly property color bg: col(theme, "bg", Qt.rgba(0, 0, 0, 0.85))

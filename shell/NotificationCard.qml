@@ -324,8 +324,7 @@ Rectangle {
         return fallbackIcon;
     }
 
-    readonly property int iconSize:
-        Math.max(28, Math.round(Cfg.fontPixelSize * 1.8))
+    readonly property int iconSize: Cfg.notifyIconSize
 
     // Clicking the card runs the default action if there is one. Nothing at
     // all if there is not -- a click that silently dismissed would lose

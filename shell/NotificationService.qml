@@ -120,7 +120,7 @@ Singleton {
     // Persisted, because it outlives a shell restart in the user's mind: a
     // person who silenced their notifications before a meeting does not expect
     // a shell reload to start shouting again.
-    readonly property bool dnd: BarConfig.flagOf("notify", "dnd", false)
+    readonly property bool dnd: Cfg.notifyDnd
 
     function toggleDnd() {
         BarConfig.setValue("notify", "dnd", !dnd);
@@ -149,7 +149,7 @@ Singleton {
         popups = popups.filter(p => p && p !== n);
     }
 
-    readonly property int maxPopups: BarConfig.numOf("notify", "max-popups", 4)
+    readonly property int maxPopups: Cfg.notifyMaxPopups
 
     // How long a popup stays when the sender does not say.
     //
@@ -158,7 +158,7 @@ Singleton {
     // spec, and that is honoured rather than overridden -- a password prompt
     // or a failed backup is exactly the kind of thing that sets it.
     readonly property int defaultTimeout:
-        BarConfig.numOf("notify", "timeout", 5000)
+        Cfg.notifyTimeout
 
     function timeoutFor(n) {
         if (!n)

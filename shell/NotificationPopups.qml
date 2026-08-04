@@ -66,7 +66,7 @@ PanelWindow {
     implicitWidth: popupWidth + shadowRoom + Cfg.marginX
     implicitHeight: Math.max(1, stack.implicitHeight + barGap + shadowRoom)
 
-    readonly property int popupWidth: BarConfig.numOf("notify", "width", 380)
+    readonly property int popupWidth: Cfg.notifyWidth
     // Room for the panel's shadow to fall outside the cards. A layer surface
     // clips to its own size, so a shadow with no margin is a shadow cut off
     // square down its edge.

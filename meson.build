@@ -120,6 +120,7 @@ install_data(
 		'shell/settings/Matugen.qml',
 		'shell/settings/MatugenPage.qml',
 		'shell/settings/DiscordPage.qml',
+		'shell/settings/NotificationsPage.qml',
 	],
 	install_dir: qmldir / 'settings',
 )

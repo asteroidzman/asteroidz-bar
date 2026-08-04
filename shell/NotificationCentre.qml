@@ -19,7 +19,7 @@ Item {
     // defining scope has `bar` in it.
     signal closeRequested()
 
-    implicitWidth: BarConfig.numOf("notify", "width", 380)
+    implicitWidth: Cfg.notifyWidth
     implicitHeight: col.implicitHeight
 
     Column {
@@ -170,5 +170,5 @@ Item {
     }
 
     readonly property int maxListHeight:
-        BarConfig.numOf("notify", "centre-height", 420)
+        Cfg.notifyCentreHeight
 }

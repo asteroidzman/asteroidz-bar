@@ -23,3 +23,4 @@ BindCard 1.0 BindCard.qml
 RuleFieldRow 1.0 RuleFieldRow.qml
 MatugenPage 1.0 MatugenPage.qml
 DiscordPage 1.0 DiscordPage.qml
+NotificationsPage 1.0 NotificationsPage.qml

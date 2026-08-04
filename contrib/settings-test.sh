@@ -1784,7 +1784,40 @@ fi
 # real XDG_CONFIG_HOME, which this harness does not isolate, and a settings test
 # has no business editing the machine's push-to-talk key. save_conf, the menu and
 # the field are covered as units in contrib/discord-ptt-test.sh.
-PTT_ROW=$((7 + NGROUPS))
+# ── the notifications page ──────────────────────────────────────────────────
+#
+# Visited before Push-to-talk because it now sits above it in the sidebar, and
+# because visiting is the only way its QML is compiled at all: the page is
+# behind a Loader that stays inactive until selected, so a missing type or a
+# bad binding in it cannot show up at startup.
+NOTIFY_ROW=$((7 + NGROUPS))
+NOTIFY_Y="$(sidebar_entry_y "$NOTIFY_ROW")"
+hl_move "$SIDEBAR_X" "$NOTIFY_Y"; sleep 1
+hl_click "$SIDEBAR_X" "$NOTIFY_Y"; sleep 2
+shot notifications
+
+NOTIFY_INK="$(ink notifications "$((WX + 12 + 450 + 12))" "$((WY + 120))" \
+	"$((WX + WW))" "$((WY + WH))")"
+if [ "${NOTIFY_INK:-0}" -gt 2000 ]; then
+	ok "the notifications page is populated (${NOTIFY_INK} ink px)"
+else
+	bad "the notifications page is populated (${NOTIFY_INK} ink px)"
+fi
+
+# Its controls are Sliders and a Toggle inside FormRows, and FormRow reparents
+# its control -- the trap that left every control on the modules page dead
+# while the page still rendered perfectly. A throw there does not blank the
+# page, so the log is the only place it appears.
+if grep -qE "TypeError|is not iterable|is not a function|Unable to assign" \
+	"$WORK/qs.log"; then
+	bad "the notifications page builds without a QML error"
+	grep -m3 -E "TypeError|is not iterable|is not a function|Unable to assign" \
+		"$WORK/qs.log" | sed 's/^/       /'
+else
+	ok "the notifications page builds without a QML error"
+fi
+
+PTT_ROW=$((8 + NGROUPS))
 PTT_Y="$(sidebar_entry_y "$PTT_ROW")"
 hl_move "$SIDEBAR_X" "$PTT_Y"; sleep 1
 hl_click "$SIDEBAR_X" "$PTT_Y"; sleep 2

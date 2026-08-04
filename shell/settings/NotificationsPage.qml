@@ -1,0 +1,208 @@
+// The notification settings.
+//
+// The shell IS org.freedesktop.Notifications -- see NotificationService.qml --
+// so there is no daemon to configure and no second config file to keep in step.
+// Every control here writes the bar's own config, which is the same file a
+// hand-edit goes into and the same one the popups read.
+//
+// No Apply bar. Each of these is independently meaningful and takes effect the
+// moment it lands: there is nothing to batch, and the toasts are exactly the
+// kind of thing you want to see change as you change it. That matches the
+// Push-to-talk page and differs from the options pages, where a compositor
+// reload is the cost of a write.
+
+import QtQuick
+import "."
+import ".."
+
+Item {
+    id: page
+
+    implicitHeight: col.implicitHeight
+
+    // Written straight through. `setValue` merges into the group and saves, so
+    // a key this page never touches is not disturbed by one that it does.
+    function set(key, value) {
+        BarConfig.setValue("notify", key, value);
+    }
+
+    Column {
+        id: col
+        width: parent.width
+        spacing: Cfg.spacing
+
+        Text {
+            text: "Notifications"
+            color: Cfg.fg
+            font.family: Cfg.fontFamily
+            font.pointSize: Cfg.fontSize
+            font.weight: Font.DemiBold
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "This shell is the notification daemon. Nothing else needs to "
+                  + "be installed or running — and a second daemon would only "
+                  + "race it for the bus name."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.5)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Item { width: 1; height: Cfg.spacing }
+
+        // ── quiet ───────────────────────────────────────────────────────────
+        FormRow {
+            width: parent.width
+            label: "Quiet"
+            control: Toggle {
+                on: Cfg.notifyDnd
+                onToggled: value => page.set("dnd", value)
+            }
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Suppresses the popup, never the notification. What arrives "
+                  + "still arrives, still lands in the centre and is still "
+                  + "counted by the bell."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Item { width: 1; height: Cfg.spacing }
+
+        // ── how long, how many ──────────────────────────────────────────────
+        //
+        // The sliders write on RELEASE, not on every move: `moved` fires
+        // continuously through a drag and each one would rewrite the config
+        // file. `released` is the one worth persisting.
+        FormRow {
+            width: parent.width
+            label: "Timeout"
+            control: Slider {
+                from: 1000
+                to: 30000
+                stepSize: 500
+                target: Cfg.notifyTimeout
+                onReleased: v => page.set("timeout", Math.round(v))
+            }
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Milliseconds, and only when the sender does not say. An "
+                  + "application that asks for two seconds gets two seconds, "
+                  + "and 0 means \"until dismissed\" — which is honoured, so a "
+                  + "failed backup is still there when you come back."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        FormRow {
+            width: parent.width
+            label: "Max popups"
+            control: Slider {
+                from: 1
+                to: 10
+                stepSize: 1
+                target: Cfg.notifyMaxPopups
+                onReleased: v => page.set("max-popups", Math.round(v))
+            }
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Oldest first out. A stack that grows without bound covers "
+                  + "the screen, and the ones at the bottom are the ones you "
+                  + "have already read."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Item { width: 1; height: Cfg.spacing }
+
+        // ── size ────────────────────────────────────────────────────────────
+        FormRow {
+            width: parent.width
+            label: "Card width"
+            control: Slider {
+                from: 240
+                to: 900
+                stepSize: 10
+                target: Cfg.notifyWidth
+                onReleased: v => page.set("width", Math.round(v))
+            }
+        }
+
+        FormRow {
+            width: parent.width
+            label: "Icon size"
+            control: Slider {
+                from: 16
+                to: 96
+                stepSize: 2
+                target: Cfg.notifyIconSize
+                onReleased: v => page.set("icon-size", Math.round(v))
+            }
+        }
+
+        FormRow {
+            width: parent.width
+            label: "Centre height"
+            control: Slider {
+                from: 200
+                to: 1200
+                stepSize: 20
+                target: Cfg.notifyCentreHeight
+                onReleased: v => page.set("centre-height", Math.round(v))
+            }
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Left unset, all three follow the theme's font size — the "
+                  + "card is about 45 characters of body text wide whatever "
+                  + "that size is. Setting one here pins it, and the reset "
+                  + "below hands it back."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Item { width: 1; height: Cfg.spacing }
+
+        // Removes the keys rather than writing today's defaults into the file.
+        // A number that happens to equal the current default is still a pinned
+        // number, and it would stop following the font the moment the theme
+        // changed -- the opposite of what "reset" means here.
+        SmallButton {
+            label: "Reset sizes"
+            onClicked: {
+                const g = ({});
+                for (const k of Object.keys(BarConfig.groups))
+                    g[k] = Object.assign(({}), BarConfig.groups[k]);
+                if (g.notify) {
+                    delete g.notify["width"];
+                    delete g.notify["icon-size"];
+                    delete g.notify["centre-height"];
+                }
+                BarConfig.save(undefined, g, undefined);
+            }
+        }
+    }
+}

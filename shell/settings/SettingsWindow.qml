@@ -568,6 +568,12 @@ FloatingWindow {
                                  { name: "", label: "Palette",
                                    page: "palette",
                                    icon: "asteroidz-bar/settings/palette.svg" },
+                                 // The bell, not a settings/*.svg: this shell
+                                 // IS the notification daemon, and the bell is
+                                 // what the thing is called on the bar.
+                                 { name: "", label: "Notifications",
+                                   page: "notifications",
+                                   icon: "asteroidz-bar/bell.svg" },
                                  { name: "", label: "Push-to-talk",
                                    page: "discord",
                                    icon: "asteroidz-bar/settings/discord.svg" }])
@@ -846,6 +852,16 @@ FloatingWindow {
                     visible: active
                     height: active && item ? item.implicitHeight : 0
                     sourceComponent: MatugenPage {}
+                }
+
+                // No Apply bar either: each of these takes effect where you
+                // can see it, which is the whole reason to have the page.
+                Loader {
+                    width: rows.width
+                    active: win.page === "notifications"
+                    visible: active
+                    height: active && item ? item.implicitHeight : 0
+                    sourceComponent: NotificationsPage {}
                 }
 
                 // No Apply bar: every control on this page writes the bridge's

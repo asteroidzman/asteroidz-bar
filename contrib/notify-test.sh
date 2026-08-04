@@ -210,6 +210,31 @@ qsipc toggle >/dev/null 2>&1
 sleep 2
 shot ipctoggle2
 
+# ── quiet suppresses the POPUP, and only the popup ──────────────────────────
+#
+# The contract the whole do-not-disturb design rests on: what arrives still
+# arrives, still lands in the centre and is still counted. A notification
+# dropped instead of quieted is one the person never finds out about.
+#
+# The centre is CLOSED first, and the baseline is asserted to be clear below.
+#
+# Both toggles above ran, so the panel is open again -- and the centre draws in
+# exactly the region a toast does. Measuring without closing it does not measure
+# quiet at all: the notification lands in the open centre, the list grows by a
+# row, and the region gains 35000px that look precisely like a toast appearing.
+# That is what the first version of this reported, as a confident failure of a
+# feature that was working.
+qsipc toggle >/dev/null 2>&1
+sleep 2
+qsipc quiet | tr -d '\n' > "$WORK/ipc-quiet3"
+sleep 1
+qsipc state | tr -d '\n' > "$WORK/ipc-dnd-before"
+shot dndbefore
+notify "Quiet" "this must not pop up"
+sleep 4
+shot dndafter
+qsipc state | tr -d '\n' > "$WORK/ipc-dnd-after"
+
 # Still alive? That is the assertion. A crashed shell draws nothing, so every
 # pixel check below would report zero and blame the wrong thing.
 if kill -0 "$QS" 2>/dev/null; then echo alive > "$WORK/alive"; else echo dead > "$WORK/alive"; fi
@@ -371,6 +396,46 @@ if [ "$T1" -gt $((T2 + 2000)) ] || [ "$T2" -gt $((T1 + 2000)) ]; then
 else
 	bad "toggle opens and closes the notification centre ($T1 <-> $T2 px)"
 fi
+
+# ── quiet ───────────────────────────────────────────────────────────────────
+DND_BEFORE_N="$(cat "$WORK/ipc-dnd-before" 2>/dev/null)"
+DND_AFTER_N="$(cat "$WORK/ipc-dnd-after" 2>/dev/null)"
+DND_BEFORE_PX="$(below_bar_px dndbefore)"
+DND_AFTER_PX="$(below_bar_px dndafter)"
+DND_DELTA=$((DND_AFTER_PX - DND_BEFORE_PX))
+[ "$DND_DELTA" -lt 0 ] && DND_DELTA=$((-DND_DELTA))
+
+# The premise, checked rather than assumed: nothing is already drawn there.
+# Without this the delta below is measuring an open notification centre growing
+# by a row, which looks exactly like a toast arriving.
+if [ "$DND_BEFORE_PX" -lt 2000 ]; then
+	ok "the toast area is clear before the quiet test ($DND_BEFORE_PX px)"
+else
+	bad "the toast area is clear before the quiet test ($DND_BEFORE_PX px)"
+fi
+
+# A toast is tens of thousands of pixels; 1000 is slack for the clock and the
+# bell's own count changing between the two shots.
+if [ "$DND_DELTA" -lt 1000 ]; then
+	ok "quiet suppresses the popup ($DND_BEFORE_PX -> $DND_AFTER_PX px)"
+else
+	bad "quiet suppresses the popup ($DND_BEFORE_PX -> $DND_AFTER_PX px)"
+fi
+
+# The other half, and the one that makes quiet different from dropping it.
+# `state` reports "<n>" or "<n> quiet", so the count is the first field.
+DND_B="${DND_BEFORE_N%% *}"
+DND_A="${DND_AFTER_N%% *}"
+case "${DND_A:-x}${DND_B:-x}" in
+	*[!0-9]*) bad "...and the notification still arrives (got '$DND_BEFORE_N' -> '$DND_AFTER_N')" ;;
+	*)
+		if [ "$DND_A" -eq $((DND_B + 1)) ]; then
+			ok "...and the notification still arrives ($DND_B -> $DND_A in the centre)"
+		else
+			bad "...and the notification still arrives ($DND_B -> $DND_A in the centre)"
+		fi
+		;;
+esac
 
 echo
 echo "$PASS passed, $FAIL failed"

@@ -192,11 +192,24 @@ Settings live under `notify` in [the bar's own config](#its-own-config):
 notify {
 	timeout 5000        // ms, when the sender does not say
 	max-popups 4        // oldest first out
-	width 380
-	centre-height 420   // the centre scrolls past this
+	width 427           // unset: 20 ems of the theme's font
+	icon-size 38        // unset: 1.8 ems
+	centre-height 427   // the centre scrolls past this; unset: 20 ems
 	dnd #false
 }
 ```
+
+or through **Settings → Notifications**, which writes the same keys and takes
+effect as you move the sliders.
+
+The three sizes are **font-derived when unset** — the card is about 45
+characters of body text wide whatever size the theme is. Every other box in
+this shell that holds text is sized that way (`FormRow`, `Picker`, `Pill`);
+these were the exceptions, fixed at 380px against a smaller default font, so
+raising the theme's size grew the text inside a box that stayed put. That is
+also why *Reset sizes* **removes** the keys rather than writing today's numbers
+back: a number equal to the current default is still a pinned number, and it
+would stop following the font the moment the theme changed.
 
 ### From a keybind
 
