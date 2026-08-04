@@ -42,6 +42,11 @@ Pill {
 
     Component {
         id: centre
-        NotificationCentre {}
+        // `bar` resolves here and not inside NotificationCentre.qml: a
+        // Component captures the scope it is DECLARED in, and the centre is a
+        // separate file that knows nothing about the bar hosting it.
+        NotificationCentre {
+            onCloseRequested: bar.closeMenu()
+        }
     }
 }

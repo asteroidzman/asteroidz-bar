@@ -13,6 +13,12 @@ import "."
 Item {
     id: root
 
+    // Raised when the panel has done the thing it was opened for. Wired to the
+    // bar's closeMenu() by whoever opens it -- this file cannot reach the bar
+    // itself, because it is loaded from a Component and only that Component's
+    // defining scope has `bar` in it.
+    signal closeRequested()
+
     implicitWidth: BarConfig.numOf("notify", "width", 380)
     implicitHeight: col.implicitHeight
 
@@ -66,7 +72,16 @@ Item {
                         font.hintingPreference: Font.PreferFullHinting
                     }
                     HoverHandler { id: dndHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: NotificationService.toggleDnd() }
+                    // Closes after acting. Quieting is a decision, not a
+                    // setting you sit and adjust -- leaving the panel up
+                    // afterwards means a second click to dismiss something you
+                    // are already done with.
+                    TapHandler {
+                        onTapped: {
+                            NotificationService.toggleDnd();
+                            root.closeRequested();
+                        }
+                    }
                 }
 
                 Rectangle {
@@ -87,7 +102,15 @@ Item {
                         font.hintingPreference: Font.PreferFullHinting
                     }
                     HoverHandler { id: clearHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: NotificationService.clearAll() }
+                    // And clearing empties the very list the panel exists to
+                    // show, so staying open leaves you looking at "Nothing
+                    // waiting."
+                    TapHandler {
+                        onTapped: {
+                            NotificationService.clearAll();
+                            root.closeRequested();
+                        }
+                    }
                 }
             }
         }
