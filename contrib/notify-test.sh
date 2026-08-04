@@ -280,6 +280,33 @@ print(sum(1 for y in range(90, min(420, h)) for x in range(w * 2 // 3, w)
 PY
 }
 
+# The notify pill's WIDTH, not its area.
+#
+# This bar has one module in its right section, so the dark run across the bar
+# strip is that pill's panel, and the panel is sized by what is in it: a bell
+# alone, or a bell plus a digit and the padding before it.
+#
+# Area does not work, and passed vacuously when it was tried. Turning quiet on
+# ALSO swaps the filled bell for the crossed-out one and drops the accent tint,
+# and those alone take the dark-pixel count from 4996 to 2853 -- so the area
+# shrank convincingly on a build that was still drawing the number.
+bell_pill_w() { # bell_pill_w <shot>
+	python3 - "$WORK/$1.png" <<'PY'
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+px = im.load(); w, h = im.size
+# 12..54 is the bar's panel and nothing else. NOT 10..80: the toasts start at
+# y=75 now, so a taller window measured the CARD's 427px width in the shots
+# that have one and the pill's 53px in the shots that do not -- which is a
+# beautifully consistent reading of whether a toast exists, and says nothing
+# whatever about the bell.
+xs = [x for y in range(12, min(54, h)) for x in range(w * 2 // 3, w)
+      if sum(px[x, y]) < 260]
+print(max(xs) - min(xs) + 1 if xs else 0)
+PY
+}
+
 if [ "$(cat "$WORK/owned" 2>/dev/null)" = "yes" ]; then
 	ok "the shell owns org.freedesktop.Notifications"
 else
@@ -436,6 +463,26 @@ case "${DND_A:-x}${DND_B:-x}" in
 		fi
 		;;
 esac
+
+# The count is not shown while quiet.
+#
+# Compared against `one`, which is the same situation in every respect that
+# matters -- exactly ONE notification held, the same bar, the same single
+# module in the right section -- differing only in whether quiet is on. So the
+# pill is narrower by precisely the digit and its padding.
+#
+# The crossed-out bell already says the state; a count beside it turns "I have
+# silenced these" back into "you have one waiting", which is the interruption
+# in another form.
+BELL_LOUD="$(bell_pill_w one)"
+BELL_QUIET="$(bell_pill_w dndafter)"
+# A digit plus its padding is a good fraction of the pill. 10px of margin keeps
+# this clear of a hinting difference between two glyphs.
+if [ "${BELL_QUIET:-99999}" -lt $((BELL_LOUD - 10)) ]; then
+	ok "quiet drops the count from the bell (${BELL_LOUD}px -> ${BELL_QUIET}px wide)"
+else
+	bad "quiet drops the count from the bell (${BELL_LOUD}px -> ${BELL_QUIET}px wide)"
+fi
 
 echo
 echo "$PASS passed, $FAIL failed"

@@ -130,7 +130,7 @@ what a notification looked like, three things that are this shell's business.
 | | |
 |---|---|
 | **toast** | a card per notification, top-right just under the bar, on every screen — frosted and shadowed like every other panel, and carrying the sender's icon |
-| **bell** | tinted with the accent while anything is waiting, and carrying the count |
+| **bell** | tinted with the accent while anything is waiting, and carrying the count — but not while quiet, where the crossed-out bell is the whole message |
 | **centre** | left-click the bell: everything waiting, with **clear all** |
 | **quiet** | right-click the bell, or the button in the centre |
 
@@ -169,7 +169,13 @@ fall back to the global switch. That setting had been read into `Cfg.panelBlur`
 and used by nothing at all, so until now it did nothing anywhere.
 
 **Quiet suppresses the popup, never the notification.** What arrives still
-arrives, still lands in the centre and is still counted by the bell. A
+arrives and still lands in the centre.
+
+The bell drops its count while quiet, though. The crossed-out bell already says
+the state you chose, and a number beside it turns "I have silenced these" back
+into "you have fourteen waiting" — the interruption in another form. The centre
+still holds them and its header still counts them, which is where you go when
+you want the number. A
 notification dropped instead of quieted is one the person never finds out
 about, and "do not disturb" is a statement about interruption rather than about
 whether the thing happened. It persists across a restart, because someone who

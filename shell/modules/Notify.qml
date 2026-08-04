@@ -25,13 +25,22 @@ Pill {
           : count > 0 ? "asteroidz-bar/bell.svg"
                       : "asteroidz-bar/bell-outline.svg"]
 
-    iconTint: (count > 0 && !dnd) ? Cfg.focusBg : Cfg.fg
+    iconTint: showCount ? Cfg.focusBg : Cfg.fg
 
     // The number beside the bell once there is one. A glyph alone says
     // "something"; the number says how much, and the difference between one
     // notification and forty is most of the reason to look.
-    text: count > 0 ? String(count) : ""
-    paddingX: count > 0 ? Cfg.pillPadding : 0
+    //
+    // Not while quiet, though. The crossed-out bell already says the state you
+    // chose, and a count beside it is the one thing quiet exists to stop
+    // asking about -- it turns "I have silenced these" back into "you have 14
+    // waiting", which is the interruption in another form. The centre still
+    // has them, and the header there counts them, which is where you go when
+    // you want the number.
+    readonly property bool showCount: count > 0 && !dnd
+
+    text: showCount ? String(count) : ""
+    paddingX: showCount ? Cfg.pillPadding : 0
 
     onClicked: button => {
         if (button === Qt.LeftButton)
