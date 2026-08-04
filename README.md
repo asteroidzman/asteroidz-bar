@@ -82,6 +82,60 @@ draw.
 Edit it by hand, or use the settings window's **Modules** page, which applies
 as you change it. `monitor=""` is every screen.
 
+## Notifications
+
+The shell is the notification daemon. It owns `org.freedesktop.Notifications`
+itself — there is no swaync, no `swaync-client --subscribe`, and nothing extra
+to install or supervise.
+
+That subscription was the whole reason to change it. A notification reached the
+bar third-hand — the sender told the daemon, the daemon told a long-lived
+client process, the client wrote a JSON line to a pill — with a second process
+spawned for every toggle and a retry timer for when the daemon was restarted
+underneath it. The daemon also owned the history, the do-not-disturb flag and
+what a notification looked like, three things that are this shell's business.
+
+| | |
+|---|---|
+| **toast** | a card per notification, top-right under the bar, on every screen |
+| **bell** | tinted with the accent while anything is waiting, and carrying the count |
+| **centre** | left-click the bell: everything waiting, with **clear all** |
+| **quiet** | right-click the bell, or the button in the centre |
+
+Hovering a toast stops its clock — reading something is the clearest possible
+signal that it should not be taken away mid-sentence — and it resumes when the
+pointer leaves.
+
+**Quiet suppresses the popup, never the notification.** What arrives still
+arrives, still lands in the centre and is still counted by the bell. A
+notification dropped instead of quieted is one the person never finds out
+about, and "do not disturb" is a statement about interruption rather than about
+whether the thing happened. It persists across a restart, because someone who
+silenced their notifications before a meeting does not expect a shell reload to
+start shouting again.
+
+The sender's own `expire_timeout` is honoured, including `0`, which the spec
+defines as "until dismissed" — a failed backup or a password prompt should
+still be there when you come back to the desk. Critical notifications default
+to that too, and get a border in the urgent colour.
+
+The capability flags the server advertises are a **contract**: an application
+asks `GetCapabilities` and formats for the answer, so claiming `body-markup`
+and then rendering the tags literally is how `<b>` ends up in front of someone.
+Each one claimed is one the card honours.
+
+Settings live under `notify` in [the bar's own config](#its-own-config):
+
+```kdl
+notify {
+	timeout 5000        // ms, when the sender does not say
+	max-popups 4        // oldest first out
+	width 380
+	centre-height 420   // the centre scrolls past this
+	dnd #false
+}
+```
+
 ## Settings
 
 The **asteroidz ship** on the bar — the chip leading the tags — opens a real
@@ -824,7 +878,9 @@ contrib/tray-test.sh       # the tray, on a private D-Bus session, against
                            #   happened to be running. Build it first:
                            #   `cd contrib/snitem && make`
 contrib/media-test.sh      # the media module, with a player and no sound
-contrib/notify-test.sh     # the bell, against a stubbed swaync
+contrib/notify-test.sh     # notifications end to end: the shell takes the bus
+                           #   name, a real Notify call tints the bell and puts a
+                           #   popup on screen, and each one gets its own card
 contrib/click-test.sh      # what the bar DOES when clicked: popovers open and
                            #   dismiss, plugin menus, plugin forms and their
                            #   fields, the power menu's confirmation, and the
@@ -1158,9 +1214,11 @@ until it was reported. contrib/mprisstub supplies one, on a private bus, and it
 is deliberately silent: something is playing, there is nothing to hear, and the
 meter has to read zero rather than disappear.
 
-`notify-test.sh` fakes swaync with a stub `swaync-client` early on PATH, and
-has it CHANGE its answer partway through: the bell was reading a subscription
-that never updated, and a stub that only ever reports one count would pass
+`notify-test.sh` sends a REAL notification over D-Bus, on the harness's private
+bus, because the shell is the daemon now -- there is nothing left to stub, and
+a call that reaches the bus name is the only thing that proves it was taken.
+The bell was once reading a subscription that never updated, and a stub that
+only ever reports one count would pass
 while being just as broken.
 
 `parity.sh` gates on **geometry** — panel extents and every pill border

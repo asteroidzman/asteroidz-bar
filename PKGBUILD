@@ -24,7 +24,6 @@ optdepends=(
   'asteroidz: the compositor this draws the bar for'
   'inotify-tools: the wallpaper browser notices files added to the folder while it is open'
   'cava: the media visualiser'
-  'swaync: the notification bell'
   'pipewire: the volume module'
   'grim: contrib/tray-test.sh'
 )

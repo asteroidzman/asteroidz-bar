@@ -26,6 +26,11 @@ ShellRoot {
         // all -- exactly the shape of thing that goes missing without a
         // reference. It does nothing until `bar { idle { enable true } }`.
         void IdleService.enabled;
+        // And the notification server. This shell IS
+        // org.freedesktop.Notifications -- a singleton nothing refers to is
+        // never constructed, so without this the bus name would simply never
+        // be taken and every notification on the desktop would go nowhere.
+        void NotificationService.count;
         if (!Ipc.connected)
             console.warn("asteroidz-bar: ASTEROIDZ_INSTANCE_SIGNATURE not set;"
                          + " running with defaults and no compositor state");
@@ -35,5 +40,14 @@ ShellRoot {
         model: Quickshell.screens
 
         Bar {}
+    }
+
+    // The toasts, one overlay per screen. Separate from the bar because a
+    // notification is not part of the strip: it arrives without anybody
+    // clicking anything, and it must not reserve space or take the keyboard.
+    Variants {
+        model: Quickshell.screens
+
+        NotificationPopups {}
     }
 }
