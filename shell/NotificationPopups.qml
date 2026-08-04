@@ -44,14 +44,27 @@ PanelWindow {
         bottom: Cfg.bottom
         right: true
     }
+    // All zero, and in particular NOT the bar's height.
+    //
+    // `exclusiveZone: 0` does not mean "ignore the bar". It means this surface
+    // reserves nothing of its own while still respecting what everyone else
+    // reserved -- so the compositor has already placed it below the bar's
+    // strip, and adding the bar's height on top of that put the toasts a
+    // second bar's worth down the screen. Measured on a 1080p output whose bar
+    // panel ends at y=57: the toast surface began at y=131.
+    //
+    // The right margin goes for the same reason it arrived: the card's own
+    // inset is `Cfg.marginX` below, so putting it here as well left the toasts
+    // a shadow's width further from the edge than the bar's panels, visibly
+    // out of line with them.
     margins {
-        top: Cfg.bottom ? 0 : Cfg.height + Cfg.marginY * 2
-        bottom: Cfg.bottom ? Cfg.height + Cfg.marginY * 2 : 0
-        right: Cfg.marginX
+        top: 0
+        bottom: 0
+        right: 0
     }
 
-    implicitWidth: popupWidth + shadowRoom * 2
-    implicitHeight: Math.max(1, stack.implicitHeight + shadowRoom * 2)
+    implicitWidth: popupWidth + shadowRoom + Cfg.marginX
+    implicitHeight: Math.max(1, stack.implicitHeight + barGap + shadowRoom)
 
     readonly property int popupWidth: BarConfig.numOf("notify", "width", 380)
     // Room for the panel's shadow to fall outside the cards. A layer surface
@@ -59,6 +72,16 @@ PanelWindow {
     // square down its edge.
     readonly property int shadowRoom:
         Cfg.panelShadow ? Cfg.panelShadowSize + Math.ceil(Cfg.panelShadowBlur) : 0
+
+    // The side facing the bar gets the bar's own margin instead of the full
+    // shadow room, which is what puts the first toast just under the bar
+    // rather than a shadow's reach below it.
+    //
+    // The shadow on that edge is clipped, and that is the trade accepted: it
+    // is the edge nearest the bar, where the bar's own shadow already falls,
+    // and the alternative is a permanent 28px gap holding a shadow nobody can
+    // pick out against it.
+    readonly property int barGap: Math.min(shadowRoom, Cfg.marginY)
 
     // ── the frost ───────────────────────────────────────────────────────────
     //
@@ -114,8 +137,10 @@ PanelWindow {
 
     Column {
         id: stack
+        // The shadow's room is on the left and on the far side; the near side
+        // gets the bar's margin. See `barGap`.
         x: root.shadowRoom
-        y: root.shadowRoom
+        y: Cfg.bottom ? root.shadowRoom : root.barGap
         width: root.popupWidth
         spacing: 8
 

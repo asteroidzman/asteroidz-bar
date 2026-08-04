@@ -7,7 +7,6 @@
 // waits to be dealt with.
 
 import Quickshell
-import Quickshell.Widgets
 import Quickshell.Services.Notifications
 import QtQuick
 import Qt5Compat.GraphicalEffects
@@ -121,10 +120,23 @@ Rectangle {
                 anchors.rightMargin: 6
                 anchors.verticalCenter: parent.verticalCenter
                 elide: Text.ElideRight
-                text: root.notification ? (root.notification.appName || "notification") : ""
+                // Who sent it. `appName` is what the sender passed as its own
+                // name; the desktop-entry hint is the fallback because an
+                // application that omits appName usually still identifies
+                // itself that way, and "notification" tells you nothing.
+                text: {
+                    const n = root.notification;
+                    if (!n)
+                        return "";
+                    if (n.appName)
+                        return n.appName;
+                    if (n.desktopEntry)
+                        return String(n.desktopEntry).replace(/\.desktop$/, "");
+                    return "notification";
+                }
                 color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.72)
+                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
                 font.hintingPreference: Font.PreferFullHinting
             }
 
@@ -156,17 +168,36 @@ Rectangle {
         // than a branch per hint the spec has accumulated.
         Row {
             width: parent.width
-            spacing: root.hasImage ? 10 : 0
+            spacing: 10
 
-            IconImage {
-                visible: root.hasImage
-                width: visible ? 40 : 0
-                height: 40
-                source: root.hasImage ? root.imageSource : ""
+            // Always something. A notification with no artwork used to draw no
+            // icon at all and the text slid left to fill the space, so a
+            // column of toasts had a ragged left edge and nothing identified
+            // the sender at a glance -- the app's name is there, but it is the
+            // smallest text on the card.
+            //
+            // The box is fixed and the artwork is centred in it, because
+            // Icon's own width is its ADVANCE: a portrait icon is narrower
+            // than `size`, which would make the text column's width depend on
+            // the shape of whatever artwork happened to arrive.
+            Item {
+                width: root.iconSize
+                height: root.iconSize
+
+                Icon {
+                    anchors.centerIn: parent
+                    name: root.iconName
+                    size: root.iconSize
+                    // The bundled bell is a monochrome glyph and has to be
+                    // painted in the theme's colours. An application's own
+                    // icon carries its own, and tinting would flatten it.
+                    tint: root.iconName === root.fallbackIcon
+                          ? Cfg.fg : "transparent"
+                }
             }
 
             Column {
-                width: parent.width - (root.hasImage ? 50 : 0)
+                width: parent.width - root.iconSize - 10
                 spacing: 2
 
                 Text {
@@ -194,7 +225,11 @@ Rectangle {
                     // up in front of somebody.
                     textFormat: Text.StyledText
                     font.family: Cfg.fontFamily
-                    font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+                    // Full size, like the bar's own labels. The body IS the
+                    // notification -- the summary is its title -- and it was
+                    // set at 0.85, which made the one line you actually have
+                    // to read the second-smallest text on the card.
+                    font.pointSize: Cfg.fontSize
                     font.hintingPreference: Font.PreferFullHinting
                 }
             }
@@ -248,10 +283,49 @@ Rectangle {
         return notification.actions.some(a => a && a.identifier === "default");
     }
 
-    readonly property string imageSource:
-        notification && notification.image ? notification.image
-        : (notification && notification.appIcon ? notification.appIcon : "")
-    readonly property bool hasImage: imageSource !== ""
+    // ── which icon ──────────────────────────────────────────────────────────
+    //
+    // In the order the spec makes them available, most specific first:
+    //
+    //   image         the image-data or image-path hint -- artwork chosen for
+    //                 THIS notification (an album cover, a contact's photo).
+    //                 The server has already resolved both spellings to one
+    //                 string.
+    //   appIcon       the app_icon argument: a theme name or a path.
+    //   desktopEntry  the desktop-entry hint, which names the application
+    //                 rather than the notification, so its icon is the app's.
+    //   appName       last, and only if the theme actually has it. "Discord"
+    //                 finds `discord`; "notify-send" finds nothing, which is
+    //                 why this is checked rather than assumed.
+    //
+    // Icon resolves each form (path, relative asset, theme name, URL); the
+    // theme lookups are checked here because a miss has to fall through to the
+    // next candidate rather than draw an empty box.
+    readonly property string fallbackIcon: "asteroidz-bar/bell.svg"
+
+    readonly property string iconName: {
+        const n = notification;
+        if (!n)
+            return fallbackIcon;
+        if (n.image)
+            return n.image;
+        if (n.appIcon)
+            return n.appIcon;
+
+        const names = [];
+        if (n.desktopEntry)
+            names.push(String(n.desktopEntry).replace(/\.desktop$/, ""));
+        if (n.appName)
+            names.push(String(n.appName).toLowerCase().replace(/\s+/g, "-"));
+        for (const candidate of names)
+            if (candidate !== "" && Quickshell.iconPath(candidate, true) !== "")
+                return candidate;
+
+        return fallbackIcon;
+    }
+
+    readonly property int iconSize:
+        Math.max(28, Math.round(Cfg.fontPixelSize * 1.8))
 
     // Clicking the card runs the default action if there is one. Nothing at
     // all if there is not -- a click that silently dismissed would lose

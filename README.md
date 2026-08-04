@@ -129,7 +129,7 @@ what a notification looked like, three things that are this shell's business.
 
 | | |
 |---|---|
-| **toast** | a card per notification, top-right under the bar, on every screen — frosted and shadowed like every other panel |
+| **toast** | a card per notification, top-right just under the bar, on every screen — frosted and shadowed like every other panel, and carrying the sender's icon |
 | **bell** | tinted with the accent while anything is waiting, and carrying the count |
 | **centre** | left-click the bell: everything waiting, with **clear all** |
 | **quiet** | right-click the bell, or the button in the centre |
@@ -143,6 +143,22 @@ stack: the cards are 8px apart on a surface taller than all of them together,
 and the wallpaper has to show through the gaps. They cast the same shadow the
 bar's panels do — the space for it was always reserved and nothing drew one,
 so they sat flat on the desktop while every other panel had depth.
+
+**Every toast carries an icon**, resolved most-specific-first: the
+`image-data`/`image-path` hint (artwork chosen for *this* notification — an
+album cover, a contact's photo), then `app_icon`, then the `desktop-entry`
+hint, then the application's own name as a theme lookup, and finally the
+bundled bell. The theme lookups are *checked* rather than assumed, because a
+miss has to fall through to the next candidate instead of drawing an empty box
+— `Discord` finds `discord`, `notify-send` finds nothing. The box is a fixed
+square with the artwork centred in it, since an icon's width is its advance and
+a portrait one would otherwise change the text column's width.
+
+`exclusiveZone: 0` on that surface does **not** mean "ignore the bar": it
+reserves nothing of its own while still respecting what the bar reserved, so
+the compositor has already placed it below the bar. Adding the bar's height to
+the margin as well put the toasts a second bar's worth down the screen — 131px
+on a 48px bar, when they should start at 75.
 
 This works on a desktop with `effects { blur { layer #false } }`, which is the
 common case. asteroidz treats a client-supplied region as an explicit opt-in

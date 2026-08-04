@@ -106,13 +106,28 @@ wait "$QS" 2>/dev/null
 INNER
 chmod +x "$WORK/run.sh"
 
+# Every number the toast's position is derived from, written here rather than
+# left to the defaults, so the arithmetic in the python below is checking the
+# shell rather than agreeing with it by coincidence.
+#
+# BAR_GAP is min(shadowRoom, margin-y), and shadowRoom -- shadow-size plus
+# shadow-blur -- is 28 with the panel settings used here, so it comes out as
+# margin-y.
+CARD_W=380
+BAR_H=48
+MARGIN_X=8
+MARGIN_Y=9
+BAR_GAP=$MARGIN_Y
+
 run_with_blur() { # run_with_blur <#true|#false> <shot>
 	# The panel block is spelled out rather than taken from bar_conf_panel,
-	# which hardcodes `blur #true` -- appending a second `panel` block to
-	# override it would depend on how BarConfig resolves a duplicated block,
-	# which is not what this test is about.
+	# which hardcodes `blur #true`. Repeating a block is safe -- BarConfig
+	# accumulates keys into a group rather than replacing it -- but saying it
+	# once is clearer than relying on that.
 	bar_conf "" "" "notify" <<EOF
 panel { enable #true; radius 9; padding 12; blur $1; shadow #true }
+bar { height $BAR_H; margin-x $MARGIN_X; margin-y $MARGIN_Y }
+notify { width $CARD_W }
 EOF
 	setsid dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
 		"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" \
@@ -124,9 +139,14 @@ run_with_blur "#false" flat
 
 # The toast is top-right under the bar. Found rather than assumed: on a row
 # crossing a white band, the columns the card covers are darker.
-python3 - "$WORK/frosted.png" "$WORK/flat.png" > "$WORK/verdict" 2>&1 <<'PY'
+python3 - "$WORK/frosted.png" "$WORK/flat.png" \
+	"$CARD_W" "$BAR_H" "$MARGIN_X" "$MARGIN_Y" "$BAR_GAP" \
+	> "$WORK/verdict" 2>&1 <<'PY'
 import sys
 from PIL import Image
+
+frosted, flat = sys.argv[1], sys.argv[2]
+CARD_W, BAR_H, MARGIN_X, MARGIN_Y, BAR_GAP = (int(a) for a in sys.argv[3:8])
 
 
 def load(path):
@@ -134,131 +154,112 @@ def load(path):
     return im.load(), im.size
 
 
-def card_box(px, W, H):
-    """The toast, found by the one thing that separates it from the backdrop.
+fpx, (W, H) = load(frosted)
+gpx, _ = load(flat)
 
-    The wallpaper is pure black or pure white and nothing else, so any pixel
-    that is NEITHER is the card or its shadow. Darkness alone does not work:
-    the stripes run horizontally, so an all-black row reads as a card spanning
-    the whole scan -- which is exactly what the first version of this did, and
-    it duly measured the wallpaper twice and reported the blur as a no-op.
-    """
-    def longest_mid(y):
-        run, best = None, None
-        for x in range(W // 2, W):
-            mid = 8 < sum(px[x, y]) / 3 < 240
-            if mid and run is None:
-                run = x
-            elif not mid and run is not None:
-                if best is None or x - run > best[1] - best[0]:
-                    best = (run, x - 1)
-                run = None
-        if run is not None and (best is None or W - 1 - run > best[1] - best[0]):
-            best = (run, W - 1)
-        return best
+# Where the card MUST be, computed rather than detected.
+#
+# Three detectors were tried and all three found something other than the
+# card -- the wallpaper's own black stripes, then the shadow below the card,
+# then nothing at all once white text was excluded. Each one passed or failed
+# for a reason that had nothing to do with blur.
+#
+# There is nothing to detect. This test writes the bar's height, its margins
+# and the card's width itself, and the shell derives the position from exactly
+# those numbers: the toast surface sits below the bar's exclusive zone
+# (height + 2*margin-y), the first card sits `bar-gap` into it, and the card's
+# right edge is `margin-x` from the screen edge. So the box is arithmetic, and
+# a card that is NOT there fails the control assertion below -- which is what
+# that assertion is for.
+card_right = W - MARGIN_X
+card_left = card_right - CARD_W
+card_top = BAR_H + 2 * MARGIN_Y + BAR_GAP
 
-    # The card's x-range, from whichever row has the widest such run.
-    widest = None
-    for y in range(60, min(500, H)):
-        got = longest_mid(y)
-        if got and (widest is None or got[1] - got[0] > widest[1] - widest[0]):
-            widest = got
-    if not widest or widest[1] - widest[0] <= 300:
-        return None
-    x0, x1 = widest[0] + 8, widest[1] - 8
-
-    # Then the rows the card COVERS COMPLETELY: every pixel across that whole
-    # x-range is the card's own, neither wallpaper black nor wallpaper white.
-    #
-    # "Long dark run" is not enough on its own, and this is where two earlier
-    # versions went wrong. The shadow is also neither black nor white, and
-    # where it falls across a black stripe it is also dark -- so the box ran
-    # past the bottom of the card into bare wallpaper. A handful of
-    # full-contrast rows then appear in EVERY column, so the median column is
-    # poisoned just as thoroughly as the worst one, and both shots read high.
-    #
-    # Under the shadow the wallpaper still reaches 0, so requiring the entire
-    # width to be card-valued excludes it.
-    # 90% of the width, not all of it: the card has WHITE text on it, and
-    # "every pixel is neither black nor white" therefore excluded every row
-    # carrying the summary or the close button. A row below the card, over a
-    # black stripe, is under a weak shadow and mostly reads as wallpaper -- so
-    # it fails a 90% test comfortably, which is the distinction being drawn.
-    rows = []
-    for y in range(60, min(500, H)):
-        vals = [sum(px[x, y]) / 3 for x in range(x0, x1)]
-        covered = sum(1 for v in vals if 8 < v < 240) / len(vals)
-        if covered > 0.9 and sum(vals) / len(vals) < 100:
-            rows.append(y)
-    if len(rows) < 40:
-        return None
-
-    # The longest CONTIGUOUS block of them, then trimmed clear of the rounded
-    # ends.
-    best = cur = [rows[0], rows[0]]
-    for y in rows[1:]:
-        if y == cur[1] + 1:
-            cur[1] = y
-        else:
-            cur = [y, y]
-        if cur[1] - cur[0] > best[1] - best[0]:
-            best = cur[:]
-    trim = max(4, int((best[1] - best[0]) * 0.15))
-    return [x0, x1, best[0] + trim, best[1] - trim]
+# Inset past the rounded corners and the border. 20..90 below the card's top
+# stays inside it (the card runs about 105px for a one-line body) and spans
+# several 20px stripe periods.
+x0, x1 = card_left + 24, card_right - 24
+y0, y1 = card_top + 20, card_top + 90
 
 
-def contrast(px, x0, x1, y0, y1):
-    """Peak-to-trough down each column; the MEDIAN column, not the worst.
+def contrast(px):
+    """Peak-to-trough down each column, at the 20th percentile of columns.
 
-    Down, because the stripes are horizontal. Median, because the card has
-    text on it and the worst column is whichever one crosses a glyph -- which
-    measures the typography, not the backdrop.
+    Down, because the stripes are horizontal.
+
+    A low percentile rather than the worst column or the median, because the
+    card is mostly TEXT: white glyphs on a dark panel swing further than any
+    stripe does, so the worst column measures the typography. The median was
+    no better once the icon and the full-size body arrived -- the text then
+    covered more than half the width, so the middle column was a text column
+    too, and a blurred card measured 371 against an unblurred 393.
+
+    The 20th percentile lands on the quiet part of the card, which is the only
+    place the backdrop is visible at all.
     """
     runs = []
     for x in range(x0, x1):
         col = [sum(px[x, y]) for y in range(y0, y1)]
         runs.append(max(col) - min(col))
-    if not runs:
-        return 0
     runs.sort()
-    return runs[len(runs) // 2]
+    return runs[len(runs) // 5]
 
 
-fpx, (W, H) = load(sys.argv[1])
-gpx, _ = load(sys.argv[2])
+def card_top_edge(px):
+    """The first row of a long run of DARK card pixels, just inside the edge.
 
-box = card_box(fpx, W, H)
-if not box:
-    print("NOCARD")
-    raise SystemExit(0)
+    Read at card_left + 6: inside the card but outside its 12px padding, so
+    there is no text or icon in this column and the card reads as one flat
+    colour all the way down.
 
-x0, x1, y0, y1 = box
-# Inset past the rounded corners and the border. The vertical span is already
-# trimmed by card_box and still has to cover several 20px stripe periods.
-x0, x1 = x0 + 24, x1 - 24
-if y1 - y0 < 40 or x1 - x0 < 40:
-    print("NOCARD")
-    raise SystemExit(0)
+    Dark as well as card-coloured, and 60 rows of it. "Neither black nor
+    white" alone finds the BAR's shadow, which starts 3px below the bar and
+    runs continuously into the card -- it reported the toast at y=60 when the
+    card begins at 75. The shadow cannot hold 60 unbroken dark rows, because
+    the 20px white stripes show through it; the card can.
+    """
+    x = card_left + 6
+    run = None
+    for y in range(BAR_H + 4, min(H, card_top + 200)):
+        v = sum(px[x, y]) / 3
+        if 8 < v < 120:
+            if run is None:
+                run = y
+        else:
+            if run is not None and y - run > 60:
+                return run
+            run = None
+    return run if run is not None else None
 
-frosted = contrast(fpx, x0, x1, y0, y1)
-flat = contrast(gpx, x0, x1, y0, y1)
+
 print(f"BOX {x0} {x1} {y0} {y1}")
-print(f"FROSTED {frosted}")
-print(f"FLAT {flat}")
+print(f"EXPECT_TOP {card_top}")
+print(f"ACTUAL_TOP {card_top_edge(fpx)}")
+print(f"FROSTED {contrast(fpx)}")
+print(f"FLAT {contrast(gpx)}")
 PY
 
 cat "$WORK/verdict"
 
-if grep -q NOCARD "$WORK/verdict"; then
-	bad "a toast is on screen to measure"
-	echo
-	echo "$PASS passed, $((FAIL + 1)) failed"
-	exit 1
-fi
-ok "a toast is on screen to measure"
-
 FROSTED="$(awk '/^FROSTED/{print $2}' "$WORK/verdict")"
 FLAT="$(awk '/^FLAT/{print $2}' "$WORK/verdict")"
+EXPECT_TOP="$(awk '/^EXPECT_TOP/{print $2}' "$WORK/verdict")"
+ACTUAL_TOP="$(awk '/^ACTUAL_TOP/{print $2}' "$WORK/verdict")"
+
+# Where the toast sits, which is its own bug and not a detail of the blur.
+#
+# `exclusiveZone: 0` does not mean "ignore the bar": the surface reserves
+# nothing while still respecting what the bar reserved, so the compositor has
+# already placed it below the bar. Adding the bar's height to the margin as
+# well put the toasts a second bar's worth down the screen -- 131px on this
+# 48px bar, when they should start at 75.
+if [ -n "$ACTUAL_TOP" ] && [ "$ACTUAL_TOP" != "None" ] \
+	&& [ "$ACTUAL_TOP" -ge $((EXPECT_TOP - 2)) ] \
+	&& [ "$ACTUAL_TOP" -le $((EXPECT_TOP + 2)) ]; then
+	ok "the toast starts just under the bar (y=$ACTUAL_TOP, wanted $EXPECT_TOP)"
+else
+	bad "the toast starts just under the bar (y=${ACTUAL_TOP:-none}, wanted $EXPECT_TOP)"
+fi
 
 # The control first. If the unblurred card did not keep its stripes, the
 # measurement is not measuring blur and the comparison below means nothing.
