@@ -40,6 +40,17 @@ Pill {
             NotificationService.toggleDnd();
     }
 
+    // The keybind's end of `ipc call notify toggle`. The service has already
+    // decided which monitor should answer, so this is a comparison rather than
+    // a second opinion -- every bar sees the signal and exactly one acts on it.
+    Connections {
+        target: NotificationService
+        function onToggleRequested(monitor) {
+            if (bar.screenName === monitor)
+                bar.showPanel(root, centre);
+        }
+    }
+
     Component {
         id: centre
         // `bar` resolves here and not inside NotificationCentre.qml: a

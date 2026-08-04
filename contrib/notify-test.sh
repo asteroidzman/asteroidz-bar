@@ -177,6 +177,39 @@ sleep 4
 shot burst
 if kill -0 "$QS" 2>/dev/null; then echo alive > "$WORK/burst-alive"; else echo dead > "$WORK/burst-alive"; fi
 
+# ── the keybind's end of it ─────────────────────────────────────────────────
+#
+# swaync had `swaync-client -t`, so replacing swaync without an equivalent
+# would leave every existing Super+n binding silently doing nothing. Last of
+# all, because `clear` empties the list every assertion above measures.
+qsipc() { timeout 5 quickshell -p "$HERE/shell/shell.qml" ipc call notify "$@" 2>/dev/null; }
+
+qsipc state | tr -d '\n' > "$WORK/ipc-state"
+qsipc quiet | tr -d '\n' > "$WORK/ipc-quiet"
+qsipc quiet | tr -d '\n' > "$WORK/ipc-quiet2"
+qsipc clear | tr -d '\n' > "$WORK/ipc-clear"
+sleep 2
+qsipc state | tr -d '\n' > "$WORK/ipc-state2"
+
+# Toggled TWICE, and the claim is that the screen differs between the two.
+#
+# Neither a single shot nor a before-and-after works here. A single shot cannot
+# tell a panel from a leftover toast -- measured against a build with no
+# `notify` target at all, that version reported 127009 px and passed, because
+# `clear` had failed too and what it measured was the burst still on screen.
+# And a before-and-after assumes the panel starts closed, which it does not:
+# the click test above opened it and nothing closed it, so the first toggle
+# CLOSED the centre and the ink went 20613 -> 0.
+#
+# Two toggles need no such assumption. Whichever way round the shell starts,
+# one of these shots has a panel in it and the other does not.
+qsipc toggle | tr -d '\n' > "$WORK/ipc-toggle"
+sleep 2
+shot ipctoggle1
+qsipc toggle >/dev/null 2>&1
+sleep 2
+shot ipctoggle2
+
 # Still alive? That is the assertion. A crashed shell draws nothing, so every
 # pixel check below would report zero and blame the wrong thing.
 if kill -0 "$QS" 2>/dev/null; then echo alive > "$WORK/alive"; else echo dead > "$WORK/alive"; fi
@@ -290,6 +323,53 @@ if [ "$POPUP_ONE" -gt $((POPUP_QUIET + 2000)) ]; then
 	ok "a notification puts a popup on screen ($POPUP_QUIET -> $POPUP_ONE px)"
 else
 	bad "a notification puts a popup on screen ($POPUP_QUIET -> $POPUP_ONE px)"
+fi
+
+# ── what a keybind can ask for ──────────────────────────────────────────────
+IPC_STATE="$(cat "$WORK/ipc-state" 2>/dev/null)"
+IPC_QUIET="$(cat "$WORK/ipc-quiet" 2>/dev/null)"
+IPC_QUIET2="$(cat "$WORK/ipc-quiet2" 2>/dev/null)"
+IPC_CLEAR="$(cat "$WORK/ipc-clear" 2>/dev/null)"
+IPC_STATE2="$(cat "$WORK/ipc-state2" 2>/dev/null)"
+IPC_TOGGLE="$(cat "$WORK/ipc-toggle" 2>/dev/null)"
+
+case "$IPC_STATE" in
+	''|*[!0-9]*) bad "the unread count is readable over IPC (got '${IPC_STATE:-<nothing>}')" ;;
+	0) bad "the unread count is readable over IPC (got 0 with notifications present)" ;;
+	*) ok "the unread count is readable over IPC ($IPC_STATE unread)" ;;
+esac
+
+# Both directions. A toggle that only ever reports "quiet" is a toggle that
+# does not toggle, and one call cannot tell the difference.
+if [ "$IPC_QUIET" = "quiet" ] && [ "$IPC_QUIET2" = "audible" ]; then
+	ok "quiet toggles both ways over IPC ($IPC_QUIET -> $IPC_QUIET2)"
+else
+	bad "quiet toggles both ways over IPC (got '$IPC_QUIET' then '$IPC_QUIET2')"
+fi
+
+if [ "$IPC_CLEAR" = "$IPC_STATE" ] && [ "$IPC_STATE2" = "0" ]; then
+	ok "clear empties the centre and says how many ($IPC_CLEAR cleared)"
+else
+	bad "clear empties the centre and says how many (cleared '$IPC_CLEAR' of '$IPC_STATE', left '$IPC_STATE2')"
+fi
+
+# The monitor it names is the one that answered, which is what makes this
+# work on more than one screen.
+if [ "$IPC_TOGGLE" = "$HL_MON" ]; then
+	ok "toggle names the monitor that answered ($IPC_TOGGLE)"
+else
+	bad "toggle names the monitor that answered (got '$IPC_TOGGLE', wanted '$HL_MON')"
+fi
+
+# And it actually moves the centre: one of the two shots has a panel in it and
+# the other does not. See the note beside the toggles for why this is not a
+# before-and-after.
+T1="$(below_bar_px ipctoggle1)"
+T2="$(below_bar_px ipctoggle2)"
+if [ "$T1" -gt $((T2 + 2000)) ] || [ "$T2" -gt $((T1 + 2000)) ]; then
+	ok "toggle opens and closes the notification centre ($T1 <-> $T2 px)"
+else
+	bad "toggle opens and closes the notification centre ($T1 <-> $T2 px)"
 fi
 
 echo

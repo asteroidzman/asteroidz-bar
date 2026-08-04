@@ -27,6 +27,10 @@ pragma Singleton
 // list of things you already missed.
 
 import Quickshell
+// IpcHandler, for the keybind at the bottom of this file. Its absence does not
+// fail locally: the whole shell refuses to load, blaming the first singleton in
+// the chain rather than this one.
+import Quickshell.Io
 import Quickshell.Services.Notifications
 import QtQuick
 import "."
@@ -234,5 +238,67 @@ Singleton {
     function invoke(action) {
         if (action)
             action.invoke();
+    }
+
+    // ── reachable from a keybind ────────────────────────────────────────────
+    //
+    // swaync had a client for this: `swaync-client -t -sw` toggled the panel,
+    // `-d` set do-not-disturb, and every keypress was a whole process spawned
+    // to speak to a daemon over D-Bus. The daemon is this shell, so the bind
+    // calls straight in:
+    //
+    //     Super+n { spawn "qs -p /usr/share/asteroidz-bar/shell.qml ipc call notify toggle"; }
+    //
+    // Replacing swaync without replacing this would have left every existing
+    // Super+n binding silently doing nothing.
+    signal toggleRequested(string monitor)
+
+    // Which bar should answer. A key press does not know which screen you are
+    // looking at and the compositor cannot pass it -- the bind spawns a command
+    // line, and that process has no notion of focus by the time it runs. The
+    // shell has it already, so the resolution happens here, the same way
+    // `wallpaper nextFocused` does it.
+    //
+    // Resolved once, here, rather than in each pill: with every bar comparing
+    // against `Compositor.focusedMonitor` itself, a moment when focus is
+    // unknown opens the centre on every monitor at once.
+    function focusedBarMonitor() {
+        if (Compositor.focusedMonitor !== "")
+            return Compositor.focusedMonitor;
+        // Before the first focus event -- at startup, or on a compositor that
+        // never sent one. Somewhere is better than nowhere.
+        const screens = Quickshell.screens;
+        return screens && screens.length > 0 ? screens[0].name : "";
+    }
+
+    IpcHandler {
+        target: "notify"
+
+        // Opens the centre, or closes it if this bar's popover is already up:
+        // `Bar.showPanel` is itself a toggle, so pressing the bind twice is
+        // open-then-close rather than open-then-open.
+        function toggle(): string {
+            const mon = root.focusedBarMonitor();
+            if (mon === "")
+                return "no screens";
+            root.toggleRequested(mon);
+            return mon;
+        }
+
+        // `quiet`, not `dnd`, so it does not shadow the property of that name.
+        function quiet(): string {
+            root.toggleDnd();
+            return root.dnd ? "quiet" : "audible";
+        }
+
+        function clear(): string {
+            const n = root.count;
+            root.clearAll();
+            return String(n);
+        }
+
+        function state(): string {
+            return String(root.count) + (root.dnd ? " quiet" : "");
+        }
     }
 }

@@ -168,6 +168,33 @@ notify {
 }
 ```
 
+### From a keybind
+
+swaync had `swaync-client -t`, so dropping swaync without an equivalent would
+leave every existing `Super+n` binding silently doing nothing. The bind calls
+the shell directly instead — no client process in between:
+
+```kdl
+Super+n { spawn "qs -p /usr/share/asteroidz-bar/shell.qml ipc call notify toggle"; }
+```
+
+| | |
+|---|---|
+| `toggle` | opens the centre, or closes it if it is already up; returns the monitor that answered |
+| `quiet` | do not disturb, both ways; returns `quiet` or `audible` |
+| `clear` | dismisses everything waiting; returns how many there were |
+| `state` | the unread count, plus `quiet` when silenced |
+
+`toggle` resolves the monitor itself, the same way `wallpaper nextFocused`
+does: a key press does not know which screen you are looking at and the
+compositor cannot pass it, since the bind spawns a command line and that
+process has no notion of focus by the time it runs. The shell knows already.
+
+The resolution happens once, in the service, rather than in each bar comparing
+itself against `Compositor.focusedMonitor` — with every bar deciding for
+itself, a moment when focus is unknown opens the centre on every screen at
+once.
+
 ## Settings
 
 The **asteroidz ship** on the bar — the chip leading the tags — opens a real
