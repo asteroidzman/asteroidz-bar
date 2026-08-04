@@ -20,6 +20,11 @@ depends=(
   'libheif' 'libpng'
 )
 makedepends=('meson' 'ninja' 'wayland-protocols' 'git')
+# It owns org.freedesktop.Notifications itself, so it satisfies anything asking
+# for a notification daemon. Not `conflicts`: having swaync installed is fine,
+# running it alongside this is what does not work, and that is a session
+# question rather than a packaging one.
+provides=('notification-daemon')
 optdepends=(
   'asteroidz: the compositor this draws the bar for'
   'inotify-tools: the wallpaper browser notices files added to the folder while it is open'
