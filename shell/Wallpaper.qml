@@ -155,20 +155,46 @@ Singleton {
     // hotkeys, set-wallpaper.sh -- so changing it here means they all agree
     // without any of them knowing about this shell.
     function setKey(key, value) {
+        const one = ({});
+        one[key] = value;
+        setKeys(one);
+    }
+
+    // Several keys in ONE pass, because two setKey calls in the same turn lose
+    // the first.
+    //
+    // Each one starts from `conf.text()`, and the FileView has not re-read the
+    // file in between -- our own write is deliberately not reported by the
+    // watcher, or it would loop -- so the second call reads text that predates
+    // the first and writes it straight back over it. With two monitors that
+    // showed up as a cycle advancing the second screen and silently dropping
+    // the first, which looks exactly like the loop skipping a monitor.
+    function setKeys(pairs) {
+        const keys = Object.keys(pairs);
+        if (keys.length === 0)
+            return;
+
         const lines = [];
-        let replaced = false;
+        const seen = ({});
         for (const line of conf.text().split("\n")) {
             if (!line.trim())
                 continue;
-            if (line.startsWith(key + "=")) {
-                lines.push(key + "=" + value);
-                replaced = true;
+            let matched = "";
+            for (const key of keys)
+                if (line.startsWith(key + "=")) {
+                    matched = key;
+                    break;
+                }
+            if (matched !== "") {
+                lines.push(matched + "=" + pairs[matched]);
+                seen[matched] = true;
             } else {
                 lines.push(line);
             }
         }
-        if (!replaced)
-            lines.push(key + "=" + value);
+        for (const key of keys)
+            if (!seen[key])
+                lines.push(key + "=" + pairs[key]);
 
         const text = lines.join("\n") + "\n";
         conf.setText(text);
@@ -483,9 +509,64 @@ Singleton {
     }
 
     function advance() {
-        const file = pick(path);
-        if (file !== "")
-            setWallpaper(file);
+        // Every screen that has a sequence of its own, and then the shared one.
+        //
+        // This used to move the shared wallpaper and nothing else, which in
+        // per-monitor scope is the one wallpaper that may be on no screen at
+        // all: a monitor with an override ignores it. Override both monitors --
+        // which is what setting each screen's wallpaper from the settings page
+        // does -- and the cycle timer fired on schedule for the whole hour and
+        // changed nothing anybody could see.
+        //
+        // The shared path still advances, because that is what a screen with no
+        // override of its own is showing. What this must NOT do is give such a
+        // screen an override: an absent key means "follow the shared one", and
+        // writing one here would silently opt every monitor out of it.
+        // Collected and written in ONE pass. A setKey per monitor loses all but
+        // the last of them -- see setKeys.
+        const pairs = ({});
+        let last = "";
+        let everyScreenOverridden = scope === "per-monitor"
+            && backdrop.outputs.length > 0;
+
+        if (scope === "per-monitor") {
+            for (const name of backdrop.outputs) {
+                const current = wallpaperFor(name);
+                if (current === "") {
+                    // No override: this screen is showing the shared one, so
+                    // advancing that is what moves it.
+                    everyScreenOverridden = false;
+                    continue;
+                }
+                const file = pick(current);
+                if (file === "" || file === current)
+                    continue;
+                pairs["wallpaper." + name] = file;
+                last = file;
+            }
+        }
+
+        // Exactly one re-theme per tick, and from a picture that is on a screen.
+        //
+        // apply() already re-themes whenever the shared path changes, so
+        // advancing it AND calling rethemeFrom would run matugen twice. When
+        // every screen has an override the shared wallpaper is on none of them,
+        // so it is left alone entirely: advancing it would tone the desktop for
+        // a picture nobody can see and burn a matugen run doing it.
+        if (!everyScreenOverridden) {
+            const shared = pick(path);
+            if (shared !== "" && shared !== path)
+                pairs["wallpaper"] = shared;
+        }
+
+        if (Object.keys(pairs).length === 0)
+            return;
+        setKeys(pairs);
+
+        // Only when the shared path did not move; apply() has already re-themed
+        // if it did.
+        if (everyScreenOverridden && last !== "")
+            rethemeFrom(last);
     }
 
     // The next wallpaper after `from`, per `order`. Shared by the timer, the

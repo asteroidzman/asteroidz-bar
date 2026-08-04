@@ -373,6 +373,47 @@ else
 	bad "...and wraps back to the first (got '$got')"
 fi
 
+# ── cycling with every screen overridden ────────────────────────────────────
+#
+# The case the cycle timer did nothing in, and it is the normal one: set each
+# screen's wallpaper from the settings page and BOTH monitors have an override,
+# so the shared wallpaper is on no screen at all. `advance()` moved only that
+# one, so the timer fired on schedule for a whole hour and changed nothing
+# anybody could see.
+#
+# Driven through `next`, which is the function the timer calls -- see the note
+# above about not waiting out an interval to find out.
+if [ -n "$SECOND" ]; then
+	printf 'folder=%s\nwallpaper=%s\nmode=fill\nwallpaper-scope=per-monitor\nwallpaper.%s=%s\nwallpaper.%s=%s\norder=sequential\ninterval=0\nretheme=0\n' \
+		"$CYCDIR" "$CYCDIR/a.png" \
+		"$HL_MON" "$CYCDIR/a.png" \
+		"$SECOND" "$CYCDIR/b.png" > "$WORK/wallpaper.conf"
+	sleep 3
+	qs_ipc next >/dev/null
+	sleep 2
+
+	got1="$(grep "^wallpaper\.$HL_MON=" "$WORK/wallpaper.conf" | cut -d= -f2-)"
+	got2="$(grep "^wallpaper\.$SECOND=" "$WORK/wallpaper.conf" | cut -d= -f2-)"
+	shared="$(grep '^wallpaper=' "$WORK/wallpaper.conf" | cut -d= -f2-)"
+
+	if [ "$got1" = "$CYCDIR/b.png" ] && [ "$got2" = "$CYCDIR/c.png" ]; then
+		ok "cycling advances every overridden screen, not just the shared one"
+	else
+		bad "cycling advances every overridden screen (got '$got1' and '$got2')"
+	fi
+
+	# And leaves the shared one alone, because nothing is showing it. Moving it
+	# would re-theme the desktop from a picture on no screen -- apply()
+	# re-themes on any shared change -- and burn a matugen run per tick.
+	if [ "$shared" = "$CYCDIR/a.png" ]; then
+		ok "...and leaves the shared wallpaper alone when no screen shows it"
+	else
+		bad "...and leaves the shared wallpaper alone when no screen shows it (got '$shared')"
+	fi
+else
+	echo "  ..   skipped the overridden-cycle case: no second output"
+fi
+
 # ── nextFocused: the one a keybind can actually use ─────────────────────────
 #
 # A key press has no idea which screen you are looking at, and the compositor
