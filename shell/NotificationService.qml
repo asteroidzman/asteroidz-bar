@@ -61,6 +61,19 @@ Singleton {
             // notification is destroyed the moment the handler returns, and the
             // popup would be drawing a dangling object.
             n.tracked = true;
+
+            // And this is what keeps it from becoming one LATER.
+            //
+            // A notification can go away without anybody here asking: the
+            // sender closes it, or the server expires it. The object is
+            // destroyed when that happens, and `popups` is a plain JS array
+            // holding a reference -- so the next time it was reassigned, the
+            // Repeater regenerated its delegates over a dangling pointer and
+            // the shell segfaulted inside QQmlIncubator. Not a rare race
+            // either: any application that withdraws its own notification does
+            // exactly this.
+            n.closed.connect(function() { root.hidePopup(n); });
+
             root.arrived(n);
         }
     }
@@ -116,7 +129,10 @@ Singleton {
     property var popups: []
 
     function showPopup(n) {
-        const next = popups.slice();
+        // Filtered on the way in as well as on the way out. `closed` covers
+        // the notifications this shell is told about; this covers anything
+        // that leaves the model by a route nobody signalled.
+        const next = popups.filter(p => p);
         next.push(n);
         // Oldest first out. A stack that grows without bound covers the screen,
         // and the ones at the bottom are the ones already read.
@@ -126,7 +142,7 @@ Singleton {
     }
 
     function hidePopup(n) {
-        popups = popups.filter(p => p !== n);
+        popups = popups.filter(p => p && p !== n);
     }
 
     readonly property int maxPopups: BarConfig.numOf("notify", "max-popups", 4)
@@ -153,9 +169,36 @@ Singleton {
             ? 0 : defaultTimeout;
     }
 
+    // ── why the popup is raised on the NEXT turn ────────────────────────────
+    //
+    // `arrived` is emitted from inside DBusNotificationServer::Notify -- the
+    // D-Bus method call itself. Building the popup list there reassigns
+    // `popups`, which is a Repeater's model, so the Repeater regenerated and
+    // incubated a delegate over a Notification the server had not finished
+    // setting up yet. That segfaults inside QQmlIncubator, and it took the
+    // whole shell down: three crash reports, all with Notify at the bottom of
+    // the stack and QQuickRepeater::setModel at the top.
+    //
+    // Queued and drained once, rather than a callLater per notification: a
+    // burst arriving in one turn should cost one model rebuild, not one each,
+    // and Qt.callLater collapses repeated calls to the same function.
+    property var pending: []
+
     onArrived: n => {
-        if (!dnd)
-            showPopup(n);
+        if (dnd)
+            return;
+        const q = pending.slice();
+        q.push(n);
+        pending = q;
+        Qt.callLater(drainPending);
+    }
+
+    function drainPending() {
+        const q = pending;
+        pending = [];
+        for (const n of q)
+            if (n)
+                showPopup(n);
     }
 
     // ── acting on them ──────────────────────────────────────────────────────

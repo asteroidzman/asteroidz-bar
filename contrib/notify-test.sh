@@ -72,7 +72,7 @@ cat > "$WORK/run.sh" <<'INNER'
 #!/usr/bin/env bash
 set -u
 WORK="$1"; HERE="$2"; SIG="$3"; WL="$4"; XRD="$5"; QMLROOT="$6"; BAR_CONF="$7"
-MON="$8"
+MON="$8"; VPTR="$9"; EW="${10}"; EH="${11}"
 
 env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" \
@@ -95,7 +95,10 @@ shot quiet
 
 # A real notification, sent the way any application sends one.
 notify() { # notify <summary> <body>
-	gdbus call --session \
+	# Bounded. gdbus blocks until the method returns, so a shell that died
+	# mid-call leaves it waiting for ever -- which turned a crash into a test
+	# that hung until its outer timeout and reported nothing at all.
+	timeout 5 gdbus call --session \
 		--dest org.freedesktop.Notifications \
 		--object-path /org/freedesktop/Notifications \
 		--method org.freedesktop.Notifications.Notify \
@@ -111,13 +114,81 @@ notify "Third" "and a third"
 sleep 3
 shot three
 
+# A sender WITHDRAWING its own notification while it is STILL ON SCREEN, which
+# is the case that crashed the shell: the object is destroyed when it closes,
+# the popup list held a plain reference, and the next reassignment of that list
+# regenerated Repeater delegates over a dangling pointer -- segfault inside
+# QQmlIncubator. Any application that closes its own notification does this.
+#
+# The timeout has to outlast the withdrawal. Closing one that has already
+# expired proves nothing, because expiry took it out of the list first -- which
+# is exactly how the first version of this case passed against the bug.
+STICKY="$(gdbus call --session \
+	--dest org.freedesktop.Notifications \
+	--object-path /org/freedesktop/Notifications \
+	--method org.freedesktop.Notifications.Notify \
+	"notify-test" 0 "" "Sticky" "withdrawn while on screen" "[]" "{}" 60000 \
+	2>/dev/null | grep -oE '[0-9]+' | head -1)"
+sleep 2
+gdbus call --session \
+	--dest org.freedesktop.Notifications \
+	--object-path /org/freedesktop/Notifications \
+	--method org.freedesktop.Notifications.CloseNotification "${STICKY:-1}" \
+	>/dev/null 2>&1
+sleep 1
+# ...and then another arrives, which is what reassigns the list.
+notify "Fourth" "after a withdrawal"
+sleep 3
+shot withdrawn
+
+# With a PANEL OPEN, which is the state every crash report was taken in: each
+# one has `Sending event "opened"` to a tray menu immediately before the fault.
+# A popover has a Repeater of its own, so a notification arriving while one is
+# incubating is the case where a second regenerate lands mid-incubation.
+"$VPTR" $((EW - 30)) 33 "$EW" "$EH" >/dev/null 2>&1
+sleep 1
+"$VPTR" $((EW - 30)) 33 "$EW" "$EH" click >/dev/null 2>&1
+sleep 2
+for i in 1 2 3; do
+	notify "WithPanel $i" "arriving while the centre is open" &
+done
+for _ in $(seq 1 30); do jobs -pr | grep -q . || break; sleep 0.5; done
+sleep 3
+if kill -0 "$QS" 2>/dev/null; then echo alive > "$WORK/panel-alive"; else echo dead > "$WORK/panel-alive"; fi
+shot withpanel
+
+# A BURST, which is what actually crashed the shell.
+#
+# `arrived` is emitted from inside the D-Bus Notify call, so building the popup
+# list there reassigned a Repeater's model and made it incubate a delegate over
+# a Notification the server had not finished setting up. Three crash reports,
+# every one with Notify at the bottom of the stack and QQuickRepeater::setModel
+# at the top. One notification at a time rarely hits it; several in the same
+# turn do, which is why this sends them without pausing.
+for i in 1 2 3 4 5 6 7 8; do
+	notify "Burst $i" "arriving with no gap between them" &
+done
+# Bounded too: `wait` on a hung sender is the same trap one level up.
+for _ in $(seq 1 40); do
+	jobs -pr | grep -q . || break
+	sleep 0.5
+done
+sleep 4
+shot burst
+if kill -0 "$QS" 2>/dev/null; then echo alive > "$WORK/burst-alive"; else echo dead > "$WORK/burst-alive"; fi
+
+# Still alive? That is the assertion. A crashed shell draws nothing, so every
+# pixel check below would report zero and blame the wrong thing.
+if kill -0 "$QS" 2>/dev/null; then echo alive > "$WORK/alive"; else echo dead > "$WORK/alive"; fi
+
 kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
 INNER
 chmod +x "$WORK/run.sh"
 
 setsid dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
-	"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" "$HL_MON"
+	"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" "$HL_MON" \
+	"$HL_WLVPTR" "$HL_PTR_EXTENT_W" "$HL_PTR_EXTENT_H"
 
 # How much of the bell is drawn in the accent? That is the whole state: the
 # glyph is tinted with the accent when something is unread and with the
@@ -155,6 +226,24 @@ if [ "$(cat "$WORK/owned" 2>/dev/null)" = "yes" ]; then
 	ok "the shell owns org.freedesktop.Notifications"
 else
 	bad "the shell owns org.freedesktop.Notifications"
+fi
+
+if [ "$(cat "$WORK/alive" 2>/dev/null)" = "alive" ]; then
+	ok "a sender withdrawing its own notification does not crash the shell"
+else
+	bad "a sender withdrawing its own notification does not crash the shell"
+fi
+
+if [ "$(cat "$WORK/panel-alive" 2>/dev/null)" = "alive" ]; then
+	ok "a notification arriving with the centre open does not crash the shell"
+else
+	bad "a notification arriving with the centre open does not crash the shell"
+fi
+
+if [ "$(cat "$WORK/burst-alive" 2>/dev/null)" = "alive" ]; then
+	ok "a burst of notifications does not crash the shell"
+else
+	bad "a burst of notifications does not crash the shell"
 fi
 
 QUIET="$(accent_px quiet)"
