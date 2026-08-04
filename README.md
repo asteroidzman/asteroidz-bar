@@ -26,6 +26,38 @@ with `Xft.dpi: 168` renders the bar 1.75× too large.
 Point it at a working tree instead of the installed copy with
 `ASTEROIDZ_BAR_SHELL=/path/to/shell/shell.qml asteroidz-bar`.
 
+### Restarting it
+
+Find the running instances through quickshell's own registry, never by matching
+a command line:
+
+```sh
+qs list --all
+```
+
+**A crashed-and-restarted bar has a different `argv` from the one you launched.**
+Quickshell supervises its own shell: when the shell faults, the supervisor
+writes a crash report and re-execs, and the replacement's command line is a bare
+`/usr/bin/quickshell` with no arguments at all — no `-p`, no shell path. So
+anything that selects processes by `qs -p .../asteroidz-bar/shell.qml` sees a
+clean slate while a fully live bar is still drawing, still holding
+`org.freedesktop.Notifications`, and still spawning plugins. That is how you end
+up looking at two bars and a restart that reported success. `qs list --all`
+shows both, keyed by instance id and shell id.
+
+Two follow-on traps once you have the ids:
+
+- **`qs kill -i <id>` kills the shell, not the supervisor.** The supervisor
+  treats that exactly like a crash: it writes a report, pops the "Quickshell has
+  crashed" dialog, and restarts the shell under a *new* instance id with the
+  same pid. To actually stop a bar, signal the process itself.
+- **A crash leaks the shell's children.** Graceful exit reaps them
+  (see [Plugins have to die with the bar](#plugins-have-to-die-with-the-bar)),
+  but a `SIGKILL`ed shell cannot, so every crash-restart cycle strands another
+  generation of `asteroidz-bar-*` plugins and one `inotifywait` on `~/Pictures`.
+  Four crashes left four watchers and some twenty unreaped zombies. Sweep them
+  by explicit pid afterwards.
+
 ## How it talks to the compositor
 
 One unix socket, newline-delimited JSON, the same one `amsg` uses
@@ -258,10 +290,23 @@ process is the cost, not the line count.
 `Super+y` no longer spawns anything:
 
 ```
-Super+y { spawn "qs -p /usr/share/asteroidz-bar/shell.qml ipc call wallpaper next"; }
+Super+y { spawn "qs -p /usr/share/asteroidz-bar/shell.qml ipc call wallpaper nextFocused"; }
 ```
 
-`wallpaper` exposes `next`, `set <file>` and `current`.
+`nextFocused` rather than `next`, because a wallpaper is a per-monitor thing.
+`next` advances the *shared* wallpaper, which a monitor carrying an override of
+its own then ignores — so on a two-monitor setup with one overridden, `next`
+looks like the keybind does nothing at all. `nextFocused` advances whichever
+monitor has the focus, which is the one the person pressing the key is looking
+at.
+
+`wallpaper` exposes `next`, `nextFocused`, `nextOn <monitor>`, `set <file>`,
+`setOn <monitor> <file>`, `current`, `currentOn <monitor>` and `monitors`.
+
+Note the argument order in that keybind: `-p` is a top-level option *and* an
+option of the `ipc` subcommand, so both `qs -p <shell> ipc call …` and
+`qs ipc -p <shell> call …` reach a running instance, and neither launches a
+second shell.
 
 **Two things were deliberately dropped.** The script kept a *theme cache* keyed
 by image identity, so revisiting a wallpaper restored the generated files
