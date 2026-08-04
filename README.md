@@ -129,7 +129,7 @@ what a notification looked like, three things that are this shell's business.
 
 | | |
 |---|---|
-| **toast** | a card per notification, top-right under the bar, on every screen |
+| **toast** | a card per notification, top-right under the bar, on every screen — frosted and shadowed like every other panel |
 | **bell** | tinted with the accent while anything is waiting, and carrying the count |
 | **centre** | left-click the bell: everything waiting, with **clear all** |
 | **quiet** | right-click the bell, or the button in the centre |
@@ -137,6 +137,20 @@ what a notification looked like, three things that are this shell's business.
 Hovering a toast stops its clock — reading something is the clearest possible
 signal that it should not be taken away mid-sentence — and it resumes when the
 pointer leaves.
+
+The toasts are frosted, one blurred region per card rather than one behind the
+stack: the cards are 8px apart on a surface taller than all of them together,
+and the wallpaper has to show through the gaps. They cast the same shadow the
+bar's panels do — the space for it was always reserved and nothing drew one,
+so they sat flat on the desktop while every other panel had depth.
+
+This works on a desktop with `effects { blur { layer #false } }`, which is the
+common case. asteroidz treats a client-supplied region as an explicit opt-in
+that overrides the global layer switch — *"a client region is an explicit
+opt-in, an empty one an opt-out"* — and that is also how `panel { blur }` turns
+the frost off: an empty region rather than no region, since an absent one would
+fall back to the global switch. That setting had been read into `Cfg.panelBlur`
+and used by nothing at all, so until now it did nothing anywhere.
 
 **Quiet suppresses the popup, never the notification.** What arrives still
 arrives, still lands in the centre and is still counted by the bell. A
@@ -953,6 +967,11 @@ contrib/media-test.sh      # the media module, with a player and no sound
 contrib/notify-test.sh     # notifications end to end: the shell takes the bus
                            #   name, a real Notify call tints the bell and puts a
                            #   popup on screen, and each one gets its own card
+contrib/notify-blur-test.sh # the toasts are frosted, measured over a STRIPED
+                           #   wallpaper as the loss of that contrast, with the
+                           #   same shot at `panel { blur #false }` as the
+                           #   control. Separate from notify-test because blur
+                           #   is invisible on the flat backdrop that test uses
 contrib/click-test.sh      # what the bar DOES when clicked: popovers open and
                            #   dismiss, plugin menus, plugin forms and their
                            #   fields, the power menu's confirmation, and the

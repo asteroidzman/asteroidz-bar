@@ -10,6 +10,7 @@ import Quickshell
 import Quickshell.Widgets
 import Quickshell.Services.Notifications
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import "."
 
 Rectangle {
@@ -35,6 +36,39 @@ Rectangle {
     // the whole card, which is unreadable against a themed palette.
     border.width: critical ? 1 : 0
     border.color: Cfg.urgent
+
+    // ── the shadow ──────────────────────────────────────────────────────────
+    //
+    // The same geometry Panel.qml draws for the bar's slab, because this is
+    // the same object: a translucent rounded panel floating over the
+    // wallpaper. NotificationPopups already reserved the margin for it -- see
+    // `shadowRoom` there -- and then nothing drew one, so the toasts sat flat
+    // on the desktop while every other panel in the shell had depth.
+    //
+    // Only in the toasts. A card in the centre is a row inside a panel that
+    // has a shadow of its own, and shadows under rows inside a shadowed panel
+    // read as clutter rather than depth.
+    //
+    // See Panel.qml for why RectangularGlow rather than MultiEffect, why
+    // `spread` is 0, and why the alpha is halved -- the reasoning is identical
+    // and is not repeated here.
+    RectangularGlow {
+        readonly property int delta: Cfg.panelShadowSize
+        readonly property int reach: delta + Math.ceil(Cfg.panelShadowBlur * 2)
+
+        anchors.centerIn: parent
+        width: root.width
+        height: root.height
+        anchors.verticalCenterOffset: Math.round(delta / 3)
+
+        cornerRadius: Cfg.panelRadius + delta
+        glowRadius: reach
+        spread: 0
+        color: Qt.rgba(Cfg.panelShadowColor.r, Cfg.panelShadowColor.g,
+                       Cfg.panelShadowColor.b, Cfg.panelShadowColor.a * 0.5)
+        visible: root.timed && Cfg.panelShadow && Cfg.panelEnable
+        z: -1
+    }
 
     // The countdown. Restarted whenever the notification changes, so a card
     // reused by the Repeater for a different notification does not inherit the

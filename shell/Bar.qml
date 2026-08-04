@@ -91,18 +91,27 @@ PanelWindow {
     // where the rounded slab does instead of leaving square ears at the
     // corners. Only non-empty sections contribute, so the gaps between groups
     // stay genuinely transparent.
+    // `panel { blur #false }` turns it off, which until now it did not: the
+    // setting was read into Cfg.panelBlur and then used by nothing at all, so
+    // the bar asked for frost whatever the config said.
+    //
+    // Off is expressed as a region with no area rather than as no region. The
+    // compositor reads those differently on purpose -- "a client region is an
+    // explicit opt-in, an empty one an opt-out" -- and an absent region falls
+    // back to the global `effects { blur { layer } }`, which would leave the
+    // switch still not working on a desktop that has that turned on.
     WlrLayershell.BackgroundEffect.blurRegion: Region {
         regions: [
             Region {
-                item: leftPanel
+                item: Cfg.panelBlur ? leftPanel : null
                 radius: Cfg.panelRadius
             },
             Region {
-                item: centerPanel
+                item: Cfg.panelBlur ? centerPanel : null
                 radius: Cfg.panelRadius
             },
             Region {
-                item: rightPanel
+                item: Cfg.panelBlur ? rightPanel : null
                 radius: Cfg.panelRadius
             }
         ]

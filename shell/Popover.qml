@@ -215,8 +215,10 @@ PopupWindow {
     // The frost, asked for the same way the bar asks: the region carries the
     // corner radius, so the blur ends where the rounded panel does and the
     // shadow margin around it stays clear.
+    // A null item leaves a region with no area, which the compositor reads as
+    // an explicit opt-out -- see the note in Bar.qml.
     BackgroundEffect.blurRegion: Region {
-        item: panelBox
+        item: Cfg.panelBlur ? panelBox : null
         radius: Cfg.panelRadius
     }
 
