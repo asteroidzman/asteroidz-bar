@@ -235,6 +235,63 @@ sleep 4
 shot dndafter
 qsipc state | tr -d '\n' > "$WORK/ipc-dnd-after"
 
+# ── clearing a lot of them at once ──────────────────────────────────────────
+#
+# `clear all` is pressed from the OPEN centre, and that is the expensive state:
+# the centre's Repeater takes `list` as its model, `list` is rebuilt on every
+# dismissal, and a Repeater given a fresh array destroys and recreates every
+# delegate it has. Dismissing one at a time is therefore quadratic in cards --
+# and a card is not cheap, it has an icon, styled text and a RectangularGlow.
+#
+# Measured rather than eyeballed, because "feels slow" does not bisect.
+# 200, not 40. The cost is quadratic in cards, so 40 is comfortably under
+# the knee: it measured 290ms on a real desktop with the bug fully present,
+# while 200 measured 7790ms. A budget set against 40 would have watched this
+# regression sail past.
+#
+# Sequential rather than 200 background jobs, which is a fork storm that
+# measures the harness.
+for i in $(seq 1 200); do
+	notify "Bulk $i" "one of many"
+done
+sleep 3
+qsipc state | tr -d '\n' > "$WORK/bulk-before"
+qsipc toggle >/dev/null 2>&1     # open the centre: the state clear is used in
+sleep 2
+
+# Measured as CPU BURNT, not as how long the call took to return.
+#
+# The call returns as soon as clearAll's loop ends -- 302ms even with the
+# quadratic rebuild in place -- because the delegate churn it causes happens on
+# later frames. Timing the IPC round trip therefore reports a number that has
+# nothing to do with the fifteen seconds a person sits through.
+#
+# The shell's own utime+stime does capture it: rebuilding every card in the
+# centre once per dismissal is work, and work shows up here whichever frame it
+# lands on.
+cpu_ms() { awk '{print int(($14 + $15) * 10)}' "/proc/$QS/stat" 2>/dev/null || echo 0; }
+
+CPU_BEFORE="$(cpu_ms)"
+CLEAR_START="$(date +%s%N)"
+qsipc clear >/dev/null 2>&1
+
+# Until the shell goes quiet again: two consecutive half-seconds with no CPU
+# moved, or 30s, whichever is first.
+prev=-1; stable=0
+for _ in $(seq 1 60); do
+	sleep 0.5
+	cur="$(cpu_ms)"
+	if [ "$cur" = "$prev" ]; then stable=$((stable + 1)); else stable=0; fi
+	[ "$stable" -ge 2 ] && break
+	prev="$cur"
+done
+CLEAR_END="$(date +%s%N)"
+CPU_AFTER="$(cpu_ms)"
+
+echo $(( (CLEAR_END - CLEAR_START) / 1000000 - 1000 )) > "$WORK/clear-ms"
+echo $(( CPU_AFTER - CPU_BEFORE )) > "$WORK/clear-cpu-ms"
+qsipc state | tr -d '\n' > "$WORK/bulk-after"
+
 # Still alive? That is the assertion. A crashed shell draws nothing, so every
 # pixel check below would report zero and blame the wrong thing.
 if kill -0 "$QS" 2>/dev/null; then echo alive > "$WORK/alive"; else echo dead > "$WORK/alive"; fi
@@ -482,6 +539,39 @@ if [ "${BELL_QUIET:-99999}" -lt $((BELL_LOUD - 10)) ]; then
 	ok "quiet drops the count from the bell (${BELL_LOUD}px -> ${BELL_QUIET}px wide)"
 else
 	bad "quiet drops the count from the bell (${BELL_LOUD}px -> ${BELL_QUIET}px wide)"
+fi
+
+# ── clearing in bulk ────────────────────────────────────────────────────────
+BULK_BEFORE="$(cat "$WORK/bulk-before" 2>/dev/null)"
+BULK_AFTER="$(cat "$WORK/bulk-after" 2>/dev/null)"
+CLEAR_MS="$(cat "$WORK/clear-ms" 2>/dev/null)"
+BULK_B="${BULK_BEFORE%% *}"
+BULK_A="${BULK_AFTER%% *}"
+
+if [ "${BULK_B:-0}" -ge 200 ] 2>/dev/null; then
+	ok "200 notifications are waiting to be cleared ($BULK_B)"
+else
+	bad "200 notifications are waiting to be cleared (got '$BULK_BEFORE')"
+fi
+
+if [ "${BULK_A:-x}" = "0" ]; then
+	ok "...and clear empties every one of them"
+else
+	bad "...and clear empties every one of them (left '$BULK_AFTER')"
+fi
+
+# A budget, not a benchmark, and measured in CPU rather than wall clock.
+#
+# Dismissing one at a time rebuilds the centre's whole delegate list per
+# notification, which is quadratic in cards -- fifteen seconds for a few dozen
+# on a real desktop. 2000ms of CPU is far above what a batched clear of 40
+# needs and far below the 7790ms the quadratic cost at this count, so it does
+# not flake on a loaded machine but still fails if the quadratic comes back.
+CLEAR_CPU="$(cat "$WORK/clear-cpu-ms" 2>/dev/null)"
+if [ "${CLEAR_CPU:-99999}" -lt 2000 ]; then
+	ok "...in one batch, not one rebuild each (${CLEAR_CPU}ms cpu, settled in ${CLEAR_MS}ms)"
+else
+	bad "...in one batch, not one rebuild each (${CLEAR_CPU}ms cpu, settled in ${CLEAR_MS}ms)"
 fi
 
 echo
