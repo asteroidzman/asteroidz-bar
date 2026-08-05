@@ -18,8 +18,14 @@ import ".."
 Row {
     id: root
 
+    // This bar's size factor -- see Sizes.qml.
+    readonly property real f:
+        QsWindow.window && QsWindow.window.uiFactor !== undefined
+            ? QsWindow.window.uiFactor : 1
+    function px(v) { return Math.round(v * f); }
+
     property var bar: null
-    spacing: Cfg.spacing
+    spacing: px(Cfg.spacing)
 
     // Artwork with no label, so the run is spaced by an exact gap and the
     // pills carry no padding of their own.

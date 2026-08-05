@@ -9,11 +9,18 @@
 // and a control that changes size when you use it moves out from under the
 // pointer.
 
+import Quickshell
 import QtQuick
 import ".."
 
 Pill {
     id: root
+
+    // This bar's size factor -- see Sizes.qml.
+    readonly property real f:
+        QsWindow.window && QsWindow.window.uiFactor !== undefined
+            ? QsWindow.window.uiFactor : 1
+    function px(v) { return Math.round(v * f); }
 
     property string screenName: ""
 
@@ -42,7 +49,7 @@ Pill {
 
     // A chip, like the tags -- bar_kind_is_chips() covers TAGS and LAYOUT --
     // so it takes the tag padding, not the narrower status-pill one.
-    paddingX: Cfg.tagPadding
+    paddingX: px(Cfg.tagPadding)
     chip: true
 
     onClicked: button => {

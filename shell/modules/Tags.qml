@@ -11,6 +11,7 @@
 // there white. Those last two are literals in the compositor too -- they are
 // tints applied over whatever the panel is, not theme colours.
 
+import Quickshell
 import QtQuick
 import ".."
 import "../settings"
@@ -18,8 +19,14 @@ import "../settings"
 Row {
     id: root
 
+    // This bar's size factor -- see Sizes.qml.
+    readonly property real f:
+        QsWindow.window && QsWindow.window.uiFactor !== undefined
+            ? QsWindow.window.uiFactor : 1
+    function px(v) { return Math.round(v * f); }
+
     property string screenName: ""
-    spacing: Cfg.spacing
+    spacing: px(Cfg.spacing)
 
     // A run of chips: the trims are the outermost pill's, and a chip trims
     // nothing (its background IS the edge you see).
@@ -73,7 +80,7 @@ Row {
             text: modelData.label
             icons: modelData.icons
             iconsAfterText: true
-            paddingX: Cfg.tagPadding
+            paddingX: root.px(Cfg.tagPadding)
             chip: true
 
             // An urgent colour is chosen to read against the BAR, so it

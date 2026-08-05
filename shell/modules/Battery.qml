@@ -16,11 +16,18 @@
 // both. The clash does not report itself as a clash -- it surfaces as "Type
 // ModuleLoader unavailable" and a bar that is simply not there.
 
+import Quickshell
 import QtQuick
 import ".."
 
 Pill {
     id: root
+
+    // This bar's size factor -- see Sizes.qml.
+    readonly property real f:
+        QsWindow.window && QsWindow.window.uiFactor !== undefined
+            ? QsWindow.window.uiFactor : 1
+    function px(v) { return Math.round(v * f); }
 
     property var bar: null
 
@@ -31,7 +38,7 @@ Pill {
     text: BatteryService.label
     // Icon-and-text, so this one keeps the theme's padding rather than the zero
     // the icon-only pills use.
-    paddingX: Cfg.pillPadding
+    paddingX: px(Cfg.pillPadding)
 
     onClicked: button => {
         if (button !== Qt.LeftButton || !bar)
