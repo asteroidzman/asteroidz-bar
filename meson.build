@@ -1,7 +1,7 @@
 project(
 	'asteroidz-bar',
 	['c', 'cpp'],
-	version: '0.3.1',
+	version: '0.3.2',
 	license: 'MIT',
 	meson_version: '>=0.59.0',
 	default_options: ['cpp_std=c++20'],
