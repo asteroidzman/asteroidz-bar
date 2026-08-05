@@ -202,6 +202,9 @@ notify {
 	icon-size 38        // unset: 1.8 ems
 	centre-height 427   // the centre scrolls past this; unset: 20 ems
 	dnd #false
+	sound #false        // audible notifications, off unless asked for
+	sound-name "message-new-instant"
+	sound-theme "freedesktop"
 }
 ```
 
@@ -216,6 +219,41 @@ raising the theme's size grew the text inside a box that stayed put. That is
 also why *Reset sizes* **removes** the keys rather than writing today's numbers
 back: a number equal to the current default is still a pinned number, and it
 would stop following the font the moment the theme changed.
+
+### Audible notifications
+
+Off unless asked for — a desktop that starts making noise because it was
+updated is worse than one that never made any. `sound #true`, or the toggle on
+the settings page.
+
+**A name, not a path.** `sound-name` is from the freedesktop sound-naming spec,
+looked up through the installed sound theme and falling back to freedesktop's,
+so it follows whatever theme is on the machine instead of hardcoding one
+distribution's file layout. The lookup walks `XDG_DATA_HOME` and
+`XDG_DATA_DIRS` for `sounds/<theme>/stereo/<name>.{oga,ogg,wav}`.
+
+The spec's hints are honoured, in its own order of specificity:
+
+| | |
+|---|---|
+| `suppress-sound` | the sender says stay silent — it has usually just made its own noise |
+| `sound-file` | an exact file, played as given |
+| `sound-name` | a themed name, looked up like any other |
+
+and only failing all three is the configured default used.
+
+**Quiet silences it too**, which is the point of quiet: a notification that is
+quieted but still audible is not quieted.
+
+Played with `pw-play`, which ships in **pipewire-audio** — anything with
+working desktop audio already has it, so this adds no dependency. One
+short-lived process per notification, which is the right trade for something
+that happens a few times an hour, and fire-and-forget, so a missing player or a
+busy sink cannot block the D-Bus call it is reached from.
+
+Note that an application playing its *own* sound is beyond a notification
+daemon's reach — it never goes near the notification protocol, and quiet cannot
+silence it. That is a setting inside the application.
 
 ### From a keybind
 

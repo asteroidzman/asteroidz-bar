@@ -33,6 +33,9 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Notifications
 import QtQuick
+// Paths.resolve, for the sound theme lookup: "which of these files exists" is
+// the one thing QML cannot answer on its own.
+import Asteroidz.Bar
 import "."
 
 Singleton {
@@ -191,6 +194,81 @@ Singleton {
             ? 0 : defaultTimeout;
     }
 
+    // ── audible notifications ───────────────────────────────────────────────
+    //
+    // Off unless asked for, and silent while quiet -- which is the point. A
+    // notification that is quieted but still makes a noise is not quieted, and
+    // that is exactly how this desktop found out the sound was coming from
+    // somewhere else entirely.
+    //
+    // Played with `pw-play`, which ships in pipewire-audio: anything with
+    // working desktop audio already has it, so this adds no dependency. It is
+    // one short-lived process per notification, which is the right trade for
+    // an event that happens a few times an hour -- and it is fire-and-forget,
+    // so a missing player or a busy sink cannot block the D-Bus call this is
+    // reached from.
+    //
+    // The spec's own hints are honoured, in its own order of specificity:
+    //
+    //   suppress-sound  the sender says stay silent. It is asking for a reason
+    //                   -- it has usually just made its own noise.
+    //   sound-file      an exact file, played as given.
+    //   sound-name      a themed name, looked up like any other.
+    //
+    // and only failing all three does the configured default get used.
+    function announce(n) {
+        if (!Cfg.notifySound)
+            return;
+        const hints = (n && n.hints) || ({});
+        const suppress = hints["suppress-sound"];
+        if (suppress === true || suppress === 1 || suppress === "true")
+            return;
+
+        const file = hints["sound-file"];
+        if (file) {
+            play(String(file));
+            return;
+        }
+        const named = soundPath(String(hints["sound-name"] || Cfg.notifySoundName));
+        if (named !== "")
+            play(named);
+    }
+
+    function play(file) {
+        // Detached rather than a Process object: two notifications close
+        // together would otherwise fight over one `running`, and the second
+        // would either be dropped or cut the first off mid-sound.
+        Quickshell.execDetached(["pw-play", file]);
+    }
+
+    // The XDG sound theme lookup, which is the whole reason a NAME is better
+    // than a path: `message-new-instant` is whatever the installed theme says
+    // it is, and falls back to freedesktop's, which every sound theme package
+    // depends on.
+    function soundPath(name) {
+        if (name === "")
+            return "";
+        const home = Quickshell.env("HOME") || "";
+        const dataHome = Quickshell.env("XDG_DATA_HOME")
+            || (home === "" ? "" : home + "/.local/share");
+        const roots = [];
+        if (dataHome !== "")
+            roots.push(dataHome);
+        for (const dir of String(Quickshell.env("XDG_DATA_DIRS")
+                                 || "/usr/local/share:/usr/share").split(":"))
+            if (dir !== "")
+                roots.push(dir);
+
+        const themes = [Cfg.notifySoundTheme, "freedesktop"];
+        const candidates = [];
+        for (const root of roots)
+            for (const theme of themes)
+                for (const ext of [".oga", ".ogg", ".wav"])
+                    candidates.push(root + "/sounds/" + theme + "/stereo/"
+                                    + name + ext);
+        return Paths.resolve(candidates);
+    }
+
     // ── why the popup is raised on the NEXT turn ────────────────────────────
     //
     // `arrived` is emitted from inside DBusNotificationServer::Notify -- the
@@ -207,8 +285,12 @@ Singleton {
     property var pending: []
 
     onArrived: n => {
+        // Quiet silences the sound as well as the popup, and it is the same
+        // early return that does both: "do not disturb" that still makes a
+        // noise is not do-not-disturb.
         if (dnd)
             return;
+        announce(n);
         const q = pending.slice();
         q.push(n);
         pending = q;

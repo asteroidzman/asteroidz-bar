@@ -30,6 +30,7 @@ optdepends=(
   'inotify-tools: the wallpaper browser notices files added to the folder while it is open'
   'cava: the media visualiser'
   'pipewire: the volume module'
+  'pipewire-audio: audible notifications (pw-play)'
   'grim: contrib/tray-test.sh'
 )
 # The released tag, not the local checkout. This is the same shape asteroidz's

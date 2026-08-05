@@ -135,6 +135,17 @@ Singleton {
     readonly property int notifyTimeout: num(notify, "timeout", 5000)
     readonly property int notifyMaxPopups: num(notify, "max-popups", 4)
     readonly property bool notifyDnd: flag(notify, "dnd", false)
+
+    // Off by default. A desktop that starts making noise because it was
+    // updated is worse than one that never made any.
+    readonly property bool notifySound: flag(notify, "sound", false)
+    // A name from the freedesktop sound-naming spec, not a path, so it follows
+    // whatever sound theme is installed rather than hardcoding one
+    // distribution's file layout.
+    readonly property string notifySoundName:
+        str(notify, "sound-name", "message-new-instant")
+    readonly property string notifySoundTheme:
+        str(notify, "sound-theme", "freedesktop")
     // The artwork's box on a card. Also font-derived, so the icon keeps its
     // proportion to the text beside it.
     readonly property int notifyIconSize:

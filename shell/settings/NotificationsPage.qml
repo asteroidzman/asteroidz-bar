@@ -78,6 +78,55 @@ Item {
 
         Item { width: 1; height: Cfg.spacing }
 
+        // ── sound ───────────────────────────────────────────────────────────
+        FormRow {
+            width: parent.width
+            label: "Sound"
+            control: Toggle {
+                on: Cfg.notifySound
+                onToggled: value => page.set("sound", value)
+            }
+        }
+
+        FormRow {
+            width: parent.width
+            visible: Cfg.notifySound
+            label: "Sound name"
+            control: Field {
+                value: Cfg.notifySoundName
+                onCommitted: v => page.set("sound-name", v)
+            }
+        }
+
+        FormRow {
+            width: parent.width
+            visible: Cfg.notifySound
+            label: "Sound theme"
+            control: Field {
+                value: Cfg.notifySoundTheme
+                onCommitted: v => page.set("sound-theme", v)
+            }
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "A name from the freedesktop sound-naming spec — "
+                  + "<i>message-new-instant</i>, <i>bell</i>, <i>complete</i> — "
+                  + "not a path, so it follows whatever sound theme is "
+                  + "installed. A sender that names its own sound gets that "
+                  + "one, and a sender asking for silence is given it.<br><br>"
+                  + "Played with <i>pw-play</i>, from pipewire-audio. Quiet "
+                  + "silences this too."
+            textFormat: Text.StyledText
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Item { width: 1; height: Cfg.spacing }
+
         // ── how long, how many ──────────────────────────────────────────────
         //
         // The sliders write on RELEASE, not on every move: `moved` fires

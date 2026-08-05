@@ -43,6 +43,19 @@ mkdir -p "$QMLROOT/Asteroidz/Bar" "$WORK/bin"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
 cp "$HERE/plugin/qmldir" "$QMLROOT/Asteroidz/Bar/"
 
+# A stand-in for the sound player, first on PATH.
+#
+# Audible notifications are asserted by what the shell ASKS to be played, not
+# by listening: a test that needed a sound card would not run anywhere, and a
+# real pw-play on a headless machine writes to a sink nobody can inspect.
+# This records the argument and exits, which is the whole contract -- the shell
+# resolves a themed name to a file and hands it over.
+cat > "$WORK/bin/pw-play" <<'STUB'
+#!/bin/sh
+echo "$@" >> "$SOUND_LOG"
+STUB
+chmod +x "$WORK/bin/pw-play"
+
 magick -size "${HL_WIDTH}x${HL_HEIGHT}" xc:'#9db8d8' "$WORK/wall.png"
 printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WORK" "$WORK/wall.png" \
 	> "$WORK/wallpaper.conf"
@@ -74,7 +87,11 @@ set -u
 WORK="$1"; HERE="$2"; SIG="$3"; WL="$4"; XRD="$5"; QMLROOT="$6"; BAR_CONF="$7"
 MON="$8"; VPTR="$9"; EW="${10}"; EH="${11}"
 
+SOUND_LOG="$WORK/sounds.log"
+: > "$SOUND_LOG"
+
 env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
+	PATH="$WORK/bin:$PATH" SOUND_LOG="$SOUND_LOG" \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" \
 	ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
@@ -291,6 +308,56 @@ CPU_AFTER="$(cpu_ms)"
 echo $(( (CLEAR_END - CLEAR_START) / 1000000 - 1000 )) > "$WORK/clear-ms"
 echo $(( CPU_AFTER - CPU_BEFORE )) > "$WORK/clear-cpu-ms"
 qsipc state | tr -d '\n' > "$WORK/bulk-after"
+
+# ── audible notifications ───────────────────────────────────────────────────
+#
+# Asserted by what the shell asks to be PLAYED. See the stub pw-play, first on
+# this process's PATH.
+#
+# Last, and after the bulk clear on purpose: with sound on, 200 notifications
+# would be 200 spawned players.
+notify_hint() { # notify_hint <summary> <hints-dict>
+	timeout 5 gdbus call --session \
+		--dest org.freedesktop.Notifications \
+		--object-path /org/freedesktop/Notifications \
+		--method org.freedesktop.Notifications.Notify \
+		"notify-test" 0 "" "$1" "sound" "[]" "$2" 3000 >/dev/null 2>&1
+}
+
+# Quiet is still on from the stage above; audible has to be off for this.
+qsipc quiet >/dev/null 2>&1
+
+# Off by default: nothing is played until it is asked for.
+notify "Silent" "sound is not configured"
+sleep 2
+wc -l < "$SOUND_LOG" | tr -d ' ' > "$WORK/sound-off"
+
+# Now switch it on, through the config file the settings page writes.
+cat >> "$BAR_CONF" <<'CONF'
+notify { sound #true }
+CONF
+sleep 3
+
+notify "Audible" "the configured default"
+sleep 2
+cp "$SOUND_LOG" "$WORK/sound-default"
+
+# A sender naming its own sound gets that one, not the default.
+notify_hint "Named" "{'sound-name': <'bell'>}"
+sleep 2
+cp "$SOUND_LOG" "$WORK/sound-named"
+
+# ...and a sender asking for silence is given it.
+notify_hint "Hushed" "{'suppress-sound': <true>}"
+sleep 2
+wc -l < "$SOUND_LOG" | tr -d ' ' > "$WORK/sound-after-suppress"
+
+# Quiet silences it too, which is the point of quiet.
+qsipc quiet >/dev/null 2>&1
+sleep 1
+notify "Quieted" "while do-not-disturb is on"
+sleep 2
+wc -l < "$SOUND_LOG" | tr -d ' ' > "$WORK/sound-after-quiet"
 
 # Still alive? That is the assertion. A crashed shell draws nothing, so every
 # pixel check below would report zero and blame the wrong thing.
@@ -572,6 +639,48 @@ if [ "${CLEAR_CPU:-99999}" -lt 2000 ]; then
 	ok "...in one batch, not one rebuild each (${CLEAR_CPU}ms cpu, settled in ${CLEAR_MS}ms)"
 else
 	bad "...in one batch, not one rebuild each (${CLEAR_CPU}ms cpu, settled in ${CLEAR_MS}ms)"
+fi
+
+# ── audible notifications ───────────────────────────────────────────────────
+SND_OFF="$(cat "$WORK/sound-off" 2>/dev/null)"
+SND_DEFAULT="$(tail -1 "$WORK/sound-default" 2>/dev/null)"
+SND_NAMED="$(tail -1 "$WORK/sound-named" 2>/dev/null)"
+SND_AFTER_SUPPRESS="$(cat "$WORK/sound-after-suppress" 2>/dev/null)"
+SND_AFTER_QUIET="$(cat "$WORK/sound-after-quiet" 2>/dev/null)"
+SND_DEFAULT_N="$(wc -l < "$WORK/sound-default" 2>/dev/null | tr -d ' ')"
+SND_NAMED_N="$(wc -l < "$WORK/sound-named" 2>/dev/null | tr -d ' ')"
+
+if [ "${SND_OFF:-1}" = "0" ]; then
+	ok "nothing is played until sound is turned on"
+else
+	bad "nothing is played until sound is turned on (${SND_OFF} plays)"
+fi
+
+# The configured default, resolved from a NAME through the sound theme to a
+# real file -- which is the part worth asserting, since a name that resolves to
+# nothing would play silence and look identical from the outside.
+case "$SND_DEFAULT" in
+	*/sounds/*message-new-instant.*)
+		ok "a notification plays the configured sound ($(basename "$SND_DEFAULT"))" ;;
+	*) bad "a notification plays the configured sound (got '${SND_DEFAULT:-nothing}')" ;;
+esac
+
+case "$SND_NAMED" in
+	*/sounds/*bell.*)
+		ok "...and a sender's own sound-name wins over it ($(basename "$SND_NAMED"))" ;;
+	*) bad "...and a sender's own sound-name wins over it (got '${SND_NAMED:-nothing}')" ;;
+esac
+
+if [ "${SND_AFTER_SUPPRESS:-0}" = "${SND_NAMED_N:-x}" ]; then
+	ok "...and suppress-sound is honoured (still $SND_AFTER_SUPPRESS plays)"
+else
+	bad "...and suppress-sound is honoured ($SND_NAMED_N -> $SND_AFTER_SUPPRESS plays)"
+fi
+
+if [ "${SND_AFTER_QUIET:-0}" = "${SND_AFTER_SUPPRESS:-x}" ]; then
+	ok "...and quiet silences it too (still $SND_AFTER_QUIET plays)"
+else
+	bad "...and quiet silences it too ($SND_AFTER_SUPPRESS -> $SND_AFTER_QUIET plays)"
 fi
 
 echo
