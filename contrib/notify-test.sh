@@ -50,9 +50,22 @@ cp "$HERE/plugin/qmldir" "$QMLROOT/Asteroidz/Bar/"
 # real pw-play on a headless machine writes to a sink nobody can inspect.
 # This records the argument and exits, which is the whole contract -- the shell
 # resolves a themed name to a file and hands it over.
+# It also checks the file OPENS. Logging the argument alone is not enough: the
+# first version of this feature handed pw-play a `file://` URL, which the real
+# player cannot open and which every "does it mention the right sound" pattern
+# matches perfectly. The stub said yes, the desktop stayed silent.
 cat > "$WORK/bin/pw-play" <<'STUB'
 #!/bin/sh
-echo "$@" >> "$SOUND_LOG"
+for arg in "$@"; do
+	case "$arg" in
+		-*) continue ;;
+	esac
+	if [ -r "$arg" ]; then
+		echo "$arg" >> "$SOUND_LOG"
+	else
+		echo "UNPLAYABLE $arg" >> "$SOUND_LOG"
+	fi
+done
 STUB
 chmod +x "$WORK/bin/pw-play"
 
@@ -358,6 +371,7 @@ sleep 1
 notify "Quieted" "while do-not-disturb is on"
 sleep 2
 wc -l < "$SOUND_LOG" | tr -d ' ' > "$WORK/sound-after-quiet"
+cp "$SOUND_LOG" "$WORK/sound-after-quiet-log"
 
 # Still alive? That is the assertion. A crashed shell draws nothing, so every
 # pixel check below would report zero and blame the wrong thing.
@@ -660,13 +674,13 @@ fi
 # real file -- which is the part worth asserting, since a name that resolves to
 # nothing would play silence and look identical from the outside.
 case "$SND_DEFAULT" in
-	*/sounds/*message-new-instant.*)
+	/*/sounds/*message-new-instant.*)
 		ok "a notification plays the configured sound ($(basename "$SND_DEFAULT"))" ;;
 	*) bad "a notification plays the configured sound (got '${SND_DEFAULT:-nothing}')" ;;
 esac
 
 case "$SND_NAMED" in
-	*/sounds/*bell.*)
+	/*/sounds/*bell.*)
 		ok "...and a sender's own sound-name wins over it ($(basename "$SND_NAMED"))" ;;
 	*) bad "...and a sender's own sound-name wins over it (got '${SND_NAMED:-nothing}')" ;;
 esac
@@ -681,6 +695,16 @@ if [ "${SND_AFTER_QUIET:-0}" = "${SND_AFTER_SUPPRESS:-x}" ]; then
 	ok "...and quiet silences it too (still $SND_AFTER_QUIET plays)"
 else
 	bad "...and quiet silences it too ($SND_AFTER_SUPPRESS -> $SND_AFTER_QUIET plays)"
+fi
+
+# Nothing was handed to the player that it could not open. This is the
+# assertion the `file://` bug walked straight past: the shell asked for the
+# right SOUND by the wrong kind of NAME.
+if ! grep -q UNPLAYABLE "$WORK/sound-after-quiet-log" 2>/dev/null; then
+	ok "...and every path handed to the player can actually be opened"
+else
+	bad "...and every path handed to the player can actually be opened"
+	grep UNPLAYABLE "$WORK/sound-after-quiet-log" | head -3 | sed 's/^/       /'
 fi
 
 echo

@@ -12,6 +12,8 @@
 // reload is the cost of a write.
 
 import QtQuick
+import Quickshell
+import Quickshell.Io
 import "."
 import ".."
 
@@ -19,6 +21,47 @@ Item {
     id: page
 
     implicitHeight: col.implicitHeight
+
+    // ── the installed sound themes ──────────────────────────────────────────
+    //
+    // Discovered rather than listed here, because which themes exist is a
+    // property of the machine: freedesktop is the only one guaranteed, and
+    // this desktop happens to have ocean, gnome and several more.
+    //
+    // A theme is a directory under `<root>/sounds/` -- the same roots the
+    // lookup itself walks -- and it counts only if it actually holds sounds,
+    // so a stray empty directory does not become an option that plays nothing.
+    property var soundThemes: ["freedesktop"]
+
+    Process {
+        id: scanThemes
+        running: true
+        command: ["sh", "-c",
+                  "for r in \"${XDG_DATA_HOME:-$HOME/.local/share}\" "
+                  + "$(echo \"${XDG_DATA_DIRS:-/usr/local/share:/usr/share}\" | tr ':' ' '); do "
+                  + "[ -d \"$r/sounds\" ] || continue; "
+                  + "for t in \"$r\"/sounds/*/; do "
+                  + "[ -d \"$t\" ] || continue; "
+                  + "ls \"$t\" 2>/dev/null | grep -q . && basename \"$t\"; "
+                  + "done; done | sort -u"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const out = [];
+                for (const line of text.split("\n")) {
+                    const t = line.trim();
+                    if (t !== "" && out.indexOf(t) < 0)
+                        out.push(t);
+                }
+                // Whatever is configured stays offered even if it is not
+                // installed: dropping it would silently rewrite the setting to
+                // something else the moment this page was opened.
+                if (out.indexOf(Cfg.notifySoundTheme) < 0)
+                    out.push(Cfg.notifySoundTheme);
+                if (out.length > 0)
+                    page.soundThemes = out;
+            }
+        }
+    }
 
     // Written straight through. `setValue` merges into the group and saves, so
     // a key this page never touches is not disturbed by one that it does.
@@ -102,9 +145,10 @@ Item {
             width: parent.width
             visible: Cfg.notifySound
             label: "Sound theme"
-            control: Field {
-                value: Cfg.notifySoundTheme
-                onCommitted: v => page.set("sound-theme", v)
+            control: Picker {
+                values: page.soundThemes
+                current: Cfg.notifySoundTheme
+                onPicked: v => page.set("sound-theme", v)
             }
         }
 

@@ -266,7 +266,18 @@ Singleton {
                 for (const ext of [".oga", ".ogg", ".wav"])
                     candidates.push(root + "/sounds/" + theme + "/stereo/"
                                     + name + ext);
-        return Paths.resolve(candidates);
+        // Paths.resolve answers with a URL -- QUrl::fromLocalFile().toString()
+        // -- because its other caller hands the result to an Image, which
+        // wants one. A player wants a filesystem path, and `pw-play
+        // file:///usr/share/...` simply fails to open it.
+        //
+        // This is what made the first version of the feature silent while
+        // every test passed: the stub player logged whatever it was given, and
+        // "does it contain /sounds/message-new-instant" is true of the URL too.
+        const found = Paths.resolve(candidates);
+        if (!found.startsWith("file://"))
+            return found;
+        return decodeURIComponent(found.substring("file://".length));
     }
 
     // ── why the popup is raised on the NEXT turn ────────────────────────────
