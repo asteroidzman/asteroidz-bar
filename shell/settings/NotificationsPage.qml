@@ -119,6 +119,29 @@ Item {
             font.hintingPreference: Font.PreferFullHinting
         }
 
+        FormRow {
+            width: parent.width
+            label: "Hide over fullscreen"
+            control: Toggle {
+                on: Cfg.notifyHideOverFullscreen
+                onToggled: value => page.set("hide-over-fullscreen", value)
+            }
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Toasts draw on the overlay layer, above everything — "
+                  + "including a fullscreen film or game, where there is no "
+                  + "way to dismiss one without leaving what you are doing. "
+                  + "Per screen: a film on one monitor leaves the other alone, "
+                  + "and the notification still lands in the centre."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
         Item { width: 1; height: Cfg.spacing }
 
         // ── sound ───────────────────────────────────────────────────────────

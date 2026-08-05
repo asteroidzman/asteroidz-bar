@@ -25,10 +25,27 @@ PanelWindow {
     required property var modelData
     screen: modelData
 
+    readonly property string screenName: modelData ? modelData.name : ""
+
     // Only mapped when there is something to show. A layer surface that exists
     // with nothing in it still takes a frame and still counts as a client with
     // a surface on that output.
+    //
+    // And never over a fullscreen window. This surface is on the OVERLAY
+    // layer, so it draws above everything including a fullscreen client -- a
+    // toast across a film or a game is the one place a notification is
+    // unambiguously an intrusion, and there is no way to dismiss it without
+    // leaving what you are doing.
+    //
+    // The notification is not lost. This hides the POPUP and nothing else, so
+    // it still lands in the centre and the bell still counts it: the same
+    // contract quiet has.
+    //
+    // Per screen, because this window is per screen. A film on one monitor
+    // leaves the other one alone.
     visible: NotificationService.popups.length > 0
+             && !(Cfg.notifyHideOverFullscreen
+                  && Compositor.fullscreenOn(root.screenName))
 
     color: "transparent"
     exclusiveZone: 0

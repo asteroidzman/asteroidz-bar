@@ -202,6 +202,7 @@ notify {
 	icon-size 38        // unset: 1.8 ems
 	centre-height 427   // the centre scrolls past this; unset: 20 ems
 	dnd #false
+	hide-over-fullscreen #true
 	sound #false        // audible notifications, off unless asked for
 	sound-name "message-new-instant"
 	sound-theme "freedesktop"
@@ -219,6 +220,22 @@ raising the theme's size grew the text inside a box that stayed put. That is
 also why *Reset sizes* **removes** the keys rather than writing today's numbers
 back: a number equal to the current default is still a pinned number, and it
 would stop following the font the moment the theme changed.
+
+### Not over a fullscreen window
+
+Toasts are on the **overlay** layer, so they draw above everything — a
+fullscreen film or game included, where there is no way to dismiss one without
+leaving what you are doing. So they are withheld there, per screen: a film on
+one monitor leaves the other alone.
+
+The notification is not lost. This hides the *popup* and nothing else, so it
+still lands in the centre and the bell still counts it — the same contract
+quiet has.
+
+`is_fullscreen` only, never `is_fakefullscreen`: a fake-fullscreen window has
+merely been *told* it is fullscreen and is still tiled with the bar above it,
+so treating it as fullscreen would withhold notifications over an ordinary
+window.
 
 ### Audible notifications
 

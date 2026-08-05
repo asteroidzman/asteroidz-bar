@@ -136,6 +136,13 @@ Singleton {
     readonly property int notifyMaxPopups: num(notify, "max-popups", 4)
     readonly property bool notifyDnd: flag(notify, "dnd", false)
 
+    // On by default, unlike the sound. A toast over a fullscreen film or game
+    // is an intrusion with no way to dismiss it that does not leave what you
+    // are doing, so the useful default is the quiet one -- and the
+    // notification still lands in the centre either way.
+    readonly property bool notifyHideOverFullscreen:
+        flag(notify, "hide-over-fullscreen", true)
+
     // Off by default. A desktop that starts making noise because it was
     // updated is worse than one that never made any.
     readonly property bool notifySound: flag(notify, "sound", false)

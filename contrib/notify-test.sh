@@ -214,6 +214,17 @@ if kill -0 "$QS" 2>/dev/null; then echo alive > "$WORK/burst-alive"; else echo d
 # all, because `clear` empties the list every assertion above measures.
 qsipc() { timeout 5 quickshell -p "$HERE/shell/shell.qml" ipc call notify "$@" 2>/dev/null; }
 
+# `quiet` is a TOGGLE, so a stage that wants a known state has to look first.
+#
+# Blind toggling couples every stage to the one before it: adding the
+# fullscreen stage, which turns quiet off, silently inverted the sound stage
+# below it and failed three assertions that had nothing to do with the change.
+set_quiet() { # set_quiet on|off
+	local want="$1" have
+	case "$(qsipc state)" in *quiet*) have=on ;; *) have=off ;; esac
+	[ "$have" = "$want" ] || qsipc quiet >/dev/null 2>&1
+}
+
 qsipc state | tr -d '\n' > "$WORK/ipc-state"
 qsipc quiet | tr -d '\n' > "$WORK/ipc-quiet"
 qsipc quiet | tr -d '\n' > "$WORK/ipc-quiet2"
@@ -322,6 +333,51 @@ echo $(( (CLEAR_END - CLEAR_START) / 1000000 - 1000 )) > "$WORK/clear-ms"
 echo $(( CPU_AFTER - CPU_BEFORE )) > "$WORK/clear-cpu-ms"
 qsipc state | tr -d '\n' > "$WORK/bulk-after"
 
+# ── not over a fullscreen window ────────────────────────────────────────────
+#
+# The toasts are on the OVERLAY layer, so they draw above everything -- a
+# fullscreen client included. Across a film or a game that is an intrusion with
+# no way to dismiss it that does not leave what you are doing.
+#
+# Quiet OFF, explicitly. Without it this measures quiet and would pass just as
+# well with the feature absent.
+set_quiet off
+sleep 1
+
+notify "Windowed" "visible with no fullscreen client"
+sleep 3
+shot fs_windowed
+
+# A real client, made fullscreen through the compositor's own dispatch -- the
+# module reads is_fullscreen off `watch all-clients`, so nothing short of an
+# actual fullscreen window exercises it.
+if command -v kitty >/dev/null 2>&1; then
+	kitty --title fsclient -o background_opacity=1.0 -o background=#202030 \
+		sh -c 'echo fs; exec sleep 120' > "$WORK/fsclient.log" 2>&1 &
+	FSPID=$!
+	sleep 4
+	env ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" amsg dispatch toggle_fullscreen >/dev/null 2>&1
+	sleep 2
+	env ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" amsg get all-clients 2>/dev/null \
+		| grep -o '"is_fullscreen":true' | head -1 > "$WORK/fs-state"
+
+	# A baseline WITH the fullscreen window up and no new notification.
+	#
+	# Against zero this reads 211200 -- the whole region, because the window is
+	# dark and fills the screen. That is the client, not a toast, and measuring
+	# it as one reported the feature broken while it worked.
+	shot fs_base
+
+	notify "Fullscreened" "must not be drawn over a fullscreen window"
+	sleep 3
+	shot fs_full
+
+	kill "$FSPID" 2>/dev/null
+	sleep 2
+else
+	echo skipped > "$WORK/fs-state"
+fi
+
 # ── audible notifications ───────────────────────────────────────────────────
 #
 # Asserted by what the shell asks to be PLAYED. See the stub pw-play, first on
@@ -337,8 +393,9 @@ notify_hint() { # notify_hint <summary> <hints-dict>
 		"notify-test" 0 "" "$1" "sound" "[]" "$2" 3000 >/dev/null 2>&1
 }
 
-# Quiet is still on from the stage above; audible has to be off for this.
-qsipc quiet >/dev/null 2>&1
+# Audible, explicitly: a quieted notification makes no sound whatever the
+# sound setting says, so this stage would prove nothing with quiet left on.
+set_quiet off
 
 # Off by default: nothing is played until it is asked for.
 notify "Silent" "sound is not configured"
@@ -366,7 +423,7 @@ sleep 2
 wc -l < "$SOUND_LOG" | tr -d ' ' > "$WORK/sound-after-suppress"
 
 # Quiet silences it too, which is the point of quiet.
-qsipc quiet >/dev/null 2>&1
+set_quiet on
 sleep 1
 notify "Quieted" "while do-not-disturb is on"
 sleep 2
@@ -653,6 +710,40 @@ if [ "${CLEAR_CPU:-99999}" -lt 2000 ]; then
 	ok "...in one batch, not one rebuild each (${CLEAR_CPU}ms cpu, settled in ${CLEAR_MS}ms)"
 else
 	bad "...in one batch, not one rebuild each (${CLEAR_CPU}ms cpu, settled in ${CLEAR_MS}ms)"
+fi
+
+# ── not over a fullscreen window ────────────────────────────────────────────
+FS_STATE="$(cat "$WORK/fs-state" 2>/dev/null)"
+if [ "$FS_STATE" = "skipped" ]; then
+	echo "  ..   skipped the fullscreen case: no kitty to make a window with"
+else
+	FS_WINDOWED="$(below_bar_px fs_windowed)"
+	FS_BASE="$(below_bar_px fs_base)"
+	FS_FULL="$(below_bar_px fs_full)"
+	FS_DELTA=$((FS_FULL - FS_BASE))
+	[ "$FS_DELTA" -lt 0 ] && FS_DELTA=$((-FS_DELTA))
+
+	# The premise. Without a client that actually went fullscreen, "no toast
+	# was drawn" below is true for the wrong reason.
+	if [ -n "$FS_STATE" ]; then
+		ok "a client really is fullscreen for the second shot"
+	else
+		bad "a client really is fullscreen for the second shot"
+	fi
+
+	if [ "${FS_WINDOWED:-0}" -gt 2000 ]; then
+		ok "a toast is drawn with no fullscreen client ($FS_WINDOWED px)"
+	else
+		bad "a toast is drawn with no fullscreen client ($FS_WINDOWED px)"
+	fi
+
+	# The DIFFERENCE the notification made, not the absolute ink: a fullscreen
+	# window is itself dark and fills the region being measured.
+	if [ "${FS_DELTA:-99999}" -lt 2000 ]; then
+		ok "...and none over a fullscreen one ($FS_BASE -> $FS_FULL px)"
+	else
+		bad "...and none over a fullscreen one ($FS_BASE -> $FS_FULL px)"
+	fi
 fi
 
 # ── audible notifications ───────────────────────────────────────────────────

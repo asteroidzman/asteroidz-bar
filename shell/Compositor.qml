@@ -85,6 +85,26 @@ Singleton {
         return out;
     }
 
+    // Is a window filling this screen?
+    //
+    // `is_fullscreen` only, never `is_fakefullscreen`. Fake fullscreen is a
+    // window that has been TOLD it is fullscreen while staying in the layout:
+    // it is a tiled window with the bar above it, and treating that as "do not
+    // disturb" would withhold notifications over an ordinary window.
+    //
+    // Asked per screen rather than "is anything fullscreen anywhere". A film on
+    // one monitor is not a reason to withhold a notification from the other,
+    // which is very often the one being worked on.
+    function fullscreenOn(screenName) {
+        void generation;
+        for (let i = 0; i < clients.length; i++) {
+            const c = clients[i];
+            if (c.monitor === screenName && c.is_fullscreen === true)
+                return true;
+        }
+        return false;
+    }
+
     // App ids of the first `limit` windows on a tag, for the icons drawn
     // inside its pill.
     function appIcons(screenName, tag, limit) {
