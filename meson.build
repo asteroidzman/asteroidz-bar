@@ -54,6 +54,7 @@ install_data(
 		'shell/NotificationCard.qml',
 		'shell/NotificationCentre.qml',
 		'shell/AudioPanel.qml',
+		'shell/AudioDeviceRow.qml',
 		'shell/NotificationPopups.qml',
 		'shell/Logo.qml',
 		'shell/IdleService.qml',

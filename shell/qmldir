@@ -32,3 +32,4 @@ NotificationCard 1.0 NotificationCard.qml
 NotificationCentre 1.0 NotificationCentre.qml
 NotificationPopups 1.0 NotificationPopups.qml
 AudioPanel 1.0 AudioPanel.qml
+AudioDeviceRow 1.0 AudioDeviceRow.qml

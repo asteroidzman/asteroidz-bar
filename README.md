@@ -844,13 +844,22 @@ three sections including the gaps between them.
 click mutes; a left click opens a panel.
 
 The panel is **DankMaterialShell's audio panel, ported** — their
-`AudioSliderRow.qml` and `ControlCenter/Details/AudioOutputDetail.qml` — in this
-shell's colours, fonts and radii. A master row whose icon is the mute button and
-whose slider carries the reading, the outputs as cards with the active one
-outlined, and every stream that is actually playing with a slider of its own.
-Picking an output sets the **default** rather than moving what is already
-playing, which is what `pactl set-default-sink` does and what people mean by
-choosing an output.
+`AudioSliderRow.qml`, `InputAudioSliderRow.qml` and the two
+`ControlCenter/Details/Audio*Detail.qml` — in this shell's colours, fonts and
+radii. A master row whose icon is the mute button and whose slider carries the
+reading, the outputs as cards with the active one outlined, the microphone with
+its own row and its own device list, and every stream that is actually playing
+with a slider of its own. Picking a device sets the **default** rather than
+moving what is already playing, which is what `pactl set-default-sink` does and
+what people mean by choosing an output.
+
+**Input is in the same panel, not behind a tab.** DankMaterialShell keeps
+output and input in two detail views because its control centre is a
+full-height surface with room for both; this is a popover with a height cap.
+A tab would also hide the one control here that is reached in a hurry — muting
+a microphone is not something you go looking for a second click to do. The
+whole microphone section is absent on a machine with no input at all, rather
+than present and dead.
 
 It replaces a menu that listed the sinks and stopped there: the level was
 readable only off the pill, setting it meant a wheel gesture with no visible

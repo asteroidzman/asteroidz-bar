@@ -40,17 +40,21 @@ Item {
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property bool have: sink !== null && sink.audio !== null
 
+    readonly property var source: Pipewire.defaultAudioSource
+    readonly property bool haveSource: source !== null && source.audio !== null
+
     // Every node the panel draws, bound at once.
     //
     // A PipeWire node reports whatever it held when it was first seen until
     // something binds it, so an unbound row shows a volume that never moves --
     // which looks exactly like a slider that does not work. The pill only ever
-    // needed the default sink; this needs all of them and the streams too.
+    // needed the default sink; this needs all of them, the sources, and the
+    // streams.
     PwObjectTracker {
         objects: {
             const out = [];
             for (const node of Pipewire.nodes.values) {
-                if (node.audio && node.isSink)
+                if (node.audio)
                     out.push(node);
             }
             return out;
@@ -70,6 +74,25 @@ Item {
             if (a === root.sink)
                 return -1;
             if (b === root.sink)
+                return 1;
+            return name(a).toLowerCase() < name(b).toLowerCase() ? -1 : 1;
+        });
+        return out;
+    }
+
+    // The microphones. Same rule as the sinks, the other way round -- a source
+    // that is a stream is an application RECORDING, not a device.
+    readonly property var sources: {
+        void Pipewire.nodes.values;
+        const out = [];
+        for (const node of Pipewire.nodes.values) {
+            if (node.audio && !node.isSink && !node.isStream)
+                out.push(node);
+        }
+        out.sort((a, b) => {
+            if (a === root.source)
+                return -1;
+            if (b === root.source)
                 return 1;
             return name(a).toLowerCase() < name(b).toLowerCase() ? -1 : 1;
         });
@@ -139,6 +162,22 @@ Item {
         if (volume < 0.67)
             return "asteroidz-bar/volume/vol-med.svg";
         return "asteroidz-bar/volume/vol-high.svg";
+    }
+
+    // A microphone has two states and not four. There is no "quiet mic" glyph
+    // in this icon set and there should not be: a level below half is a normal
+    // way to record, where a volume below half is a thing you did on purpose
+    // and want to see.
+    function micIcon(muted, volume) {
+        return muted || volume <= 0 ? "asteroidz-bar/volume/mic-mute.svg"
+                                    : "asteroidz-bar/volume/mic.svg";
+    }
+
+    // The tint every one of these rows uses: the accent while it is doing
+    // something, the foreground dimmed while it is not.
+    function liveTint(live) {
+        return live ? Cfg.focusBg
+                    : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55);
     }
 
     Column {
@@ -262,59 +301,152 @@ Item {
                 Repeater {
                     model: root.sinks
 
-                    delegate: Rectangle {
-                        id: device
+                    // Sets the DEFAULT rather than moving what is already
+                    // playing, which is what `pactl set-default-sink` does and
+                    // what people mean by picking an output.
+                    delegate: AudioDeviceRow {
                         required property var modelData
-                        readonly property bool current: modelData === root.sink
-
                         width: outputs.width
-                        height: Math.round(Cfg.fontPixelSize * 2.4)
-                        radius: Cfg.themeRadius
-                        color: deviceHover.hovered ? Qt.rgba(1, 1, 1, 0.10)
-                                                   : Qt.rgba(1, 1, 1, 0.05)
-                        border.width: current ? 2 : 1
-                        border.color: current ? Cfg.focusBg : Qt.rgba(1, 1, 1, 0.08)
+                        label: root.name(modelData)
+                        current: modelData === root.sink
+                        onPicked: Pipewire.preferredDefaultAudioSink = modelData
+                    }
+                }
+            }
+        }
 
-                        Column {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.leftMargin: Cfg.panelPadding
-                            anchors.rightMargin: Cfg.panelPadding
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 0
+        // ── the microphone ──────────────────────────────────────────────────
+        //
+        // Below the outputs rather than in a tab of its own, which is where
+        // DankMaterialShell keeps it: their control centre is a full-height
+        // surface with room for two detail views, and this is a popover with a
+        // height cap. A tab would also hide the one control here that is
+        // reached in a hurry -- muting a microphone is not something you go
+        // looking for a second click to do.
+        //
+        // The whole section is absent when there is no input at all, rather
+        // than present and dead. A machine with no microphone should not be
+        // told about the microphone it does not have.
+        Item {
+            width: parent.width
+            visible: root.sources.length > 0
+            height: visible ? Math.max(24, Math.round(Cfg.fontPixelSize * 1.4)) : 0
 
-                            Text {
-                                width: parent.width
-                                text: root.name(device.modelData)
-                                elide: Text.ElideRight
-                                color: Cfg.fg
-                                font.family: Cfg.fontFamily
-                                font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
-                                font.weight: device.current ? Font.DemiBold : Font.Normal
-                                font.hintingPreference: Font.PreferFullHinting
-                            }
+            Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Microphone"
+                color: Cfg.fg
+                font.family: Cfg.fontFamily
+                font.pointSize: Cfg.fontSize
+                font.weight: Font.DemiBold
+                font.hintingPreference: Font.PreferFullHinting
+            }
 
-                            Text {
-                                width: parent.width
-                                text: device.current ? "Active" : "Available"
-                                color: device.current
-                                       ? Cfg.focusBg
-                                       : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
-                                font.family: Cfg.fontFamily
-                                font.pointSize: Math.max(6, Cfg.fontSize * 0.7)
-                                font.hintingPreference: Font.PreferFullHinting
-                            }
-                        }
+            Text {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.haveSource && root.source.audio.muted
+                text: "muted"
+                color: Cfg.urgent
+                font.family: Cfg.fontFamily
+                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                font.hintingPreference: Font.PreferFullHinting
+            }
+        }
 
-                        HoverHandler { id: deviceHover; cursorShape: Qt.PointingHandCursor }
-                        // Sets the DEFAULT rather than moving what is already
-                        // playing, which is what `pactl set-default-sink` does
-                        // and what people mean by picking an output. The panel
-                        // stays up: picking a device is something you may want
-                        // to hear the result of and then adjust.
-                        TapHandler {
-                            onTapped: Pipewire.preferredDefaultAudioSink = device.modelData
-                        }
+        Row {
+            width: parent.width
+            visible: root.sources.length > 0
+            spacing: Cfg.spacing
+            height: visible ? Math.round(Cfg.fontPixelSize * 2) : 0
+
+            Rectangle {
+                id: micButton
+                width: parent.height
+                height: parent.height
+                radius: width / 2
+                color: micHover.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+
+                Icon {
+                    anchors.centerIn: parent
+                    name: root.micIcon(root.haveSource && root.source.audio.muted,
+                                       root.haveSource ? root.source.audio.volume : 0)
+                    size: Math.round(Cfg.fontPixelSize * 1.1)
+                    tint: root.liveTint(root.haveSource && !root.source.audio.muted
+                                        && root.source.audio.volume > 0)
+                }
+
+                HoverHandler { id: micHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    enabled: root.haveSource
+                    onTapped: root.source.audio.muted = !root.source.audio.muted
+                }
+            }
+
+            Slider {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - micButton.width - Cfg.spacing
+                enabled: root.haveSource
+                from: 0
+                to: 100
+                stepSize: 1
+                unit: "%"
+                wheelStep: Cfg.volumeStep
+                target: root.haveSource
+                        ? Math.round(root.source.audio.volume * 100) : 0
+                onMoved: v => {
+                    if (!root.haveSource)
+                        return;
+                    root.source.audio.volume = v / 100;
+                    if (v > 0 && root.source.audio.muted)
+                        root.source.audio.muted = false;
+                }
+            }
+        }
+
+        // ── the inputs ──────────────────────────────────────────────────────
+        //
+        // Listed even when there is only one, which the outputs are too. The
+        // first cut hid a single microphone on the grounds that one device is
+        // not a choice -- and then the panel never said WHICH microphone the
+        // slider above belonged to, on the one machine that has exactly one.
+        Text {
+            width: parent.width
+            visible: root.sources.length > 0
+            text: "Input"
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
+            font.family: Cfg.fontFamily
+            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.weight: Font.DemiBold
+            font.hintingPreference: Font.PreferFullHinting
+        }
+
+        Flickable {
+            width: parent.width
+            visible: root.sources.length > 0
+            height: visible
+                    ? Math.min(inputs.implicitHeight, Math.round(Cfg.fontPixelSize * 9))
+                    : 0
+            contentWidth: width
+            contentHeight: inputs.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            Column {
+                id: inputs
+                width: parent.width
+                spacing: 4
+
+                Repeater {
+                    model: root.sources
+
+                    delegate: AudioDeviceRow {
+                        required property var modelData
+                        width: inputs.width
+                        label: root.name(modelData)
+                        current: modelData === root.source
+                        onPicked: Pipewire.preferredDefaultAudioSource = modelData
                     }
                 }
             }
