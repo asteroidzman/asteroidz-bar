@@ -25,8 +25,10 @@ Arrange 1.0 Arrange.qml
 FormRow 1.0 FormRow.qml
 Picker 1.0 Picker.qml
 Toggle 1.0 Toggle.qml
+Slider 1.0 Slider.qml
 Field 1.0 Field.qml
 singleton NotificationService 1.0 NotificationService.qml
 NotificationCard 1.0 NotificationCard.qml
 NotificationCentre 1.0 NotificationCentre.qml
 NotificationPopups 1.0 NotificationPopups.qml
+AudioPanel 1.0 AudioPanel.qml

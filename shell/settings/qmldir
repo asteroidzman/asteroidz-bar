@@ -8,7 +8,6 @@ singleton Rules 1.0 Rules.qml
 singleton Matugen 1.0 Matugen.qml
 SettingsWindow 1.0 SettingsWindow.qml
 OptionRow 1.0 OptionRow.qml
-Slider 1.0 Slider.qml
 ColorField 1.0 ColorField.qml
 SmallButton 1.0 SmallButton.qml
 DisplaysPage 1.0 DisplaysPage.qml

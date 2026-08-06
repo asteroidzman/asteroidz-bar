@@ -10,9 +10,13 @@
 // silently cap a value the compositor accepts, which is the same class of bug as
 // a UI that clamps and does not say so. The nine unbounded numbers get a text
 // field instead; see OptionRow.
+//
+// It lives beside Toggle and Picker rather than in settings/ because the audio
+// panel wants one too, and a second slider written for that panel would be the
+// same 170 lines with a different bug in it.
 
 import QtQuick
-import ".."
+import "."
 
 Item {
     id: root
@@ -38,6 +42,17 @@ Item {
     property real stepSize: 0
     property int decimals: 0
 
+    // Written after the number. A volume reads "40%"; a blur radius reads
+    // "40", and a settings page that started suffixing units would have to
+    // know one for every option in the schema.
+    property string unit: ""
+
+    // How much one wheel notch moves it, or 0 for no wheel at all -- which is
+    // the default, and is what the settings pages want: their sliders sit in a
+    // scrolling column, and a wheel that changed a value instead of scrolling
+    // past it would edit settings you were only trying to read.
+    property real wheelStep: 0
+
     // Continuous, for the readout and for a throttled preview upstream.
     signal moved(real v)
     // The drag ended. One of these is worth persisting; a hundred `moved` are
@@ -61,7 +76,7 @@ Item {
     }
 
     function fmt(v) {
-        return decimals > 0 ? v.toFixed(decimals) : String(Math.round(v));
+        return (decimals > 0 ? v.toFixed(decimals) : String(Math.round(v))) + unit;
     }
 
     function clampv(v) {
@@ -142,6 +157,25 @@ Item {
             onTapped: eventPoint => {
                 root.seek(eventPoint.position.x);
                 root.released(root.value);
+            }
+        }
+
+        // And a wheel, where the caller asked for one. A volume slider under
+        // the pointer should answer the same gesture the pill does.
+        WheelHandler {
+            enabled: root.wheelStep > 0
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: event => {
+                const d = event.angleDelta.y !== 0 ? event.angleDelta.y
+                                                   : event.angleDelta.x;
+                const v = root.clampv(root.value
+                                      + (d > 0 ? root.wheelStep : -root.wheelStep));
+                if (v !== root.value) {
+                    root.value = v;
+                    root.moved(v);
+                    root.released(v);
+                }
+                event.accepted = true;
             }
         }
     }

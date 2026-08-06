@@ -70,28 +70,25 @@ Pill {
             sink.audio.muted = !sink.audio.muted;
             return;
         }
-        if (button !== Qt.LeftButton || !bar)
-            return;
+        if (button === Qt.LeftButton && bar)
+            bar.showPanel(root, panel);
+    }
 
-        // Every sink that can actually play, with the current one checked.
-        // Picking one sets the DEFAULT rather than moving streams, which is
-        // what `pactl set-default-sink` did and what people mean by "output".
-        const rows = [{
-            text: have ? (muted ? "Muted  " : "Volume  ") + pct + "%"
-                       : "no audio server",
-            enabled: false
-        }, { separator: true }];
-
-        for (const node of Pipewire.nodes.values) {
-            if (!node.isSink || !node.audio)
-                continue;
-            rows.push({
-                text: node.nickname || node.description || node.name,
-                checked: sink && node.id === sink.id,
-                value: String(node.id),
-                node: node
-            });
+    // A panel rather than a menu.
+    //
+    // The menu listed the sinks and stopped there: the level was readable only
+    // off this pill, setting it meant a wheel gesture with no visible target,
+    // and what an individual application was playing at was not shown at all.
+    // See AudioPanel.qml.
+    //
+    // `bar` resolves in this Component and not inside AudioPanel.qml, because
+    // a Component captures the scope it is DECLARED in and the panel is a
+    // separate file that knows nothing about the bar hosting it -- the same
+    // arrangement the notification centre uses.
+    Component {
+        id: panel
+        AudioPanel {
+            onCloseRequested: bar.closeMenu()
         }
-        bar.showMenu(root, rows);
     }
 }

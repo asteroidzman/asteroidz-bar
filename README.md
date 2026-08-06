@@ -838,6 +838,52 @@ Shadows are the shell's own. asteroidz will put a layer shadow behind the whole
 surface, but the surface spans the output — that would be one shadow around all
 three sections including the gaps between them.
 
+## Sound
+
+`volume` in a module list. The pill shows the level and takes a wheel; a middle
+click mutes; a left click opens a panel.
+
+The panel is **DankMaterialShell's audio panel, ported** — their
+`AudioSliderRow.qml` and `ControlCenter/Details/AudioOutputDetail.qml` — in this
+shell's colours, fonts and radii. A master row whose icon is the mute button and
+whose slider carries the reading, the outputs as cards with the active one
+outlined, and every stream that is actually playing with a slider of its own.
+Picking an output sets the **default** rather than moving what is already
+playing, which is what `pactl set-default-sink` does and what people mean by
+choosing an output.
+
+It replaces a menu that listed the sinks and stopped there: the level was
+readable only off the pill, setting it meant a wheel gesture with no visible
+target, and what an individual application was playing at was not shown at all.
+
+Two things in their panel are deliberately not here. **Device pinning** is a
+preference stored in their cache for choosing a default automatically, and
+nothing in this shell would read it. **Per-device artwork** — a headset, a
+television, a speaker — is a symbol font in their shell and illustrated SVGs in
+this one, so there is no glyph to draw; the outline and the word *Active* carry
+it instead.
+
+Everything comes from PipeWire directly. `Quickshell.Services.Pipewire` binds
+the node graph, so a volume is a property to watch rather than a `pactl` to
+fork — but a node reports whatever it held when it was first seen until
+something binds it, so the panel tracks every sink and stream it draws. An
+untracked row is a slider that never moves, which looks exactly like a slider
+that does not work.
+
+The slider itself is `shell/Slider.qml`, which the settings window already had:
+it moved up out of `shell/settings/` rather than being written twice, and gained
+a unit suffix and an optional wheel. The wheel is off by default because a
+settings page scrolls, and a slider that changed a value instead of scrolling
+past it would edit settings you were only trying to read.
+
+`contrib/audio-test.sh` covers the frame of it. The headless compositor has its
+own `XDG_RUNTIME_DIR` and therefore no PipeWire, so there are no sinks to list:
+what it checks is that the click opens a panel with a **slider track** in it,
+measured as a rule at least four pixels thick. Width alone proved nothing — the
+menu this replaced drew a separator the full width of the panel, one pixel
+thick, and the first version of the test called that a slider and passed on a
+build that had no slider in it.
+
 ## The power menu
 
 `power` in a module list. Lock, log out, suspend, hibernate, restart, power off.
