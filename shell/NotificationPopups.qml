@@ -87,8 +87,18 @@ PanelWindow {
     // Room for the panel's shadow to fall outside the cards. A layer surface
     // clips to its own size, so a shadow with no margin is a shadow cut off
     // square down its edge.
+    //
+    // TWICE the blur, which is what the shadow actually reaches: solid out to
+    // `size`, then a gaussian falloff that is spent by about two sigma -- the
+    // same arithmetic Panel.qml's own `reach` uses to size the glow, and the
+    // same room Bar.qml and Popover.qml reserve. This reserved one sigma, so
+    // the outer half of the falloff was clipped and the toast sat in a hard
+    // dark rectangle instead of fading out. The half that survives is the one
+    // still dark enough to see the edge of.
     readonly property int shadowRoom:
-        Cfg.panelShadow ? Cfg.panelShadowSize + Math.ceil(Cfg.panelShadowBlur) : 0
+        Cfg.panelShadow
+            ? Cfg.panelShadowSize + Math.ceil(2 * Cfg.panelShadowBlur)
+            : 0
 
     // The side facing the bar gets the bar's own margin instead of the full
     // shadow room, which is what puts the first toast just under the bar
@@ -159,7 +169,20 @@ PanelWindow {
         x: root.shadowRoom
         y: Cfg.bottom ? root.shadowRoom : root.barGap
         width: root.popupWidth
-        spacing: 8
+
+        // Far enough apart that one card's shadow does not fall on the next.
+        //
+        // This was 8 while the shadow reached `size + 2 * blur` -- 30px on the
+        // shipped theme, 42 before the sizes became font-derived. So every
+        // card's shadow landed twenty-odd pixels into the card below it, as a
+        // rounded rectangle of `panelRadius + size`, right across the heading.
+        // It reads as a dark panel over the text rather than as a shadow,
+        // because at that distance from its own card there is nothing nearby
+        // for the eye to attribute it to.
+        //
+        // Derived rather than picked, so it stays correct when the theme font
+        // changes the shadow with everything else.
+        spacing: Math.max(8, root.shadowRoom)
 
         Repeater {
             id: cards

@@ -111,8 +111,8 @@ chmod +x "$WORK/run.sh"
 # shell rather than agreeing with it by coincidence.
 #
 # BAR_GAP is min(shadowRoom, margin-y), and shadowRoom -- shadow-size plus
-# shadow-blur -- is 28 with the panel settings used here, so it comes out as
-# margin-y.
+# TWICE shadow-blur, the distance the shadow actually reaches -- is 42 with the
+# panel settings used here, so it comes out as margin-y either way.
 CARD_W=380
 BAR_H=48
 MARGIN_X=8

@@ -1152,6 +1152,10 @@ contrib/click-test.sh      # what the bar DOES when clicked: popovers open and
                            #   that only reads out
 contrib/panel-layout-test.sh # the settings window's boxes fit the text in them,
                            #   at three font sizes
+contrib/toast-shadow-test.sh # a toast's shadow fades out rather than being cut
+                           #   off square at the layer surface's own edge,
+                           #   measured as the biggest single-pixel step across
+                           #   the shadow (1 when it fits, 4 when it is clipped)
 contrib/picker-test.sh     # an open dropdown is inside the window it belongs
                            #   to. Run at output scale 1.75, which is the shape
                            #   that made the Displays page's Scale list fall off
