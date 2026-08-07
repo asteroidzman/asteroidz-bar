@@ -1152,6 +1152,10 @@ contrib/click-test.sh      # what the bar DOES when clicked: popovers open and
                            #   that only reads out
 contrib/panel-layout-test.sh # the settings window's boxes fit the text in them,
                            #   at three font sizes
+contrib/picker-test.sh     # an open dropdown is inside the window it belongs
+                           #   to. Run at output scale 1.75, which is the shape
+                           #   that made the Displays page's Scale list fall off
+                           #   the bottom entirely
 contrib/bar-scale-test.sh  # sizing: two outputs running the same mode at
                            #   different scales draw bars whose REAL heights
                            #   differ by exactly that scale, changing one

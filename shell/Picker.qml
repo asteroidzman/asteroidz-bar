@@ -130,16 +130,50 @@ Item {
         parent: root.open && QsWindow.window ? QsWindow.window.contentItem : root
         z: 11
 
-        // Placed by mapping, since the parent is no longer the header's.
+        // Placed by mapping, since the parent is no longer the header's. The
+        // HEADER's own top-left, not the row below it, so the arithmetic below
+        // can put the list on either side of it.
         readonly property point at: root.open && QsWindow.window
-            ? root.mapToItem(QsWindow.window.contentItem, 0, root.rowHeight + 4)
+            ? root.mapToItem(QsWindow.window.contentItem, 0, 0)
             : Qt.point(0, 0)
+        readonly property int winHeight:
+            QsWindow.window ? QsWindow.window.contentItem.height : 0
+
         x: parent === root ? 0 : at.x
-        y: parent === root ? root.rowHeight + 4 : at.y
+
+        // Below the header if it fits, above it if it does not.
+        //
+        // It used to be "below", full stop. A window is not infinitely tall,
+        // and this list is reparented OUT of the scrolling pane, so a list
+        // opened near the bottom was drawn past the window's edge and simply
+        // clipped away -- the row expanded, and there was nothing in the gap to
+        // click. On the Displays page, whose Scale row sits under a monitor
+        // arrangement and two other pickers, that is where the row normally is.
+        //
+        // Reported live at output scale 1.75, where the logical window is short
+        // enough to lose the whole list. It reproduces at any scale on a short
+        // enough window; the scale only decided how much of it went missing.
+        y: {
+            if (parent === root)
+                return root.rowHeight + 4;
+            const below = at.y + root.rowHeight + 4;
+            if (below + height <= winHeight)
+                return below;
+            const above = at.y - 4 - height;
+            if (above >= 0)
+                return above;
+            // Taller than the window on either side: pin it inside and let the
+            // list scroll. Never negative, which would clip the FIRST rows --
+            // the ones a list is usually opened for.
+            return Math.max(0, winHeight - height);
+        }
 
         width: root.width
-        height: Math.min(root.maxRows, Math.max(1, root.values.length))
-                * root.rowHeight + 4
+        // Never taller than the window it is drawn in, whatever maxRows says.
+        height: Math.min(
+                    Math.min(root.maxRows, Math.max(1, root.values.length))
+                        * root.rowHeight + 4,
+                    winHeight > 0 ? winHeight : Number.MAX_VALUE)
         visible: root.open
         radius: Cfg.themeRadius
         color: Cfg.popoverColor
