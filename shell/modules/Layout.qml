@@ -16,12 +16,6 @@ import ".."
 Pill {
     id: root
 
-    // This bar's size factor -- see Sizes.qml.
-    readonly property real f:
-        QsWindow.window && QsWindow.window.uiFactor !== undefined
-            ? QsWindow.window.uiFactor : 1
-    function px(v) { return Math.round(v * f); }
-
     property string screenName: ""
 
     readonly property string symbol: {
@@ -49,7 +43,7 @@ Pill {
 
     // A chip, like the tags -- bar_kind_is_chips() covers TAGS and LAYOUT --
     // so it takes the tag padding, not the narrower status-pill one.
-    paddingX: px(Cfg.tagPadding)
+    paddingX: Cfg.tagPadding
     chip: true
 
     onClicked: button => {

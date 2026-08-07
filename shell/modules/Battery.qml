@@ -23,12 +23,6 @@ import ".."
 Pill {
     id: root
 
-    // This bar's size factor -- see Sizes.qml.
-    readonly property real f:
-        QsWindow.window && QsWindow.window.uiFactor !== undefined
-            ? QsWindow.window.uiFactor : 1
-    function px(v) { return Math.round(v * f); }
-
     property var bar: null
 
     visible: BatteryService.present
@@ -38,7 +32,7 @@ Pill {
     text: BatteryService.label
     // Icon-and-text, so this one keeps the theme's padding rather than the zero
     // the icon-only pills use.
-    paddingX: px(Cfg.pillPadding)
+    paddingX: Cfg.pillPadding
 
     onClicked: button => {
         if (button !== Qt.LeftButton || !bar)

@@ -20,16 +20,8 @@ import "."
 Item {
     id: root
 
-    // This bar's size factor. Read off the window rather than threaded down,
-    // because every visual item here is inside one Bar and QsWindow.window is
-    // that bar -- see Sizes.qml for why sizes differ per output at all.
-    readonly property real f:
-        QsWindow.window && QsWindow.window.uiFactor !== undefined
-            ? QsWindow.window.uiFactor : 1
-    function px(v) { return Math.round(v * f); }
-
     default property alias content: layout.data
-    property int spacing: px(Cfg.moduleSpacing)
+    property int spacing: Cfg.moduleSpacing
 
     // Trimmed off the ends before padding, so the gap from the panel edge to
     // the first thing you can see matches the gap after the last one. Fed by
@@ -50,15 +42,15 @@ Item {
     property bool empty: layout.implicitWidth <= 0
 
     visible: !empty
-    implicitWidth: Math.max(2 * px(Cfg.panelPadding),
+    implicitWidth: Math.max(2 * Cfg.panelPadding,
                             layout.implicitWidth - leadTrim - trailTrim
-                            + 2 * px(Cfg.panelPadding))
-    implicitHeight: px(Cfg.height)
+                            + 2 * Cfg.panelPadding)
+    implicitHeight: Cfg.height
 
     Rectangle {
         id: slab
         anchors.fill: parent
-        radius: px(Cfg.panelRadius)
+        radius: Cfg.panelRadius
         color: Cfg.panelEnable ? Cfg.panelColor : "transparent"
     }
 
@@ -69,7 +61,7 @@ Item {
         // goes NEGATIVE when a pinned pill's reserve exceeds the padding,
         // which is correct: the pill's box hangs outside the slab, its ink
         // does not.
-        x: root.px(Cfg.panelPadding) - root.leadTrim
+        x: Cfg.panelPadding - root.leadTrim
         spacing: root.spacing
     }
 
@@ -96,10 +88,10 @@ Item {
     RectangularGlow {
         id: shadow
 
-        readonly property int delta: root.px(Cfg.panelShadowSize)
+        readonly property int delta: Cfg.panelShadowSize
         // How far the shadow reaches: solid out to `delta`, then the blur's
         // falloff, which for a gaussian is spent by about two sigma.
-        readonly property int reach: delta + Math.ceil(2 * root.px(Cfg.panelShadowBlur))
+        readonly property int reach: delta + Math.ceil(2 * Cfg.panelShadowBlur)
 
         anchors.centerIn: slab
         width: slab.width
@@ -108,7 +100,7 @@ Item {
         // sits under a window.
         anchors.verticalCenterOffset: Math.round(delta / 3)
 
-        cornerRadius: root.px(Cfg.panelRadius) + delta
+        cornerRadius: Cfg.panelRadius + delta
         glowRadius: reach
 
         // Two corrections for the same fact: RectangularGlow is not a

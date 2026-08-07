@@ -18,12 +18,6 @@ import ".."
 Pill {
     id: root
 
-    // This bar's size factor -- see Sizes.qml.
-    readonly property real f:
-        QsWindow.window && QsWindow.window.uiFactor !== undefined
-            ? QsWindow.window.uiFactor : 1
-    function px(v) { return Math.round(v * f); }
-
     readonly property int count: NotificationService.count
     readonly property bool dnd: NotificationService.dnd
 
@@ -46,7 +40,7 @@ Pill {
     readonly property bool showCount: count > 0 && !dnd
 
     text: showCount ? String(count) : ""
-    paddingX: showCount ? px(Cfg.pillPadding) : 0
+    paddingX: showCount ? Cfg.pillPadding : 0
 
     onClicked: button => {
         if (button === Qt.LeftButton)

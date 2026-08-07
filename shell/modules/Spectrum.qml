@@ -26,12 +26,6 @@ import ".."
 Item {
     id: root
 
-    // This bar's size factor -- see Sizes.qml.
-    readonly property real f:
-        QsWindow.window && QsWindow.window.uiFactor !== undefined
-            ? QsWindow.window.uiFactor : 1
-    function px(v) { return Math.round(v * f); }
-
     // Is the visualiser part of the pill at all? Config, nothing else.
     property bool active: false
     // Is there something playing to analyse? cava only runs while there is,
@@ -105,7 +99,7 @@ Item {
     // It used to be given the icon's square -- 28px -- and six bars were
     // divided into it, which came out under four pixels each with a pixel
     // between them: technically a spectrum, visually a texture.
-    readonly property int barWidth: Math.max(5, Math.round(px(Cfg.height) * 0.19))
+    readonly property int barWidth: Math.max(5, Math.round(Cfg.height * 0.19))
     readonly property int barGap: Math.max(2, Math.round(barWidth * 0.35))
     implicitWidth: Cfg.mediaBars * barWidth + (Cfg.mediaBars - 1) * barGap
 

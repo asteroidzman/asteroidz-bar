@@ -22,12 +22,6 @@ import ".."
 Pill {
     id: root
 
-    // This bar's size factor -- see Sizes.qml.
-    readonly property real f:
-        QsWindow.window && QsWindow.window.uiFactor !== undefined
-            ? QsWindow.window.uiFactor : 1
-    function px(v) { return Math.round(v * f); }
-
     // The `custom "<name>" { }` block this pill is, straight from the
     // compositor's config.
     property var plugin: ({})
@@ -87,7 +81,7 @@ Pill {
 
     // Icon-only plugins join the tight run of status artwork; one with a label
     // is padded like any other labelled pill.
-    paddingX: text === "" ? 0 : px(Cfg.pillPadding)
+    paddingX: text === "" ? 0 : Cfg.pillPadding
 
     // ── the process ─────────────────────────────────────────────────────────
 

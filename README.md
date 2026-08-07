@@ -114,6 +114,34 @@ draw.
 Edit it by hand, or use the settings window's **Modules** page, which applies
 as you change it. `monitor=""` is every screen.
 
+## How big everything is
+
+Two numbers, and neither of them lives in this file.
+
+**`theme { font }`, in the compositor's config, sets the size of the bar.**
+Every default in the shell — the bar's height, its margins, the padding inside
+a pill, the panel's corner radius, a notification's width — is a multiple of
+that font's pixel height, so raising the font grows the boxes around the text
+instead of putting bigger text into boxes that stay where they are. One knob,
+and it is the one you would reach for anyway. The multipliers live in
+`Cfg.qml`; each is still overridable per key in `config.kdl` if you want a
+taller bar than its type.
+
+**The output's `scale` sets how big that is in real pixels.** Sizes here are
+Wayland *logical* pixels, and the compositor multiplies a layer surface by the
+scale of the output it is on — so a bar 48 logical pixels tall is 84 real
+pixels on a display at `scale 1.75` and 36 on one at `0.75`, with nothing
+configured per monitor. It is the same multiplication the compositor applies to
+its own titlebars, which is why the two stay the size of each other.
+
+The shell used to carry a *second* scale factor, in `Sizes.qml`: each output's
+height over the tallest output's, so the bar was a fixed fraction of every
+screen. It measured logical heights, which already contain the scale, so it
+partly undid the scaling it sat on top of; and its reference was the whole
+desktop's, so changing one monitor's scale resized the bar on all the others —
+putting DP-1 on 1.75 made the bar on an untouched HDMI-A-1 half again as big.
+It is gone. `contrib/bar-scale-test.sh` holds the ground it lost.
+
 ## Notifications
 
 The shell is the notification daemon. It owns `org.freedesktop.Notifications`
@@ -1124,6 +1152,14 @@ contrib/click-test.sh      # what the bar DOES when clicked: popovers open and
                            #   that only reads out
 contrib/panel-layout-test.sh # the settings window's boxes fit the text in them,
                            #   at three font sizes
+contrib/bar-scale-test.sh  # sizing: two outputs running the same mode at
+                           #   different scales draw bars whose REAL heights
+                           #   differ by exactly that scale, changing one
+                           #   output's scale leaves the other's bar alone, and
+                           #   the theme font is what resizes it
+contrib/audio-test.sh      # the volume pill opens the sound panel, with a
+                           #   slider track in it rather than the old menu's
+                           #   one-pixel separator
 contrib/palette-test.sh    # the matugen palette page, fully sandboxed: its
                            #   template, mapping file and matugen binary are all
                            #   redirected, so it cannot re-theme the desktop it

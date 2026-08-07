@@ -18,13 +18,7 @@ import ".."
 Row {
     id: root
 
-    // This bar's size factor -- see Sizes.qml.
-    readonly property real f:
-        QsWindow.window && QsWindow.window.uiFactor !== undefined
-            ? QsWindow.window.uiFactor : 1
-    function px(v) { return Math.round(v * f); }
-
-    spacing: px(Cfg.moduleSpacing)
+    spacing: Cfg.moduleSpacing
 
     // The player to follow: whichever one is actually playing, else the first
     // PAUSED one. Picking "the first" outright means a paused browser tab
@@ -64,7 +58,7 @@ Row {
     property bool shown: have
 
     readonly property int leadTrim: 0
-    readonly property int trailTrim: px(Cfg.pillPadding)
+    readonly property int trailTrim: Cfg.pillPadding
 
     // ── transport ───────────────────────────────────────────────────────────
 

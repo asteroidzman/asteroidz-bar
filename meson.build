@@ -45,7 +45,6 @@ install_data(
 		'shell/Icon.qml',
 		'shell/Compositor.qml',
 		'shell/Metrics.qml',
-		'shell/Sizes.qml',
 		'shell/BatteryService.qml',
 		'shell/Wallpaper.qml',
 		'shell/Location.qml',

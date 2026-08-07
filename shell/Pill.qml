@@ -17,13 +17,6 @@ import "."
 Item {
     id: root
 
-    // This bar's size factor -- see Sizes.qml. Read off the window because
-    // every pill is inside exactly one Bar, and that is the bar it belongs to.
-    readonly property real f:
-        QsWindow.window && QsWindow.window.uiFactor !== undefined
-            ? QsWindow.window.uiFactor : 1
-    function px(v) { return Math.round(v * f); }
-
     property string text: ""
     // Artwork names, resolved by Icon: asset paths or icon-theme names.
     property var icons: []
@@ -34,7 +27,7 @@ Item {
     property bool iconsAfterText: false
     property color fg: Cfg.fg
     property color bg: "transparent"
-    property int paddingX: px(Cfg.pillPadding)
+    property int paddingX: Cfg.pillPadding
     // A width to pin to, so a clock does not resize the bar every second as
     // its digits change width. 0 sizes to content.
     property int fixedWidth: 0
@@ -93,8 +86,8 @@ Item {
     readonly property font textFont: label.font
 
     readonly property int iconSize:
-        Math.round((implicitHeight - 2 * px(Cfg.borderWidth)
-                    - 2 * px(Cfg.themePaddingY)) * iconScale)
+        Math.round((implicitHeight - 2 * Cfg.borderWidth
+                    - 2 * Cfg.themePaddingY) * iconScale)
     readonly property int contentWidth: layout.implicitWidth
 
     // The native formula, verbatim (text-node.c):
@@ -109,7 +102,7 @@ Item {
     // scale the two roundings disagree just often enough to ellipsise a label
     // that was pinned to its own width.
     readonly property int naturalWidth:
-        contentWidth + 2 * paddingX + 2 * px(Cfg.borderWidth) + 1
+        contentWidth + 2 * paddingX + 2 * Cfg.borderWidth + 1
 
     // What this pill would be if its LABEL were `w` wide instead of what it
     // currently is. This is how a pill pins itself -- a clock to its widest
@@ -133,19 +126,19 @@ Item {
     implicitWidth: {
         if (fixedWidth > 0)
             return fixedWidth;
-        const natural = Math.max(px(Cfg.pillMinWidth), naturalWidth);
+        const natural = Math.max(Cfg.pillMinWidth, naturalWidth);
         return maxWidth > 0 ? Math.min(natural, maxWidth) : natural;
     }
-    implicitHeight: px(Cfg.height) - 2 * px(Cfg.pillInset)
+    implicitHeight: Cfg.height - 2 * Cfg.pillInset
 
     Rectangle {
         anchors.fill: parent
-        radius: root.px(Cfg.themeRadius)
+        radius: Cfg.themeRadius
         color: root.bg
         // The shared theme's border, which every native pill carries -- the
         // tab-bar node applies the whole theme, border included, and the bar
         // only overrides the colour pair on top of it.
-        border.width: root.px(Cfg.borderWidth)
+        border.width: Cfg.borderWidth
         border.color: Cfg.border
     }
 
@@ -207,7 +200,7 @@ Item {
             // only way to agree is to hand Qt the points and let it do the
             // same arithmetic. That is safe here ONLY because the launcher
             // pins QT_FONT_DPI=96, the resolution the compositor renders at.
-            font.pointSize: Cfg.fontSize * root.f
+            font.pointSize: Cfg.fontSize
             // Integer glyph advances, the way cairo lays text out.
             //
             // Qt's default is unhinted, fractional advances: it measured
@@ -238,7 +231,7 @@ Item {
                       + (root.icons.length - 1) * 6 + 6
                     : 0;
                 const room = root.maxWidth - 2 * root.paddingX
-                    - 2 * root.px(Cfg.borderWidth) - 1 - art
+                    - 2 * Cfg.borderWidth - 1 - art
                     - (root.leadingSpace > 0 ? root.leadingSpace + 6 : 0);
                 return Math.min(implicitWidth, Math.max(0, room));
             }

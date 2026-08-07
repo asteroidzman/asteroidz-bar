@@ -87,27 +87,49 @@ Singleton {
         return Qt.rgba(v[0], v[1], v[2], v[3]);
     }
 
+    // ── sizes ───────────────────────────────────────────────────────────────
+    //
+    // An em: a multiple of the theme font's pixel height, rounded to a whole
+    // logical pixel.
+    //
+    // Every default below goes through this, and it is the only reason one
+    // setting -- `theme { font }` -- can resize the whole bar. They used to be
+    // absolute pixel counts, each tuned by hand against whatever font was in
+    // the theme at the time, so raising the font grew the text inside boxes
+    // that stayed where they were: a 48px bar with 17pt type in it is snug,
+    // and the same 48px bar with 10pt type in it is a band of empty space
+    // with a thin line of writing across the middle.
+    //
+    // The multipliers are the old numbers divided by the font they were
+    // chosen against (the compositor's default, "monospace Bold 16" -- 21.33
+    // pixels at 96 dpi), so an unconfigured bar on the default theme is within
+    // a pixel of what it always was.
+    //
+    // Still LOGICAL pixels: the output scale is applied to the finished
+    // surface by the compositor, not here. See the note in Bar.qml.
+    function em(mult) { return Math.round(fontPixelSize * mult); }
+
     // ── geometry ────────────────────────────────────────────────────────────
-    readonly property int height: num(bar, "height", 48)
+    readonly property int height: num(bar, "height", em(2.25))
     readonly property bool bottom: str(bar, "position", "top") === "bottom"
-    readonly property int spacing: num(bar, "spacing", 8)
-    readonly property int marginX: num(bar, "margin-x", 8)
-    readonly property int marginY: num(bar, "margin-y", 9)
-    readonly property int pillMinWidth: num(bar, "pill-min-width", 28)
-    readonly property int pillInset: num(bar, "pill-inset", 6)
-    readonly property int pillPadding: num(bar, "pill-padding", 6)
-    readonly property int tagPadding: num(bar, "tag-padding", 16)
-    readonly property int moduleSpacing: num(bar, "module-spacing", 12)
-    readonly property int traySpacing: num(bar, "tray-spacing", 24)
+    readonly property int spacing: num(bar, "spacing", em(0.375))
+    readonly property int marginX: num(bar, "margin-x", em(0.375))
+    readonly property int marginY: num(bar, "margin-y", em(0.42))
+    readonly property int pillMinWidth: num(bar, "pill-min-width", em(1.3))
+    readonly property int pillInset: num(bar, "pill-inset", em(0.28))
+    readonly property int pillPadding: num(bar, "pill-padding", em(0.28))
+    readonly property int tagPadding: num(bar, "tag-padding", em(0.75))
+    readonly property int moduleSpacing: num(bar, "module-spacing", em(0.56))
+    readonly property int traySpacing: num(bar, "tray-spacing", em(1.125))
 
     // ── panel ───────────────────────────────────────────────────────────────
     readonly property bool panelEnable: flag(panel, "enable", true)
-    readonly property int panelRadius: num(panel, "radius", 9)
-    readonly property int panelPadding: num(panel, "padding", 12)
+    readonly property int panelRadius: num(panel, "radius", em(0.42))
+    readonly property int panelPadding: num(panel, "padding", em(0.56))
     readonly property bool panelBlur: flag(panel, "blur", true)
     readonly property bool panelShadow: flag(panel, "shadow", true)
-    readonly property int panelShadowSize: num(panel, "shadow-size", 14)
-    readonly property real panelShadowBlur: num(panel, "shadow-blur", 14.0)
+    readonly property int panelShadowSize: num(panel, "shadow-size", em(0.66))
+    readonly property real panelShadowBlur: num(panel, "shadow-blur", em(0.66))
     readonly property color panelColor: col(panel, "color",
                                             Qt.rgba(0.039, 0.039, 0.047, 0.85))
     readonly property color panelShadowColor: col(panel, "shadow-color",
@@ -120,18 +142,12 @@ Singleton {
     // twice, in the toasts and in the centre, and a change to one silently made
     // the popup and the panel it opens into different widths.
     //
-    // The width and the centre's height are sized from the FONT, not fixed.
-    // Every box in this shell that holds text is (see FormRow, Picker, Pill),
-    // and these two were the exceptions: 380px was chosen against a smaller
-    // default font, so raising the theme's size grew the text inside a box
-    // that stayed where it was and the card got tighter the bigger the type
-    // got. 20 ems is about 45 characters of body text, which is a notification
+    // 20 ems is about 45 characters of body text, which is a notification
     // rather than a paragraph.
     readonly property var notify: BarConfig.groups.notify || ({})
-    readonly property int notifyWidth:
-        num(notify, "width", Math.round(fontPixelSize * 20))
+    readonly property int notifyWidth: num(notify, "width", em(20))
     readonly property int notifyCentreHeight:
-        num(notify, "centre-height", Math.round(fontPixelSize * 20))
+        num(notify, "centre-height", em(20))
     readonly property int notifyTimeout: num(notify, "timeout", 5000)
     readonly property int notifyMaxPopups: num(notify, "max-popups", 4)
     readonly property bool notifyDnd: flag(notify, "dnd", false)
@@ -155,8 +171,7 @@ Singleton {
         str(notify, "sound-theme", "freedesktop")
     // The artwork's box on a card. Also font-derived, so the icon keeps its
     // proportion to the text beside it.
-    readonly property int notifyIconSize:
-        num(notify, "icon-size", Math.max(28, Math.round(fontPixelSize * 1.8)))
+    readonly property int notifyIconSize: num(notify, "icon-size", em(1.8))
 
     // ── theme ───────────────────────────────────────────────────────────────
     readonly property color fg: col(theme, "fg", Qt.rgba(1, 1, 1, 1))
@@ -299,7 +314,7 @@ Singleton {
     readonly property string iconDir: str(bar, "icon-dir",
         "/usr/share/asteroidz/bar-icons:"
         + Quickshell.env("HOME") + "/.local/share:/usr/share")
-    readonly property int titleWidth: num(bar, "title-width", 320)
+    readonly property int titleWidth: num(bar, "title-width", em(15))
     readonly property bool showAllTags: flag(bar, "show-all-tags", false)
     readonly property int minTags: num(bar, "min-tags", 3)
     readonly property int tagIcons: num(bar, "tag-icons", 3)
@@ -307,18 +322,18 @@ Singleton {
     readonly property int volumeStep: num(bar, "volume-step", 5)
     readonly property real netMaxDown: num(bar, "net-max-down", 0)
     readonly property real netMaxUp: num(bar, "net-max-up", 0)
-    readonly property int mediaWidth: num(bar, "media-width", 280)
+    readonly property int mediaWidth: num(bar, "media-width", em(13))
     readonly property int mediaBars: num(bar, "media-bars", 6)
     readonly property int mediaFps: num(bar, "media-fps", 20)
     readonly property bool mediaViz: num(bar, "media-viz", 1) !== 0
     readonly property int weatherInterval: num(bar, "weather-interval", 15)
 
     // ── popover ─────────────────────────────────────────────────────────────
-    readonly property int popoverWidth: num(popover, "width", 340)
-    readonly property int popoverRowHeight: num(popover, "row-height", 34)
-    readonly property int popoverSpacing: num(popover, "spacing", 2)
-    readonly property int popoverPadding: num(popover, "padding", 12)
-    readonly property int popoverGap: num(popover, "gap", 6)
+    readonly property int popoverWidth: num(popover, "width", em(16))
+    readonly property int popoverRowHeight: num(popover, "row-height", em(1.6))
+    readonly property int popoverSpacing: num(popover, "spacing", em(0.1))
+    readonly property int popoverPadding: num(popover, "padding", em(0.56))
+    readonly property int popoverGap: num(popover, "gap", em(0.28))
     readonly property color popoverColor: col(popover, "color",
                                               Qt.rgba(0.039, 0.039, 0.047, 0.95))
     readonly property string weatherLocation: str(bar, "weather-location", "")

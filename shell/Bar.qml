@@ -19,21 +19,25 @@ PanelWindow {
     screen: modelData
     readonly property string screenName: modelData ? modelData.name : ""
 
-    // How big this bar is, relative to the tallest output. See Sizes.qml: a
-    // fixed 48px bar is a bigger share of a shorter screen, which is what made
-    // the bar look oversized on a second, smaller monitor.
+    // ── on sizes, and why there is no scale factor here ─────────────────────
     //
-    // Exposed on the window so anything inside it can ask without having the
-    // screen name threaded down to it -- QsWindow.window is that window.
-    readonly property real uiFactor: Sizes.factor(screenName)
-    onUiFactorChanged: console.log("PROBE", screenName, "factor", uiFactor,
-                                   "reference", Sizes.reference,
-                                   "height", px(Cfg.height))
-    Component.onCompleted: console.log("PROBE-INIT", screenName, "factor", uiFactor,
-                                       "reference", Sizes.reference)
-    function px(v) { return Math.round(v * uiFactor); }
-    readonly property real fontPx: Cfg.fontPixelSize * uiFactor
-    readonly property real fontPt: Cfg.fontSize * uiFactor
+    // Every size in this shell is a WAYLAND LOGICAL PIXEL, used raw. The
+    // compositor multiplies a layer surface by its output's `scale`, so a bar
+    // 48 logical pixels tall is 84 real pixels on an output at scale 1.75 and
+    // 36 on one at 0.75 -- which is what display scaling is for, and it is the
+    // same multiplication the compositor applies to its own titlebars, so the
+    // bar and the desktop it sits on stay the same size as each other.
+    //
+    // This used to carry a second factor of its own -- each output's height
+    // over the tallest output's -- on the theory that a fixed 48px bar is a
+    // bigger share of a shorter screen. It measured LOGICAL heights, which
+    // already contain the scale, so it was dividing out part of the thing it
+    // sat on top of; and its reference was global, so setting DP-1 to scale
+    // 1.75 moved the tallest output from DP-1 to HDMI-A-1 and made the bar on
+    // HDMI-A-1 -- untouched, nothing about it changed -- 1.5x bigger.
+    //
+    // The answer to "this bar is too big on that monitor" is that monitor's
+    // scale, which the user already sets and every other program obeys.
 
     WlrLayershell.namespace: "asteroidz-bar"
     WlrLayershell.layer: WlrLayer.Top
@@ -88,14 +92,14 @@ PanelWindow {
     // under the panels that closes on any click which is not on a pill. The
     // exclusive zone does not change, so nothing on screen moves.
     readonly property bool menuOpen: menu.visible
-    readonly property int restingHeight: px(Cfg.height) + 2 * px(Cfg.marginY) + shadowRoom
+    readonly property int restingHeight: Cfg.height + 2 * Cfg.marginY + shadowRoom
 
     implicitHeight: menuOpen && screen ? screen.height : restingHeight
     // Windows are kept clear of the bar AND of the gap it floats in: the
     // margin is part of the bar's footprint, not free space a maximised window
     // may use, or the panel would sit on top of window content. The shadow is
     // not part of that footprint -- it is something to see through.
-    exclusiveZone: px(Cfg.height) + 2 * px(Cfg.marginY)
+    exclusiveZone: Cfg.height + 2 * Cfg.marginY
 
     color: "transparent"
 
@@ -375,15 +379,15 @@ PanelWindow {
     // them 4.5px low, which is the sort of error that looks like nothing and
     // fails a pixel diff.
     Item {
-        height: root.px(Cfg.height)
+        height: Cfg.height
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: Cfg.bottom ? undefined : parent.top
         anchors.bottom: Cfg.bottom ? parent.bottom : undefined
-        anchors.topMargin: Cfg.bottom ? 0 : root.px(Cfg.marginY)
-        anchors.bottomMargin: Cfg.bottom ? root.px(Cfg.marginY) : 0
-        anchors.leftMargin: root.px(Cfg.marginX)
-        anchors.rightMargin: root.px(Cfg.marginX)
+        anchors.topMargin: Cfg.bottom ? 0 : Cfg.marginY
+        anchors.bottomMargin: Cfg.bottom ? Cfg.marginY : 0
+        anchors.leftMargin: Cfg.marginX
+        anchors.rightMargin: Cfg.marginX
 
         Section {
             id: leftPanel
