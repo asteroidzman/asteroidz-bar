@@ -453,6 +453,34 @@ void Calendar::sync() {
 	this->fetchCalendarList();
 }
 
+void Calendar::ensureMonth(const QDate& month) {
+	if (!month.isValid() || this->mRefreshToken.isEmpty()) return;
+
+	// A whole month, plus the days either side that a six-week grid shows --
+	// the cells before the 1st and after the last are real days with real
+	// events, and a dot missing from them is the same lie as an empty month.
+	const auto wantFrom = QDate(month.year(), month.month(), 1).addDays(-7);
+	const auto wantTo = wantFrom.addDays(7).addMonths(1).addDays(7);
+
+	const auto now = QDate::currentDate();
+	if (!this->mRangeStart.isValid()) this->mRangeStart = now;
+	if (!this->mRangeEnd.isValid()) this->mRangeEnd = now.addDays(this->mHorizonDays);
+
+	auto grew = false;
+	if (wantFrom < this->mRangeStart) {
+		this->mRangeStart = wantFrom;
+		grew = true;
+	}
+	if (wantTo > this->mRangeEnd) {
+		this->mRangeEnd = wantTo;
+		grew = true;
+	}
+
+	// Only when it actually grew. Paging back and forth across a boundary
+	// would otherwise be a network round trip per keypress.
+	if (grew) this->sync();
+}
+
 void Calendar::fetchCalendarList() {
 	QNetworkRequest req { QUrl(QString::fromLatin1(API_ROOT) + QStringLiteral("/users/me/calendarList"))
 	};
@@ -514,8 +542,12 @@ void Calendar::fetchEvents() {
 	const auto now = QDateTime::currentDateTime();
 	// From the start of today, not from this instant: an event you are in the
 	// middle of is the one most worth showing.
-	const auto from = QDateTime(now.date(), QTime(0, 0), now.timeZone());
-	const auto to = from.addDays(this->mHorizonDays);
+	if (!this->mRangeStart.isValid()) this->mRangeStart = now.date();
+	if (!this->mRangeEnd.isValid())
+		this->mRangeEnd = now.date().addDays(this->mHorizonDays);
+
+	const auto from = QDateTime(this->mRangeStart, QTime(0, 0), now.timeZone());
+	const auto to = QDateTime(this->mRangeEnd, QTime(0, 0), now.timeZone());
 
 	for (const auto& cal: std::as_const(this->mCalendarList)) {
 		QUrlQuery q;

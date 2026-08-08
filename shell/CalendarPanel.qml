@@ -44,6 +44,15 @@ Item {
                                    root.shownMonth.getMonth() + delta, 1);
     }
 
+    // Tell the backend which month is on show, so it can widen its fetch.
+    //
+    // The grid pages without limit; the fetch reaches horizonDays ahead. Left
+    // to itself that means paging past the horizon draws a month with no dots,
+    // which reads as "nothing on all month" rather than "not fetched" -- the
+    // one thing a calendar must not get wrong. ensureMonth() only refetches
+    // when the range actually grows.
+    onShownMonthChanged: Calendar.ensureMonth(root.shownMonth)
+
     // Events grouped by day, built once per change rather than filtered per
     // cell: a month grid asks "has this day anything" 42 times, and doing that
     // as a scan of the whole list each time is 42 scans for one repaint.

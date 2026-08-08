@@ -87,6 +87,17 @@ public:
 	// restarted, and the access token is reused until it expires.
 	Q_INVOKABLE void sync();
 
+	// Widen the fetched window to cover a month the UI has paged to, and
+	// refetch if it actually grew.
+	//
+	// Without this the grid lies. It pages months without limit while the
+	// fetch only ever reached horizonDays ahead, so paging past that showed an
+	// empty month -- indistinguishable from a month with nothing in it, which
+	// is exactly the reading a calendar must not get wrong.
+	//
+	// `month` is any date within the wanted month; the whole month is covered.
+	Q_INVOKABLE void ensureMonth(const QDate& month);
+
 	// The loopback OAuth flow, for a first login or after a revoked token.
 	// Binds 127.0.0.1 on an ephemeral port, opens the system browser at
 	// Google's consent screen, and completes when the redirect comes back.
@@ -158,6 +169,12 @@ private:
 	// Raw instances per calendar, merged into mEvents once all replies land.
 	QHash<QString, QVariantList> mPerCalendar;
 	int mPending = 0;
+
+	// The range actually fetched, as opposed to the default horizon. Grows
+	// when the UI pages outside it and never shrinks -- paging back and forth
+	// across a boundary would otherwise refetch on every press.
+	QDate mRangeStart;
+	QDate mRangeEnd;
 
 	QVariantList mEvents;
 	QVariantList mCalendars;
