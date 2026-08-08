@@ -20,6 +20,7 @@
 #include <QtQml/QQmlExtensionPlugin>
 #include <QtQml/qqml.h>
 
+#include "calendar.hpp"
 #include "clipboard.hpp"
 #include "opticalicon.hpp"
 #include "paths.hpp"
@@ -59,6 +60,20 @@ public:
 			    return new Paths();
 		    }
 		);
+		// Also a singleton, and for a sharper reason than the clipboard's: a
+		// second instance would mean a second OAuth token refresh racing the
+		// first, and two writers to the same keyring item.
+		qmlRegisterSingletonType<Calendar>(
+		    uri,
+		    1,
+		    0,
+		    "Calendar",
+		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
+			    Q_UNUSED(engine);
+			    return new Calendar();
+		    }
+		);
+
 		// A singleton, not a type: the history is the machine's, not any one
 		// bar's, and a second instance would mean a second data-control device
 		// racing the first for the same selections.

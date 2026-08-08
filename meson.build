@@ -152,7 +152,15 @@ install_data(
 # to a Qt version in a way that breaks silently on the next Qt rebuild, and
 # would put a module nothing else can use where every Qt application looks.
 qt6 = import('qt6')
-qt6_dep = dependency('qt6', modules: ['Core', 'Gui', 'Qml', 'Quick'])
+# Network is here for the calendar: token refresh and the Google Calendar API
+# are HTTPS, and QNetworkAccessManager is already in the process rather than
+# being a curl subprocess per request.
+qt6_dep = dependency('qt6', modules: ['Core', 'Gui', 'Qml', 'Quick', 'Network'])
+
+# The calendar's credentials live in the Secret Service, which is where dcal
+# put them -- so they are read rather than copied to a file, and they survive
+# dcal being uninstalled because gnome-keyring owns them, not the package.
+libsecret_dep = dependency('libsecret-1')
 # Asked for by name here as well as through asteroidzbg: Paths::imageExtensions
 # reports what the decoder can read, so the plugin includes its header directly
 # rather than relying on a transitive dependency it does not declare.
@@ -214,6 +222,7 @@ plugin_moc = qt6.preprocess(
 		'plugin/paths.hpp',
 		'plugin/windowicon.hpp',
 		'plugin/clipboard.hpp',
+		'plugin/calendar.hpp',
 	],
 	# plugin.cpp declares its class in the .cpp and ends with
 	# `#include "plugin.moc"`, which is the form moc expects for a type that
@@ -231,10 +240,11 @@ shared_module(
 		'plugin/windowicon.cpp',
 		'plugin/opticalicon.cpp',
 		'plugin/clipboard.cpp',
+		'plugin/calendar.cpp',
 		plugin_protos,
 		plugin_moc,
 	],
-	dependencies: [qt6_dep, asteroidzbg_dep, wayland_client_dep],
+	dependencies: [qt6_dep, asteroidzbg_dep, wayland_client_dep, libsecret_dep],
 	link_with: imageformats_lib,
 	install: true,
 	install_dir: qmlplugindir,
