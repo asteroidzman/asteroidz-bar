@@ -131,6 +131,17 @@ else
 	bad "the clipboard IPC handler answers (got '$STATE', want 'paused')"
 fi
 
+# Wake the keyboard up before anything depends on it.
+#
+# wlvkbd is a one-shot client: it connects, creates a virtual keyboard, sends
+# and exits. On the FIRST press the bar is still binding wl_keyboard in
+# response to wl_seat.capabilities and sees only the release -- so the first
+# invocation of a session is swallowed whole. click-test.sh presses ESC twice
+# for the same reason. Done here, with nothing open, so the throwaway cannot
+# type into the panel the later assertion is measuring.
+"$HL_WLVKBD" press LEFTSHIFT >/dev/null 2>&1
+sleep 1
+
 # ── the pill opens its panel ────────────────────────────────────────────────
 shot idle
 IDLE="$(panel_pixels idle)"
@@ -149,6 +160,31 @@ if [ "$OPENED" -gt $((IDLE + 400)) ]; then
 else
 	bad "clicking the pill opens the clipboard ($IDLE -> $OPENED px)"
 fi
+
+# ── the search box actually receives keys ───────────────────────────────────
+#
+# Reported as "the search input is not focusable", and invisible to every
+# assertion above: the panel opened, drew a search box, and swallowed nothing,
+# because `focus: true` on a TextInput means nothing in a popup that never
+# holds the keyboard. The bar does, and forwards to whatever the popover names
+# as its keyTarget -- so this types and checks the LIST NARROWED, which is only
+# possible if the keystrokes arrived.
+#
+# "beta" matches one of the two entries. If the keys go nowhere the list stays
+# at two rows and the panel keeps its height.
+"$HL_WLVKBD" press B E T A 2>/dev/null
+sleep 2
+shot filtered
+FILTERED="$(panel_pixels filtered)"
+if [ "$FILTERED" -lt "$OPENED" ] && [ "$FILTERED" -gt 0 ]; then
+	ok "typing in the search box filters the list ($OPENED -> $FILTERED px)"
+else
+	bad "typing in the search box filters the list ($OPENED -> $FILTERED px)"
+fi
+
+# Clear the query so the later assertions see the whole list again.
+"$HL_WLVKBD" press BACKSPACE BACKSPACE BACKSPACE BACKSPACE 2>/dev/null
+sleep 1
 
 # Clicking it again closes it: showPanel is itself a toggle.
 hl_click "$PILL_X" "$PILL_Y"

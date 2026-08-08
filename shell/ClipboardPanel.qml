@@ -59,6 +59,50 @@ Item {
             selected = Math.max(0, shown.length - 1);
     }
 
+    // Claim the popover's key forwarding.
+    //
+    // `focus: true` on the TextInput does NOTHING here, which is what the first
+    // version of this got wrong and what "the search input is not focusable"
+    // was: keys arrive at the BAR's layer surface, not at the popup this lives
+    // in. Bar.qml raises WlrKeyboardFocus.Exclusive on itself while a popover
+    // is up and forwards to whatever the popover names as its keyTarget,
+    // because Qt refuses to create a grabbing popup here. Being that target IS
+    // being focused; nothing else is.
+    //
+    // QsWindow.window, not a walk up the parent chain: it returns the WRAPPER
+    // (the PopupWindow) that carries keyTarget, and walking by hand dead-ends
+    // one step short. Field.qml explains the same mechanism at length; this
+    // does not reuse Field itself because that one commits on Enter and its
+    // internal input would swallow the arrow keys this panel navigates with.
+    function claimKeys() {
+        const w = QsWindow.window;
+        if (w && w.isPopover === true)
+            w.keyTarget = search;
+    }
+
+    // Whether keystrokes will land in the search box. Answered by asking the
+    // popover who its target is, for the reason above -- input.activeFocus
+    // reports on a focus chain the keys are not travelling down.
+    readonly property bool keysHere: {
+        const w = QsWindow.window;
+        return w !== null && w.isPopover === true && w.keyTarget === search;
+    }
+
+    // A clipboard panel is opened in order to find something, so the keyboard
+    // belongs in the search box from the moment it appears rather than after a
+    // click on it. Field.qml only ever claims on click, so it never had to
+    // answer the question this does: WHEN is there a window to claim from.
+    //
+    // Component.onCompleted alone is too early -- the panel is built as the
+    // Component is instantiated, before the PopupWindow that carries keyTarget
+    // is attached, so the claim ran against a null window and silently did
+    // nothing. That is what "the search input is not focusable" was after the
+    // first fix. Watching the attached property covers both orders: whichever
+    // of the two happens second is the one that claims.
+    readonly property var popupWindow: QsWindow.window
+    onPopupWindowChanged: root.claimKeys()
+    Component.onCompleted: root.claimKeys()
+
     function activate(index) {
         const e = shown[index];
         if (!e)
@@ -159,16 +203,28 @@ Item {
 
         // ── the search box ──────────────────────────────────────────────────
         //
-        // Always focused, and it owns the arrow keys as well as the text: a
-        // clipboard panel is opened to find something, so the keyboard should
-        // be in the search box without being asked, and moving the selection
-        // should not require leaving it.
+        // It owns the arrow keys as well as the text: moving the selection
+        // should not require leaving the box you are typing in.
+        //
+        // Focus comes from root.claimKeys(), NOT from `focus: true` -- see the
+        // note on that function for why the obvious form does nothing here.
         Rectangle {
             width: parent.width
             visible: Clipboard.available && Clipboard.entries.length > 0
             height: Math.max(24, Math.round(Cfg.fontPixelSize * 1.5))
             radius: Cfg.themeRadius
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, 0.08)
+            // An affordance that tells the truth. It is keyed on where the keys
+            // are actually GOING (keyTarget), not on TextInput.activeFocus,
+            // which is unreliable in a popup whose window is never active --
+            // the same trap Field.qml documents, where a caret came and went
+            // for reasons unrelated to where typing landed.
+            border.width: root.keysHere ? 1 : 0
+            border.color: Cfg.focusBg
+
+            // Clicking it takes the keyboard back, for the case where something
+            // else in the panel claimed it.
+            TapHandler { onTapped: root.claimKeys() }
 
             TextInput {
                 id: search
@@ -181,7 +237,9 @@ Item {
                 font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
                 font.hintingPreference: Font.PreferFullHinting
                 selectByMouse: true
-                focus: true
+                // TextInput draws its own caret from activeFocus, which this
+                // never has -- so the caret is drawn below instead.
+                cursorVisible: root.keysHere
 
                 onTextChanged: root.query = text
 
