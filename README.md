@@ -1001,11 +1001,11 @@ There is no `calendar` module: the clock *is* the calendar's pill. A bar that
 shows you the date and a bar that shows you what is on that date are the same
 button, and two of them side by side would be one too many.
 
-**It replaced `dcal`, and does not need it.** Google Calendar is spoken
-directly by the C++ plugin — credentials out of the Secret Service, token
-refresh and the API over `QNetworkAccessManager`. dcal's login was *migrated*
-once into this shell's own keyring items rather than copied by hand, so
-uninstalling dcal cannot take the account with it.
+**No helper program, no daemon, no second thing to keep running.** Google
+Calendar is spoken directly by the C++ plugin — credentials out of the Secret
+Service, token refresh and the API over `QNetworkAccessManager`. The account
+lives in this shell's own keyring items, so nothing else on the machine has to
+be installed or alive for the calendar to work.
 
 What it deliberately is **not** is a sync engine. No local store, no
 incremental sync tokens, no write access. It fetches a window and holds it,
@@ -1032,8 +1032,8 @@ calendar {
 
 ### When the login expires
 
-It will. Google expires or revokes a refresh token eventually — it happened to
-dcal, which is how this project started.
+It will. Google expires or revokes a refresh token eventually, and the first
+you know of it is a calendar that has quietly stopped changing.
 
 When it does, the panel says so and grows a **Reauthorise** button. Pressing it
 opens your browser at Google's consent screen; the shell listens on an

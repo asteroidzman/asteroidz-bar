@@ -6,9 +6,8 @@
 // bar panel, and the question a bar panel answers is "what is on today, and
 // what is the date on Thursday".
 //
-// Events come from the C++ Calendar singleton (Google Calendar over the
-// account migrated from dcal). Nothing here fetches, parses or knows what a
-// recurrence is -- instances arrive already expanded.
+// Events come from the C++ Calendar singleton. Nothing here fetches, parses or
+// knows what a recurrence is -- instances arrive already expanded.
 
 import Quickshell
 import QtQuick
