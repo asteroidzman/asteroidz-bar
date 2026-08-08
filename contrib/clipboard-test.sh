@@ -229,6 +229,21 @@ else
 	bad "the backend captured both copies (got '$CLEARED', want >= 2)"
 fi
 
+# ── the panel drew without complaining ──────────────────────────────────────
+#
+# Same check calendar-test.sh carries, and here for the same reason rather than
+# by symmetry: pixel deltas say a panel appeared, not what it did on the way.
+# The calendar spent hours throwing 80 TypeErrors an open while every one of
+# its assertions passed, because a binding that throws still leaves the item
+# drawn in its default state. Nothing was reading the log.
+QML_ERRORS="$(grep -cE "TypeError|ReferenceError|is not a function" "$WORK/qs.log" 2>/dev/null || true)"
+if [ "${QML_ERRORS:-0}" -eq 0 ]; then
+	ok "the panel drew with no QML errors"
+else
+	bad "the panel drew with no QML errors ($QML_ERRORS logged)"
+	grep -oE "@[A-Za-z]+\.qml\[[0-9]+.*" "$WORK/qs.log" | sort -u | head -5
+fi
+
 kill "$QS" 2>/dev/null
 
 echo

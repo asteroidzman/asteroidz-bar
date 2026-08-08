@@ -992,6 +992,78 @@ Super+v { spawn "qs -p /usr/share/asteroidz-bar/shell.qml ipc call clipboard tog
 compares, or the panel opens on all of them at once. `pause` and `clear` are
 there too.
 
+## The calendar
+
+Click the clock. A month you can page through, and the day you picked written
+out underneath — that is the whole panel.
+
+There is no `calendar` module: the clock *is* the calendar's pill. A bar that
+shows you the date and a bar that shows you what is on that date are the same
+button, and two of them side by side would be one too many.
+
+**It replaced `dcal`, and does not need it.** Google Calendar is spoken
+directly by the C++ plugin — credentials out of the Secret Service, token
+refresh and the API over `QNetworkAccessManager`. dcal's login was *migrated*
+once into this shell's own keyring items rather than copied by hand, so
+uninstalling dcal cannot take the account with it.
+
+What it deliberately is **not** is a sync engine. No local store, no
+incremental sync tokens, no write access. It fetches a window and holds it,
+because a bar answers "what is on today" and not "let me reorganise December".
+The single line doing the most work is `singleEvents=true`: Google expands
+recurrences server-side and returns concrete instances, which is the difference
+between this and a calendar library.
+
+The scope asked for is **read-only** (`calendar.readonly`). Nothing here
+creates or edits an event, and asking for write access to display a fortnight
+is a permission you would be right to refuse.
+
+Paging past the fetched window widens it rather than showing you an empty
+month. That distinction matters more here than anywhere else in this shell: a
+month with no dots has to mean "nothing on", never "not fetched".
+
+```kdl
+calendar {
+	width         21    // ems; the month grid drives this, not taste
+	agenda-height 11    // ems of agenda before it scrolls
+	horizon-days  60    // how far ahead to fetch before you page
+}
+```
+
+### When the login expires
+
+It will. Google expires or revokes a refresh token eventually — it happened to
+dcal, which is how this project started.
+
+When it does, the panel says so and grows a **Reauthorise** button. Pressing it
+opens your browser at Google's consent screen; the shell listens on an
+ephemeral loopback port, checks `state`, exchanges the code with PKCE and
+stores the new token. There is no other program to run.
+
+The button is hidden while the login works, which is right — one sitting in
+your face when nothing is wrong is noise — but it also means the path cannot be
+rehearsed. So it can be summoned:
+
+```sh
+qs -p /usr/share/asteroidz-bar/shell.qml ipc call calendar showAuth   # reveal it, until restart
+qs -p /usr/share/asteroidz-bar/shell.qml ipc call calendar authorize  # skip the button
+qs -p /usr/share/asteroidz-bar/shell.qml ipc call calendar sync
+qs -p /usr/share/asteroidz-bar/shell.qml ipc call calendar status
+```
+
+`showAuth` is session-only and deliberately not a config key: it is a way to
+test a button, not a preference. While revealed on a healthy account the button
+reads **Reauthorise (test)**, because calling it anything else would be a label
+lying about the state.
+
+Running `authorize` while the login is *healthy* is safe, and worth doing once:
+Google issues a new refresh token and the old one keeps working until it does,
+so a failure mid-flow leaves you exactly where you were. Far better to find out
+it works on a Tuesday than the morning the token dies.
+
+`status` reports counts and flags only, never event contents — it is meant to
+be safe to paste into a bug report.
+
 ## Idle
 
 `swayidle` is gone: the bar does idle itself. asteroidz implements
