@@ -21,7 +21,16 @@ ShellRoot {
         // Touching the singleton is what creates it. A Singleton nothing ever
         // refers to is never instantiated, and the wallpaper would simply
         // never start -- silently, because there is nothing to fail.
-        void Wallpaper.binary;
+        //
+        // The property has to be one that EXISTS. This read `Wallpaper.binary`
+        // until qmllint noticed: `binary` was added in 6f68564, when the shell
+        // still launched asteroidzbg as a separate program, and removed in
+        // 6cb1d65 when the shell took over drawing in its own process. The
+        // touch line was not updated with it, and kept working purely by
+        // accident -- resolving the identifier is what constructs the
+        // singleton, so the failed lookup afterwards cost nothing, which is
+        // why nothing caught it for so long.
+        void Wallpaper.path;
         // Same for the idle service, which is a set of timers and no pixels at
         // all -- exactly the shape of thing that goes missing without a
         // reference. It does nothing until `bar { idle { enable true } }`.
