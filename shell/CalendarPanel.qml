@@ -239,8 +239,15 @@ Item {
                         width: 3
                         height: 3
                         radius: 1.5
+                        // The length check is not redundant with `visible`
+                        // above: QML evaluates a binding whether or not the
+                        // item is shown, so an empty day still dereferences
+                        // dayEvents[0] -- undefined -- and threw a TypeError
+                        // for every eventless cell, which is most of them.
                         color: cell.isSelected ? Cfg.focusFg
-                                               : (cell.dayEvents[0].colour || Cfg.focusBg)
+                             : cell.dayEvents.length > 0 && cell.dayEvents[0].colour
+                               ? cell.dayEvents[0].colour
+                               : Cfg.focusBg
                     }
 
                     HoverHandler { id: dayHover; cursorShape: Qt.PointingHandCursor }

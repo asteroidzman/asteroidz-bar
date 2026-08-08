@@ -136,6 +136,21 @@ else
 	bad "clicking it again closes the calendar ($OPENED -> $CLOSED px)"
 fi
 
+# ── the panel drew without complaining ──────────────────────────────────────
+#
+# Pixel deltas say a panel appeared; they say nothing about what it did to get
+# there. This ran for a long time with 80 TypeErrors per open -- every eventless
+# day cell dereferencing dayEvents[0] -- while every assertion above passed,
+# because a binding that throws still leaves the item drawn in its default
+# colour. The log had it the whole time and nothing was reading the log.
+QML_ERRORS="$(grep -cE "TypeError|ReferenceError|is not a function" "$WORK/qs.log" 2>/dev/null || true)"
+if [ "${QML_ERRORS:-0}" -eq 0 ]; then
+	ok "the panel drew with no QML errors"
+else
+	bad "the panel drew with no QML errors ($QML_ERRORS logged)"
+	grep -oE "@[A-Za-z]+\.qml\[[0-9]+.*" "$WORK/qs.log" | sort -u | head -5
+fi
+
 kill "$QS" 2>/dev/null
 
 echo
