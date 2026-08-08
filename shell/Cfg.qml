@@ -166,6 +166,19 @@ Singleton {
     // screenshots all day.
     readonly property int clipboardLimit: num(clipboard, "limit", 100)
 
+    // The calendar, under the clock.
+    //
+    // Width is driven by the month grid rather than by taste: seven columns
+    // wide enough for a two-digit day with room to breathe, and the agenda
+    // underneath inherits it.
+    readonly property var calendar: BarConfig.groups.calendar || ({})
+    readonly property int calendarWidth: num(calendar, "width", em(21))
+    readonly property int calendarAgendaHeight: num(calendar, "agenda-height", em(11))
+    // How far ahead to fetch. The grid only ever shows a month, but the agenda
+    // reads forward, and refetching on every arrow press would make paging the
+    // month a network round trip.
+    readonly property int calendarHorizon: num(calendar, "horizon-days", 60)
+
     // On by default, unlike the sound. A toast over a fullscreen film or game
     // is an intrusion with no way to dismiss it that does not leave what you
     // are doing, so the useful default is the quiet one -- and the

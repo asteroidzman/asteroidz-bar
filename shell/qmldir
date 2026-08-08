@@ -34,3 +34,4 @@ AudioPanel 1.0 AudioPanel.qml
 AudioDeviceRow 1.0 AudioDeviceRow.qml
 ClipboardPanel 1.0 ClipboardPanel.qml
 singleton ClipboardService 1.0 ClipboardService.qml
+CalendarPanel 1.0 CalendarPanel.qml

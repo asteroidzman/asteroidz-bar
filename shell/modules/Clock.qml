@@ -14,10 +14,30 @@ import ".."
 Pill {
     id: root
 
-    // A readout. It has no `onClicked`, and saying so is what keeps the pointer
-    // an arrow over it -- `interactive` is the only thing a Pill knows about
-    // whether pressing it does anything, and it defaults to true.
-    interactive: false
+    // Handed in by ModuleLoader, so the pill can open a panel under itself.
+    property var bar: null
+
+    // It was a pure readout, and `interactive: false` was what kept the
+    // pointer an arrow over it. It has a calendar under it now, so it is a
+    // button -- but only where there is a bar to open it on: the clock is also
+    // instantiated in places that have no popover, and claiming to be
+    // clickable there would be a cursor that lies.
+    interactive: root.bar !== null
+
+    onClicked: button => {
+        if (button === Qt.LeftButton && root.bar)
+            root.bar.showPanel(root, calendar);
+    }
+
+    Component {
+        id: calendar
+        // `bar` resolves here rather than inside CalendarPanel.qml: a Component
+        // captures the scope it is DECLARED in, and the panel is a separate
+        // file that knows nothing about the bar hosting it.
+        CalendarPanel {
+            onCloseRequested: root.bar.closeMenu()
+        }
+    }
 
     // SystemClock ticks on the second boundary rather than every 1000ms from
     // whenever the shell happened to start, so a seconds format does not drift

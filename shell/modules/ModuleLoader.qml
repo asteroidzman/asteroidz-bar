@@ -127,7 +127,7 @@ Row {
 
     Component {
         id: clockComponent
-        Clock {}
+        Clock { bar: root.bar }
     }
 
     Component {
