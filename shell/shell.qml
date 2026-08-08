@@ -40,6 +40,12 @@ ShellRoot {
         // never constructed, so without this the bus name would simply never
         // be taken and every notification on the desktop would go nowhere.
         void NotificationService.count;
+        // And the calendar's command surface, which is nothing but an
+        // IpcHandler -- so if it is never constructed, `ipc call calendar
+        // authorize` simply reports an unknown target, with nothing anywhere
+        // to suggest why. The panel refers to the C++ Calendar singleton, not
+        // to this one, so there is no other reference to rely on.
+        void CalendarService.objectName;
         if (!Ipc.connected)
             console.warn("asteroidz-bar: ASTEROIDZ_INSTANCE_SIGNATURE not set;"
                          + " running with defaults and no compositor state");

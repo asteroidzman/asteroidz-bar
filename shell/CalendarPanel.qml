@@ -289,7 +289,13 @@ Item {
         // reported. authorize() opens the browser and the shell finishes the
         // exchange itself -- there is no other program to run any more.
         Rectangle {
-            visible: Calendar.needsAuth || (!Calendar.configured && !Calendar.syncing)
+            // CalendarService.revealAuth is the testing door: the first two
+            // conditions only ever come true once the login is already broken,
+            // which is far too late to find out the button does not work. See
+            // the note there.
+            visible: Calendar.needsAuth
+                     || CalendarService.revealAuth
+                     || (!Calendar.configured && !Calendar.syncing)
             width: authLabel.implicitWidth + 16
             height: Math.max(20, Math.round(Cfg.fontPixelSize * 1.25))
             radius: Cfg.themeRadius
@@ -299,7 +305,9 @@ Item {
             Text {
                 id: authLabel
                 anchors.centerIn: parent
-                text: Calendar.configured ? "Reauthorise" : "Connect a calendar"
+                text: !Calendar.configured ? "Connect a calendar"
+                    : Calendar.needsAuth ? "Reauthorise"
+                                         : "Reauthorise (test)"
                 color: authHover.hovered ? Cfg.focusFg : Cfg.fg
                 font.family: Cfg.fontFamily
                 font.pointSize: Math.max(7, Cfg.fontSize * 0.8)

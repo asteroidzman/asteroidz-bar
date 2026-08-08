@@ -53,6 +53,7 @@ install_data(
 		'shell/NotificationCard.qml',
 		'shell/NotificationCentre.qml',
 		'shell/CalendarPanel.qml',
+		'shell/CalendarService.qml',
 		'shell/ClipboardPanel.qml',
 		'shell/ClipboardService.qml',
 		'shell/AudioPanel.qml',
