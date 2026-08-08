@@ -18,13 +18,17 @@ set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="${ASTEROIDZ_REPO:-$HOME/asteroidz}"
+# Which tree's plugin to test. The default is the dev build; an install check
+# points this at build-install, because an optimised build is a different
+# binary and "it worked in build/" is not evidence about the one being shipped.
+BAR_BUILD="${BAR_BUILD:-$HERE/build}"
 
 PASS=0
 FAIL=0
 ok() { echo "  ok   $1"; PASS=$((PASS + 1)); }
 bad() { echo "  FAIL $1"; FAIL=$((FAIL + 1)); }
 
-[ -f "$HERE/build/libasteroidzbarplugin.so" ] || {
+[ -f "$BAR_BUILD/libasteroidzbarplugin.so" ] || {
 	echo "clipboard-test: not built -- meson setup build && meson compile -C build" >&2
 	exit 1
 }
@@ -44,7 +48,7 @@ WORK="$HL_OUTDIR"
 BAR_CONF="$(bar_conf_path)"
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
-cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
+cp "$BAR_BUILD/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
 cp "$HERE/plugin/qmldir" "$QMLROOT/Asteroidz/Bar/"
 
 # The icon this module draws lives in the bar's datadir, which is not installed
@@ -178,7 +182,11 @@ sleep 1
 # The premise assertion for everything above: if this is 0, the panel that
 # opened was an empty one and the pixel deltas measured chrome.
 CLEARED="$(qsipc clear)"
-COUNT="$(echo "$CLEARED" | grep -oE '[0-9]+' | head -1)"
+# Matched against the whole "cleared N" shape, not just "a number appears
+# somewhere". Pulling the first [0-9]+ out of the reply passed against
+# quickshell's error text, because the path in it contains digits -- the same
+# way the handler check above once passed against "No running instances".
+COUNT="$(echo "$CLEARED" | sed -nE 's/^cleared ([0-9]+)$/\1/p')"
 if [ -n "$COUNT" ] && [ "$COUNT" -ge 2 ]; then
 	ok "the backend captured both copies ($CLEARED)"
 else
