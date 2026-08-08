@@ -219,6 +219,14 @@ static struct hdr_image *load_jxl(const char *path) {
 	uint16_t *pixels = NULL;
 	JxlBasicInfo info;
 	JxlColorEncoding color;
+	/* Both are filled only by their own decoder event, and subscribing asks
+	 * for an event rather than guaranteeing it. have_color was already tracked
+	 * for that reason; info was not, and it is the more dangerous of the two.
+	 * The pixel loop below takes its bounds from info while pixels was sized
+	 * from the decoder's own `needed`, so an info that was never written does
+	 * not merely give a wrong image -- the two disagree and the loop walks off
+	 * the end of the buffer. */
+	bool have_info = false;
 	bool have_color = false;
 
 	if (JxlDecoderSubscribeEvents(dec,
@@ -244,6 +252,7 @@ static struct hdr_image *load_jxl(const char *path) {
 			if (JxlDecoderGetBasicInfo(dec, &info) != JXL_DEC_SUCCESS) {
 				goto out;
 			}
+			have_info = true;
 		} else if (status == JXL_DEC_COLOR_ENCODING) {
 			have_color = JxlDecoderGetColorAsEncodedProfile(dec,
 					JXL_COLOR_PROFILE_TARGET_DATA, &color) == JXL_DEC_SUCCESS;
@@ -265,7 +274,9 @@ static struct hdr_image *load_jxl(const char *path) {
 		}
 	}
 
-	if (!pixels) {
+	/* Before any read of info.xsize/ysize below, including the one that sizes
+	 * the surface. */
+	if (!pixels || !have_info) {
 		goto out;
 	}
 
