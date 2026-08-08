@@ -117,6 +117,8 @@ Row {
                 return batteryComponent;
             case "power":
                 return powerComponent;
+            case "clipboard":
+                return clipboardComponent;
             default:
                 return null;
             }
@@ -191,6 +193,11 @@ Row {
     Component {
         id: powerComponent
         Power { bar: root.bar }
+    }
+
+    Component {
+        id: clipboardComponent
+        Clipboard { bar: root.bar }
     }
 
     Component {

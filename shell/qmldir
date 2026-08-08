@@ -32,3 +32,4 @@ NotificationCentre 1.0 NotificationCentre.qml
 NotificationPopups 1.0 NotificationPopups.qml
 AudioPanel 1.0 AudioPanel.qml
 AudioDeviceRow 1.0 AudioDeviceRow.qml
+ClipboardPanel 1.0 ClipboardPanel.qml

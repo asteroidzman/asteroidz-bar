@@ -152,6 +152,20 @@ Singleton {
     readonly property int notifyMaxPopups: num(notify, "max-popups", 4)
     readonly property bool notifyDnd: flag(notify, "dnd", false)
 
+    // The clipboard.
+    //
+    // Wider than the notification centre, because what is being scanned here
+    // is a line you are trying to RECOGNISE rather than a message you are
+    // reading: more characters per row is what turns "which of these four
+    // URLs" into a glance instead of four hovers.
+    readonly property var clipboard: BarConfig.groups.clipboard || ({})
+    readonly property int clipboardWidth: num(clipboard, "width", em(24))
+    readonly property int clipboardHeight: num(clipboard, "height", em(22))
+    // Roughly a day of ordinary copying. The cost is memory -- every entry is
+    // held whole, images included -- so this is the knob for anyone who pastes
+    // screenshots all day.
+    readonly property int clipboardLimit: num(clipboard, "limit", 100)
+
     // On by default, unlike the sound. A toast over a fullscreen film or game
     // is an intrusion with no way to dismiss it that does not leave what you
     // are doing, so the useful default is the quiet one -- and the

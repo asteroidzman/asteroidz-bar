@@ -945,6 +945,53 @@ The transitions are plain `systemctl`, without `--user`: they are system
 transitions and polkit decides whether this session may make them. Where it may
 not, systemctl says so rather than this module guessing.
 
+## The clipboard
+
+`clipboard` in a module list. The last hundred things you copied, searchable,
+with Enter to put one back.
+
+**There is no `cliphist`, no `wl-paste --watch`, and no daemon.** The history is
+read directly off `ext-data-control-v1` by the C++ plugin, on the shell's own
+Wayland connection — that protocol exists precisely so a privileged client can
+watch every selection *without* holding keyboard focus, which is what rules out
+the ordinary `wl_data_device` route for a bar that never has focus. The history
+is a list in this process; the backend is a listener, not a second program to
+install and supervise.
+
+It records text and images. Anything else — a file list, an application's
+private format — is passed over rather than stored as bytes nobody could paste
+back usefully. The **primary** selection is deliberately not recorded: it
+changes on every drag of the mouse across text, so a history of it is noise.
+
+**Pausing stops recording and nothing else.** What is already there stays, and
+the clipboard itself keeps working — the distinction that matters when you are
+about to paste a password. Right-click the pill, or `ipc call clipboard pause`.
+The pill dims while paused, because that is the state you turned on for a
+reason and will forget.
+
+Copying the same thing twice moves it to the top rather than adding a second
+row. Putting an entry back is itself a copy, so the compositor echoes it
+straight back at us — dedupe against what we last set is what stops that
+becoming a duplicate.
+
+```kdl
+clipboard {
+	width  24    // ems; wider than the notification centre on purpose
+	height 22    // ems of list before it scrolls
+	limit  100   // entries kept. Each is held whole, images included
+}
+```
+
+Bound to a key, which is how it will actually be used:
+
+```kdl
+Super+v { spawn "qs -p /usr/share/asteroidz-bar/shell.qml ipc call clipboard toggle"; }
+```
+
+`toggle` opens it on the focused monitor only — every bar sees the signal and
+compares, or the panel opens on all of them at once. `pause` and `clear` are
+there too.
+
 ## Idle
 
 `swayidle` is gone: the bar does idle itself. asteroidz implements

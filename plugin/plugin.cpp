@@ -1,10 +1,12 @@
 // The QML module the shell imports as `Asteroidz.Bar`.
 //
-// Two types, both for things QML cannot do at all:
+// Types for things QML cannot do at all:
 //
 //   Backdrop   the wallpaper, drawn on the shell's own Wayland connection,
 //              in 10-bit HDR when the image is HDR
 //   Paths      does this file exist?
+//   Clipboard  the selection history, read off ext-data-control-v1 on that
+//              same connection -- no cliphist, no wl-paste subprocess
 //
 // Plus one image provider, `image://opticalicon/...`, which normalises tray
 // artwork by ink coverage -- see opticalicon.hpp.
@@ -18,6 +20,7 @@
 #include <QtQml/QQmlExtensionPlugin>
 #include <QtQml/qqml.h>
 
+#include "clipboard.hpp"
 #include "opticalicon.hpp"
 #include "paths.hpp"
 #include "windowicon.hpp"
@@ -54,6 +57,19 @@ public:
 				    );
 			    }
 			    return new Paths();
+		    }
+		);
+		// A singleton, not a type: the history is the machine's, not any one
+		// bar's, and a second instance would mean a second data-control device
+		// racing the first for the same selections.
+		qmlRegisterSingletonType<Clipboard>(
+		    uri,
+		    1,
+		    0,
+		    "Clipboard",
+		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
+			    Q_UNUSED(engine);
+			    return new Clipboard();
 		    }
 		);
 		qmlRegisterSingletonType<WindowIcon>(

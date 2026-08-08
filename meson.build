@@ -52,6 +52,7 @@ install_data(
 		'shell/NotificationService.qml',
 		'shell/NotificationCard.qml',
 		'shell/NotificationCentre.qml',
+		'shell/ClipboardPanel.qml',
 		'shell/AudioPanel.qml',
 		'shell/AudioDeviceRow.qml',
 		'shell/NotificationPopups.qml',
@@ -66,6 +67,18 @@ install_data(
 	],
 	install_dir: qmldir,
 )
+
+# Icons this shell owns.
+#
+# The compositor ships the bar's icon set (assets/bar-icons there, installed to
+# /usr/share/asteroidz/bar-icons), which is right for the ones a bar and a
+# compositor both have opinions about -- tags, layouts, the logo. An icon that
+# exists only because a module here exists belongs with the module.
+#
+# Installed into the shell's own datadir, which needs no change to the search
+# path: Cfg.iconDir ends with /usr/share, so `asteroidz-bar/clipboard.svg`
+# resolves to /usr/share/asteroidz-bar/clipboard.svg through that last root.
+install_data(['assets/clipboard.svg'], install_dir: qmldir)
 
 install_data(
 	[
@@ -87,6 +100,7 @@ install_data(
 		'shell/modules/Tray.qml',
 		'shell/modules/Custom.qml',
 		'shell/modules/Power.qml',
+		'shell/modules/Clipboard.qml',
 	],
 	install_dir: qmldir / 'modules',
 )
@@ -160,8 +174,46 @@ imageformats_lib = static_library(
 	pic: true,
 )
 
+# ext-data-control-v1, for the clipboard.
+#
+# The wallpaper's protocols are generated inside the asteroidzbg subproject
+# because that is where they are spoken. This one is spoken by the C++ plugin
+# directly, so it is generated here -- same scanner, same shape.
+#
+# ext-data-control rather than the older zwlr-data-control: asteroidz offers
+# both, ext- is the standardised one, and "a privileged client watches every
+# selection" is precisely what the protocol exists for.
+wl_protos_dep = dependency('wayland-protocols', version: '>=1.41')
+wl_scanner_dep = dependency('wayland-scanner', version: '>=1.14.91', native: true)
+wl_scanner = find_program(wl_scanner_dep.get_variable('wayland_scanner'), native: true)
+wl_protocol_root = wl_protos_dep.get_variable('pkgdatadir')
+
+plugin_proto_code = generator(
+	wl_scanner,
+	output: '@BASENAME@-protocol.c',
+	arguments: ['private-code', '@INPUT@', '@OUTPUT@'],
+)
+plugin_proto_header = generator(
+	wl_scanner,
+	output: '@BASENAME@-client-protocol.h',
+	arguments: ['client-header', '@INPUT@', '@OUTPUT@'],
+)
+
+ext_data_control_xml = wl_protocol_root / 'staging/ext-data-control/ext-data-control-v1.xml'
+plugin_protos = [
+	plugin_proto_code.process(ext_data_control_xml),
+	plugin_proto_header.process(ext_data_control_xml),
+]
+
+wayland_client_dep = dependency('wayland-client')
+
 plugin_moc = qt6.preprocess(
-	moc_headers: ['plugin/wallpaper.hpp', 'plugin/paths.hpp', 'plugin/windowicon.hpp'],
+	moc_headers: [
+		'plugin/wallpaper.hpp',
+		'plugin/paths.hpp',
+		'plugin/windowicon.hpp',
+		'plugin/clipboard.hpp',
+	],
 	# plugin.cpp declares its class in the .cpp and ends with
 	# `#include "plugin.moc"`, which is the form moc expects for a type that
 	# has no header of its own.
@@ -177,9 +229,11 @@ shared_module(
 		'plugin/paths.cpp',
 		'plugin/windowicon.cpp',
 		'plugin/opticalicon.cpp',
+		'plugin/clipboard.cpp',
+		plugin_protos,
 		plugin_moc,
 	],
-	dependencies: [qt6_dep, asteroidzbg_dep],
+	dependencies: [qt6_dep, asteroidzbg_dep, wayland_client_dep],
 	link_with: imageformats_lib,
 	install: true,
 	install_dir: qmlplugindir,
