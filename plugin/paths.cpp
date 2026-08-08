@@ -1,5 +1,7 @@
 #include "paths.hpp"
 
+#include <QtCore/QUrl>
+
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QUrl>
@@ -67,4 +69,11 @@ QString Paths::renderToPng(const QString& source, const QString& dest, int maxEd
 	auto why = err != nullptr ? QString::fromUtf8(err) : QStringLiteral("failed");
 	std::free(err);
 	return why;
+}
+
+QString Paths::opticalIcon(const QString& url, int box) {
+	if (url.isEmpty() || box <= 0) return url;
+	return QStringLiteral("image://opticalicon/%1/%2")
+	    .arg(box)
+	    .arg(QString::fromUtf8(QUrl::toPercentEncoding(url)));
 }

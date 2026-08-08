@@ -1511,6 +1511,39 @@ artwork that failed to load.
 StatusNotifierItem on whatever bus it finds, so a test against the real one
 would pick up Steam and Discord and pass whether or not the code works.
 
+### Tray icons are normalised by weight, not by box
+
+Every icon in the tray is fitted into the same square, and they still do not
+read as the same size. Measured on a live bar: 15x15 and 17x14 inside an
+identical advance, and the smaller one looked bigger — because it was a solid
+filled block covering 72% of its canvas next to a sparse logo covering 63%, and
+a box is not what the eye measures. That difference is in the artwork, which is
+supplied by arbitrary applications, so no layout arithmetic in QML can reach it.
+
+So `image://opticalicon/<box>/<url>` measures the ink and scales by
+`sqrt(target / coverage)` — the factor that equalises AREA rather than extent,
+which is the correction a designer applies by hand when a set mixes solid and
+open shapes. It brought those two from 15% apart in ink to 1.6%. Shrink only:
+growing an icon past the advance the pill already reserved would push the bar's
+layout around as tray items come and go.
+
+Two things about it are worth keeping in mind.
+
+The target coverage is **measured, not reasoned**. The first value was 0.75,
+picked from what a well-drawn 16px-grid icon ought to cover — and it sat above
+every icon in a real tray, so each one scored "already fine", the provider
+returned its input untouched, and a correctly wired feature was
+indistinguishable from a broken one. `ASTEROIDZ_BAR_ICON_DEBUG=1` prints what
+each icon measures; that is how 0.62 was chosen.
+
+And the provider is installed from the `Paths` singleton's factory, not from
+`QQmlExtensionPlugin::initializeEngine`. That override compiles, is present in
+the plugin, and quickshell's engine never calls it — the tray logged `Invalid
+image provider` for every icon and drew them unnormalised. A singleton is
+constructed on first access, and `Paths.opticalIcon()` is what builds the URLs,
+so the provider cannot be missing when one is used. `tray-test.sh` now treats
+that warning as an error, because nothing else did.
+
 ## Layout
 
 ```

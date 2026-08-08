@@ -34,6 +34,10 @@ Row {
             required property var modelData
 
             icons: [modelData.icon]
+            // Tray artwork comes from arbitrary applications and is the only
+            // artwork in the bar drawn as a run of unrelated logos, so it is
+            // the only place that needs ink normalisation.
+            opticalIcons: true
             paddingX: 0
             fixedWidth: iconSize + 2 * Cfg.borderWidth + 1
 

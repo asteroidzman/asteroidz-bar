@@ -137,7 +137,7 @@ install_data(
 # to a Qt version in a way that breaks silently on the next Qt rebuild, and
 # would put a module nothing else can use where every Qt application looks.
 qt6 = import('qt6')
-qt6_dep = dependency('qt6', modules: ['Core', 'Gui', 'Qml'])
+qt6_dep = dependency('qt6', modules: ['Core', 'Gui', 'Qml', 'Quick'])
 # Asked for by name here as well as through asteroidzbg: Paths::imageExtensions
 # reports what the decoder can read, so the plugin includes its header directly
 # rather than relying on a transitive dependency it does not declare.
@@ -176,6 +176,7 @@ shared_module(
 		'plugin/wallpaper.cpp',
 		'plugin/paths.cpp',
 		'plugin/windowicon.cpp',
+		'plugin/opticalicon.cpp',
 		plugin_moc,
 	],
 	dependencies: [qt6_dep, asteroidzbg_dep],
@@ -248,4 +249,18 @@ configure_file(
 	install: true,
 	install_dir: get_option('bindir'),
 	install_mode: 'rwxr-xr-x',
+)
+
+# ── tests ────────────────────────────────────────────────────────────────────
+#
+# Pure functions only. Anything needing a compositor, a bus or a running bar
+# lives in contrib/*-test.sh, which is a different kind of slow.
+test(
+	'opticalicon',
+	executable(
+		'test-opticalicon',
+		['tests/test_opticalicon.cpp', 'plugin/opticalicon.cpp'],
+		dependencies: [qt6_dep],
+		build_by_default: false,
+	),
 )

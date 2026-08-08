@@ -60,7 +60,17 @@ Image {
         return Quickshell.iconPath(name, true);
     }
 
-    source: resolved
+    // Normalise by ink coverage before drawing (tray artwork only, see
+    // plugin/opticalicon.hpp). Off everywhere else: the bar's own vendored
+    // glyphs are drawn as a set and already agree with each other, and running
+    // them through a provider would cost a rasterisation to change nothing.
+    property bool optical: false
+
+    // Through Paths, not string-concatenated here: reaching that singleton is
+    // what installs the image provider (see Paths::opticalIcon).
+    source: (optical && resolved !== "" && size > 0)
+        ? Paths.opticalIcon(resolved, size)
+        : resolved
 
     // Hidden when there is nothing to draw -- NOT while it is still arriving.
     //
@@ -90,7 +100,11 @@ Image {
             : 1.0
 
     height: size
-    width: aspect < 1.0 ? Math.round(size * aspect) : size
+    // The optical provider returns a square of exactly `size` with the artwork
+    // centred in it, so its advance IS the box -- applying the aspect rule on
+    // top would measure the padding the provider just added and narrow the
+    // pill around it.
+    width: (optical || aspect >= 1.0) ? size : Math.round(size * aspect)
 
     // Both dimensions for a THEME icon, height only for a file asset.
     //
@@ -115,8 +129,10 @@ Image {
     readonly property bool ownAsset:
         name !== "" && name.includes("/") && !name.includes("://")
         && !name.startsWith("/")
-    sourceSize.width: ownAsset ? 0 : size * 2
-    sourceSize.height: size * 2
+    // The optical provider is handed the box in its URL and returns exactly
+    // that, so a sourceSize would only ask it to rescale its own output.
+    sourceSize.width: optical ? 0 : (ownAsset ? 0 : size * 2)
+    sourceSize.height: optical ? 0 : size * 2
     fillMode: Image.PreserveAspectFit
     smooth: true
     asynchronous: true

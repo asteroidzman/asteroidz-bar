@@ -20,6 +20,11 @@ Item {
     property string text: ""
     // Artwork names, resolved by Icon: asset paths or icon-theme names.
     property var icons: []
+    // Normalise this pill's artwork by ink coverage before drawing. Only the
+    // tray wants it: its icons come from arbitrary applications and are drawn
+    // side by side, which is the one place where a solid block next to a
+    // sparse logo reads as two different sizes. See plugin/opticalicon.hpp.
+    property bool opticalIcons: false
     // Recolours every icon in this pill. See Icon.tint.
     property color iconTint: "transparent"
     // Tag pills put the number first and what is running on it after, because
@@ -179,6 +184,7 @@ Item {
                     name: modelData
                     size: root.iconSize
                     tint: root.iconTint
+                    optical: root.opticalIcons
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -249,6 +255,7 @@ Item {
                     name: modelData
                     size: root.iconSize
                     tint: root.iconTint
+                    optical: root.opticalIcons
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }

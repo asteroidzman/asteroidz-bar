@@ -60,6 +60,19 @@ public:
 	Q_INVOKABLE [[nodiscard]] QString
 	renderToPng(const QString& source, const QString& dest, int maxEdge);
 
+	// The `image://opticalicon/...` URL that draws `url` normalised by ink
+	// coverage into a `box`-sized square. Returns `url` unchanged when there
+	// is nothing to normalise.
+	//
+	// Here, rather than assembled in QML, for one reason: touching this
+	// singleton is what GUARANTEES the provider exists. It is installed from
+	// this type's factory, because QQmlExtensionPlugin::initializeEngine is
+	// not called by quickshell's engine -- the override is compiled into the
+	// plugin and simply never runs, and the tray logged "Invalid image
+	// provider" for every icon. A singleton is constructed on first access, so
+	// the call that needs the provider is the call that creates it.
+	Q_INVOKABLE [[nodiscard]] static QString opticalIcon(const QString& url, int box);
+
 private:
 	// Icons are asked for repeatedly -- every pill that draws one asks on
 	// every config change -- and the answer only changes when a file is

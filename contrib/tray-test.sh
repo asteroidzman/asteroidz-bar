@@ -184,7 +184,12 @@ fi
 # every type above it went unavailable, and the one assertion still standing
 # said the tray was fine. An assertion about errors has to see the error that
 # stops the program before it starts.
-_TRAY_ERRS="ReferenceError\|is not defined\|Failed to load configuration\|unavailable\|is not installed"
+# "Invalid image provider" is in here because it happened. The optical icon
+# provider was registered from QQmlExtensionPlugin::initializeEngine, which
+# quickshell's engine never calls -- so every tray icon logged that line, drew
+# unnormalised, and every assertion here passed. A warning that means "the
+# artwork you asked for was not produced" is an error for a tray test.
+_TRAY_ERRS="ReferenceError\|is not defined\|Failed to load configuration\|unavailable\|is not installed\|Invalid image provider"
 if grep -q "$_TRAY_ERRS" "$WORK/qs.log" 2>/dev/null; then
 	bad "no QML errors while hosting the tray"
 	grep -m3 "$_TRAY_ERRS" "$WORK/qs.log" | sed 's/^/       /'
