@@ -69,7 +69,14 @@ Row {
                 }
             }
 
-            onWheel: delta => modelData.scroll(0, delta)
+            // scroll(delta, horizontal), NOT scroll(orientation, delta).
+            // Reversed, this sent every tray item a delta of ZERO with
+            // `horizontal` set to whatever the wheel produced -- which is
+            // truthy for any real scroll, so items got a horizontal no-op and
+            // nothing that reacts to the wheel (a volume applet, a workspace
+            // switcher) ever moved. Vertical, because Pill.wheel carries
+            // angleDelta.y.
+            onWheel: delta => modelData.scroll(delta, false)
 
             function openMenu() {
                 if (!root.bar)
