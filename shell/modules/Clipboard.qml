@@ -1,8 +1,8 @@
 // The clipboard pill.
 //
-// Opens the history under itself on a left click, and answers
-// `ipc call clipboard toggle` from a keybind -- which is how it will actually
-// be used. A clipboard manager you have to aim at with a mouse is a clipboard
+// Opens the history under itself on a left click, and on the keybind that
+// ClipboardService turns into a signal -- which is how it will actually be
+// used. A clipboard manager you have to aim at with a mouse is a clipboard
 // manager you stop using.
 //
 // The history is the C++ Clipboard singleton (ext-data-control-v1, on the
@@ -10,7 +10,6 @@
 // no state of its own.
 
 import Quickshell
-import Quickshell.Io
 import QtQuick
 import Asteroidz.Bar
 import ".."
@@ -62,49 +61,11 @@ Pill {
         value: Cfg.clipboardLimit
     }
 
-    // The keybind's end of `ipc call clipboard toggle`.
-    //
-    // One bar answers, not all of them. The same problem the notification
-    // centre has: a key press does not know which screen you are looking at,
-    // and the compositor cannot pass it, so the shell resolves it -- and every
-    // bar receiving the signal compares rather than deciding, or the panel
-    // opens on every monitor at once.
-    IpcHandler {
-        target: "clipboard"
-
-        function toggle(): string {
-            const mon = root.focusedMonitor();
-            if (mon === "")
-                return "no screens";
-            root.toggleRequested(mon);
-            return mon;
-        }
-
-        function pause(): string {
-            Clipboard.paused = !Clipboard.paused;
-            return Clipboard.paused ? "paused" : "recording";
-        }
-
-        function clear(): string {
-            const n = Clipboard.entries.length;
-            Clipboard.clear();
-            return "cleared " + n;
-        }
-    }
-
-    signal toggleRequested(string monitor)
-
-    function focusedMonitor() {
-        if (Compositor.focusedMonitor !== "")
-            return Compositor.focusedMonitor;
-        // Before the first focus event -- at startup, or on a compositor that
-        // never sent one. Somewhere is better than nowhere.
-        const screens = Quickshell.screens;
-        return screens && screens.length > 0 ? screens[0].name : "";
-    }
-
+    // One bar answers, not all of them. The handler lives in
+    // ClipboardService, a singleton -- see the note there about what happens
+    // when it lives here instead and a second monitor appears.
     Connections {
-        target: root
+        target: ClipboardService
         function onToggleRequested(monitor) {
             if (bar.screenName === monitor)
                 bar.showPanel(root, panel);
