@@ -80,7 +80,16 @@ FloatingWindow {
                                  : (Schema.groupLabel(group) || "Settings");
         return ({ displays: "Displays", wallpaper: "Wallpaper",
                   modules: "Modules",
-                  layouts: "Layouts", rules: "Window rules", binds: "Keybinds",
+                  // "Tags", not "Layouts". The page is the per-TAG rules --
+                  // which layout each tag opens in, on which monitor -- and
+                  // "Layout" is already a settings group two rows above it in
+                  // the sidebar. Two entries a letter apart, meaning different
+                  // things, is a menu you have to read twice.
+                  //
+                  // The internal key stays `layouts`: it is not user-visible,
+                  // and renaming it would touch the page component, the loader
+                  // and both test suites for no gain.
+                  layouts: "Tags", rules: "Window rules", binds: "Keybinds",
                   palette: "Palette", discord: "Push-to-talk" })[page] || "Settings";
     }
 
@@ -585,7 +594,7 @@ FloatingWindow {
                                  { name: "", label: "Modules",
                                    page: "modules",
                                    icon: "asteroidz-bar/settings/modules.svg" },
-                                 { name: "", label: "Layouts",
+                                 { name: "", label: "Tags",
                                    page: "layouts",
                                    icon: "asteroidz-bar/settings/layout.svg" },
                                  { name: "", label: "Window rules",

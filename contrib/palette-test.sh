@@ -259,7 +259,7 @@ PY
 PALETTE_ROW="$(hl_get "get config-schema" | python3 -c '
 import json, sys
 groups = [g["label"] for g in json.load(sys.stdin)["groups"]]
-fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+fixed = ["Displays", "Wallpaper", "Modules", "Tags", "Window rules",
          "Keybinds", "Palette", "Notifications", "Push-to-talk"]
 rows = sorted(groups + fixed, key=lambda s: s.lower())
 print(rows.index("Palette"))
@@ -276,7 +276,7 @@ SEL_ROW="$(hl_get "get config-schema" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 groups = [g["label"] for g in d["groups"]]
-fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+fixed = ["Displays", "Wallpaper", "Modules", "Tags", "Window rules",
          "Keybinds", "Palette", "Notifications", "Push-to-talk"]
 rows = sorted(groups + fixed, key=lambda s: s.lower())
 print(rows.index(groups[0]))

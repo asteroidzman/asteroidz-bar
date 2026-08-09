@@ -288,11 +288,11 @@ PY
 eval "$(hl_get "get config-schema" | python3 -c '
 import json, sys
 groups = [g["label"] for g in json.load(sys.stdin)["groups"]]
-fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+fixed = ["Displays", "Wallpaper", "Modules", "Tags", "Window rules",
          "Keybinds", "Palette", "Notifications", "Push-to-talk"]
 rows = sorted(groups + fixed, key=lambda s: s.lower())
 for name, label in [("DISPLAYS", "Displays"), ("WALLPAPER", "Wallpaper"),
-                    ("MODULES", "Modules"), ("LAYOUTS", "Layouts"),
+                    ("MODULES", "Modules"), ("LAYOUTS", "Tags"),
                     ("RULES", "Window rules"), ("BINDS", "Keybinds")]:
     print("%s_ROW=%d" % (name, rows.index(label)))
 # The row a freshly opened window selects is the first GROUP, which after
@@ -1811,7 +1811,7 @@ fi
 NOTIFY_ROW="$(hl_get "get config-schema" | python3 -c '
 import json, sys
 groups = [g["label"] for g in json.load(sys.stdin)["groups"]]
-fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+fixed = ["Displays", "Wallpaper", "Modules", "Tags", "Window rules",
          "Keybinds", "Palette", "Notifications", "Push-to-talk"]
 print(sorted(groups + fixed, key=lambda s: s.lower()).index("Notifications"))
 ')"
@@ -1844,7 +1844,7 @@ fi
 PTT_ROW="$(hl_get "get config-schema" | python3 -c '
 import json, sys
 groups = [g["label"] for g in json.load(sys.stdin)["groups"]]
-fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+fixed = ["Displays", "Wallpaper", "Modules", "Tags", "Window rules",
          "Keybinds", "Palette", "Notifications", "Push-to-talk"]
 print(sorted(groups + fixed, key=lambda s: s.lower()).index("Push-to-talk"))
 ')"
