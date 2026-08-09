@@ -2,7 +2,7 @@
 //
 // One Apply for the whole page rather than per row, unlike the rule and bind
 // editors. The reason is the opposite of theirs: these nine are rendered from a
-// single template by a single matugen run, so applying one is applying all of
+// single template by a single render, so applying one is applying all of
 // them — a per-row Save would re-render the entire desktop nine times and mean
 // exactly the same thing as one.
 
@@ -88,7 +88,7 @@ Item {
         // Wallpaper.PATH. There is no `Wallpaper.wallpaper` -- the singleton
         // calls it `path` -- and reading the wrong name yields undefined rather
         // than an error, so Apply wrote the template and then quietly skipped the
-        // render. The palette test caught it by asserting matugen was invoked.
+        // render. The palette test caught it by asserting a render was invoked.
         Matugen.apply(Wallpaper.path);
     }
 
@@ -102,9 +102,10 @@ Item {
         spacing: Cfg.spacing
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
-            text: "matugen turns the wallpaper into a Material palette and these "
+            text: "The wallpaper is turned into a Material palette and these "
                   + "nine colours are generated from it. Turning one off hands it "
                   + "back to your config, where the Appearance page can edit it."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
@@ -114,6 +115,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: Matugen.status !== ""
             wrapMode: Text.WordWrap
@@ -150,6 +152,7 @@ Item {
         // what every role IS, and the rows below only pick which role each colour
         // reads. Changing the scheme moves all nine at once.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             text: "Scheme"
             color: Cfg.fg
@@ -160,12 +163,11 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
-            text: "How matugen derives the palette from the wallpaper. These "
-                  + "apply to every application it themes, not just the "
-                  + "compositor — anything else that runs matugen must pass the "
-                  + "same values or the two will keep overwriting each other."
+            text: "How the palette is derived from the wallpaper. These apply "
+                  + "to every template rendered below, not just the compositor."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
             font.family: Cfg.fontFamily
             font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
@@ -173,15 +175,15 @@ Item {
         }
 
         Repeater {
+            // Two knobs, because the engine has two. `type` (which Material
+            // scheme) and `prefer` (which candidate source colour) were
+            // matugen's CLI flags; the palette is generated in-process now, so
+            // both wrote a config file and changed nothing on screen.
             model: [
-                { field: "type",     label: "Type",
-                  values: Matugen.schemeTypes },
                 { field: "mode",     label: "Mode",
                   values: ["dark", "light"] },
                 { field: "contrast", label: "Contrast",
-                  values: ["-1", "-0.5", "0", "0.5", "1"] },
-                { field: "prefer",   label: "Prefer",
-                  values: Matugen.preferModes }
+                  values: ["-1", "-0.5", "0", "0.5", "1"] }
             ]
 
             delegate: Item {
@@ -190,6 +192,7 @@ Item {
                 height: picker.implicitHeight
 
                 Text {
+                    font.weight: Cfg.fontWeight
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     // "Prefer" needs the explanation; the rest read for
@@ -223,6 +226,7 @@ Item {
         Item { width: 1; height: Cfg.spacing }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             text: "Colours"
             color: Cfg.fg
@@ -275,6 +279,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             anchors.left: swatch.right
                             anchors.leftMargin: Cfg.spacing
                             anchors.right: ownToggle.left
@@ -317,6 +322,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: grayLabel
                             anchors.right: grayToggle.left
                             anchors.rightMargin: Cfg.spacing
@@ -341,6 +347,7 @@ Item {
                     }
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         width: parent.width
                         visible: !parent.parent.owned
                         wrapMode: Text.WordWrap
@@ -357,12 +364,13 @@ Item {
 
         Item { width: 1; height: Cfg.spacing }
 
-        // ── everything else matugen themes ──────────────────────────────────
+        // ── everything else the palette themes ──────────────────────────────
         //
         // Listed because Apply always rewrote every one of these and the page
         // never said so. A button that re-themes nine applications should look
         // like it does.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             text: "Applications"
             color: Cfg.fg
@@ -373,11 +381,12 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             visible: Matugen.templates.length > 0
-            text: "Templates in your matugen config. Turning one off leaves it "
-                  + "out of Apply only — it stays in matugen's own config, so a "
+            text: "Templates in your palette config. Turning one off leaves it "
+                  + "out of Apply only — it stays in the config, so a "
                   + "wallpaper change still renders it."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
             font.family: Cfg.fontFamily
@@ -386,10 +395,11 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             visible: Matugen.templates.length === 0
-            text: "No matugen config found, so nothing else is themed yet. "
+            text: "No palette config found, so nothing else is themed yet. "
                   + "Apply will create one with the compositor's template in it."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
@@ -406,6 +416,7 @@ Item {
                 height: appToggle.implicitHeight
 
                 Text {
+                    font.weight: Cfg.fontWeight
                     anchors.left: parent.left
                     anchors.right: appToggle.left
                     anchors.rightMargin: Cfg.spacing
@@ -436,15 +447,16 @@ Item {
 
         // What Apply actually does, said before you press it.
         //
-        // It is not a small action: it rewrites the template, re-runs matugen
+        // It is not a small action: it rewrites the template, re-renders the palette
         // against the current wallpaper, and that renders EVERY template this
         // desktop has and fires every post-hook -- waybar, kitty, the compositor
         // reload. Which is exactly what changing the wallpaper does, but a button
         // on a settings page does not look like changing the wallpaper.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
-            text: "Apply rewrites the matugen template and re-renders the palette "
+            text: "Apply rewrites the template and re-renders the palette "
                   + "from the current wallpaper — the same work a wallpaper change "
                   + "does, so every other themed application reloads too. The "
                   + "previous template is kept beside it as .bak."

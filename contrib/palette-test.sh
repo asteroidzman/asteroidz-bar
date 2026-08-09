@@ -244,12 +244,44 @@ print(grp[0], grp[-1] - grp[0] + 1)
 PY
 )"
 
-# One row per option group, then Displays, Wallpaper, rules, binds, palette.
-# There is no "All settings" row: a freshly opened window selects the first
-# group, so the accent pill the scan above found is row 0.
-NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
-PALETTE_ROW=$((6 + NGROUPS))
-PALETTE_Y=$((SB_TOP + PALETTE_ROW * (SB_H + 2) + SB_H / 2))
+# Which row "Palette" is, computed rather than counted.
+#
+# This was `6 + NGROUPS`: one row per option group, then the fixed pages in the
+# order they happened to be written. The sidebar is SORTED BY LABEL now, so that
+# arithmetic silently pointed at a different page -- the click landed somewhere
+# else, no palette rows were on screen, and the failure surfaced eleven
+# assertions later as "the first row's ownership toggle was located".
+#
+# The label list is duplicated from SettingsWindow.qml, which is not ideal, but
+# the alternative is finding a row by its pixels in a sidebar where every row is
+# an icon and a word in the same colour. A page added there and not here shows
+# up immediately as a wrong-page failure rather than as a slow drift.
+PALETTE_ROW="$(hl_get "get config-schema" | python3 -c '
+import json, sys
+groups = [g["label"] for g in json.load(sys.stdin)["groups"]]
+fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+         "Keybinds", "Palette", "Notifications", "Push-to-talk"]
+rows = sorted(groups + fixed, key=lambda s: s.lower())
+print(rows.index("Palette"))
+')"
+# The accent pill is the SELECTED row, which is no longer row 0.
+#
+# SB_TOP came from scanning for that pill, and the arithmetic below treated it
+# as the top of the list. That held while the sidebar was in schema order and
+# the first group was also the first row. Sorted by label, the selected group
+# ("Appearance") sits at index 1, so every row computed from SB_TOP was one row
+# low -- the click landed on Push-to-talk instead of Palette, and the failure
+# surfaced eleven assertions later as a missing toggle.
+SEL_ROW="$(hl_get "get config-schema" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+groups = [g["label"] for g in d["groups"]]
+fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+         "Keybinds", "Palette", "Notifications", "Push-to-talk"]
+rows = sorted(groups + fixed, key=lambda s: s.lower())
+print(rows.index(groups[0]))
+')"
+PALETTE_Y=$((SB_TOP + (PALETTE_ROW - SEL_ROW) * (SB_H + 2) + SB_H / 2))
 hl_move $((WX + 60)) "$PALETTE_Y"; sleep 1
 hl_click $((WX + 60)) "$PALETTE_Y"; sleep 3
 shot palette
@@ -569,11 +601,14 @@ shot palette_again
 read -r AP_X AP_Y <<<"$(find_apply "$WORK/palette_again.png")"
 hl_move "$AP_X" "$AP_Y"; sleep 1
 hl_click "$AP_X" "$AP_Y"; sleep 3
-# The premise, so the assertion under it means something.
-if grep -q "image " "$MG_CALLS"; then
+# The premise, so the assertion under it means something. The render is
+# in-process now, so what proves it ran is the output file being rewritten --
+# not a line in the stub's call log.
+if [ -s "$MG_OUT" ] && [ "$MG_OUT" -nt "$MG_TOML" ]; then
 	ok "the second Apply really ran"
 else
 	bad "the second Apply really ran"
+	ls -l --time-style=+%T "$MG_OUT" "$MG_TOML" 2>&1 | sed 's/^/       /'
 fi
 if [ "$(grep -c "asteroidz-colors.kdl" "$MG_TOML")" = "$BEFORE_N" ]; then
 	ok "...and does not add the template twice"
@@ -617,31 +652,49 @@ hl_move "$AP_X" "$AP_Y"; sleep 1
 hl_click "$AP_X" "$AP_Y"; sleep 4
 shot palette_unreadable
 
-# The premise: without it, this test cannot fail.
-if grep -q "image $WORK/wall.heic" "$MG_CALLS"; then
-	ok "the unreadable wallpaper really did reach matugen and was refused"
+rm -f "$CONVERTED"
+cp "$WORK/wall.png" "$WORK/wall.heic"
+printf 'heic\n' > "$MG_REJECT"
+printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WORK" "$WORK/wall.heic" \
+	> "$WORK/wallpaper.conf"
+sleep 2
+: > "$MG_CALLS"
+# Apply is inert with nothing staged, so the wallpaper change alone leaves it
+# unclickable and the run below would never happen. (It did not, the first time
+# this was written -- which is what the premise assertion underneath is for.)
+shot palette_before_unreadable
+read -r TOGGLE_X TOGGLE_Y <<<"$(find_on_toggle "$WORK/palette_before_unreadable.png")"
+hl_move "$TOGGLE_X" "$TOGGLE_Y"; sleep 1
+hl_click "$TOGGLE_X" "$TOGGLE_Y"; sleep 1
+shot palette_before_apply
+read -r AP_X AP_Y <<<"$(find_apply "$WORK/palette_before_apply.png")"
+hl_move "$AP_X" "$AP_Y"; sleep 1
+hl_click "$AP_X" "$AP_Y"; sleep 4
+shot palette_unreadable
+
+# An unusual format still themes, however it gets decoded.
+#
+# This asserted the CONVERSION path: matugen decodes what the Rust `image` crate
+# decodes, so a .heic wallpaper made it fail, and the shell answered by writing
+# a PNG copy and retrying. The engine is Qt now and decodes by CONTENT rather
+# than by extension, so this fixture -- a PNG named .heic -- is simply read, and
+# no converted copy is written at all.
+#
+# So the assertion is the outcome rather than the mechanism: the palette came
+# out. Whether it took the fallback is the engine's business, and demanding the
+# fallback would be demanding a workaround for a limitation that is gone.
+if [ -s "$MG_OUT" ] && ! grep -q '{{' "$MG_OUT"; then
+	ok "an odd-format wallpaper still produces a palette"
 else
-	bad "the unreadable wallpaper really did reach matugen and was refused"
-	sed 's/^/       /' "$MG_CALLS"
+	bad "an odd-format wallpaper still produces a palette"
 fi
-if [ -f "$CONVERTED" ] && head -c 8 "$CONVERTED" | grep -q 'PNG'; then
-	ok "...so the shell decoded it and wrote a PNG matugen can read"
+# If the fallback DID run, what it wrote has to be a real PNG -- a conversion
+# that produced something undecodable would fail the check above for a reason
+# worth telling apart from "never converted".
+if [ ! -f "$CONVERTED" ] || head -c 8 "$CONVERTED" | grep -q 'PNG'; then
+	ok "...and any converted copy it made is a real PNG"
 else
-	bad "...so the shell decoded it and wrote a PNG matugen can read"
-fi
-if grep -q "image $CONVERTED" "$MG_CALLS"; then
-	ok "...and re-ran matugen against that, rather than giving up"
-else
-	bad "...and re-ran matugen against that, rather than giving up"
-	sed 's/^/       /' "$MG_CALLS"
-fi
-# The retry is a fallback, not the path every run takes: the first attempt is
-# still the original file, byte for byte what a bare `matugen image` would get.
-if [ "$(head -1 "$MG_CALLS" | grep -c "wall.heic")" = "1" ]; then
-	ok "...having tried the original first, so a readable format is untouched"
-else
-	bad "...having tried the original first, so a readable format is untouched"
-	sed 's/^/       /' "$MG_CALLS"
+	bad "...and any converted copy it made is a real PNG"
 fi
 rm -f "$CONVERTED"
 
@@ -669,7 +722,10 @@ qs_ipc() {
 qs_ipc setOn "$HL_MON" "$WORK/permon.png" >/dev/null
 sleep 4
 
-if grep -q "image $WORK/permon.png" "$MG_CALLS"; then
+# Re-rendered, not re-invoked. There is no matugen call log to look in; what
+# says the desktop was re-themed from the new picture is that the palette output
+# was written again after the wallpaper changed.
+if [ -s "$MG_OUT" ] && [ "$MG_OUT" -nt "$WORK/permon.png" ]; then
 	ok "setting one monitor's wallpaper re-themes from that image"
 else
 	bad "setting one monitor's wallpaper re-themes from that image"

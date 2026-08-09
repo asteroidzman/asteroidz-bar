@@ -79,11 +79,12 @@ Item {
             color: Cfg.fg
             font.family: Cfg.fontFamily
             font.pointSize: Cfg.fontSize
-            font.weight: Font.DemiBold
+            font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "This shell is the notification daemon. Nothing else needs to "
@@ -108,6 +109,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Suppresses the popup, never the notification. What arrives "
@@ -129,6 +131,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Toasts draw on the overlay layer, above everything — "
@@ -176,6 +179,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "A name from the freedesktop sound-naming spec — "
@@ -212,6 +216,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Milliseconds, and only when the sender does not say. An "
@@ -237,6 +242,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Oldest first out. A stack that grows without bound covers "
@@ -288,6 +294,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Left unset, all three follow the theme's font size — the "

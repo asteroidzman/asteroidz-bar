@@ -91,6 +91,7 @@ Item {
             border.color: Qt.rgba(1, 1, 1, 0.25)
 
             Text {
+                font.weight: Cfg.fontWeight
                 anchors.centerIn: parent
                 // The canvas is a fraction of real size, so a 1920px-wide
                 // output can land at ~120px here and an output name is longer
@@ -168,6 +169,7 @@ Item {
     // give could not be read. 0.8 and 60% is still clearly secondary to the
     // monitor names without being decorative.
     Text {
+        font.weight: Cfg.fontWeight
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: 6

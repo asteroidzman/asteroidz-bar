@@ -87,6 +87,7 @@ Item {
     // row rather than centred in it: the row is as tall as its explanation, and
     // a label floating halfway down that has nothing beside it.
     Text {
+        font.weight: Cfg.fontWeight
         id: labelText
         anchors.left: parent.left
         anchors.top: parent.top
@@ -143,6 +144,7 @@ Item {
         // are why the schema carries a `desc` field at all, and an explanation
         // you have to discover is one most people never read.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: text !== ""
             wrapMode: Text.WordWrap
@@ -160,6 +162,7 @@ Item {
             visible: !root.atDefault || root.foreign
 
             Text {
+                font.weight: Cfg.fontWeight
                 id: srcText
                 anchors.left: parent.left
                 anchors.right: acts.left

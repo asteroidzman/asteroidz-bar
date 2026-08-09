@@ -107,6 +107,7 @@ Rectangle {
             height: Math.max(24, Math.round(Cfg.fontPixelSize * 1.4))
 
             Text {
+                font.weight: Cfg.fontWeight
                 anchors.left: parent.left
                 anchors.right: chevron.left
                 anchors.rightMargin: Cfg.spacing
@@ -121,6 +122,7 @@ Rectangle {
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 id: chevron
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
@@ -144,6 +146,7 @@ Rectangle {
         // What it does, and where it lives. Both on one dim line, because
         // collapsed cards are for scanning.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             elide: Text.ElideRight
             text: {
@@ -209,6 +212,7 @@ Rectangle {
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 width: parent.width
                 visible: root.draftKeys.length === 0
                 wrapMode: Text.WordWrap

@@ -368,6 +368,7 @@ PopupWindow {
                     spacing: 12
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         text: "‹"
                         color: Cfg.fg
                         font.family: Cfg.fontFamily
@@ -393,6 +394,7 @@ PopupWindow {
                     }
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         text: "›"
                         color: Cfg.fg
                         font.family: Cfg.fontFamily
@@ -409,6 +411,7 @@ PopupWindow {
                 // which is undefined, not false -- and binding that to
                 // `visible` fails outright instead of hiding the marker.
                 Text {
+                    font.weight: Cfg.fontWeight
                     visible: row.modelData.separator !== true
                         && (row.modelData.checked === true
                             || row.modelData.submenu === true)

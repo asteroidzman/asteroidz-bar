@@ -113,6 +113,7 @@ Rectangle {
             height: Math.max(26, Math.round(Cfg.fontPixelSize * 1.6))
 
             Text {
+                font.weight: Cfg.fontWeight
                 anchors.left: parent.left
                 anchors.right: chevron.left
                 anchors.rightMargin: Cfg.spacing
@@ -126,6 +127,7 @@ Rectangle {
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 id: chevron
                 anchors.right: parent.right
                 anchors.rightMargin: 4
@@ -145,6 +147,7 @@ Rectangle {
         // What the rule actually does, on one line, so the list is readable
         // without opening anything.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: !root.expanded && text !== ""
             elide: Text.ElideRight
@@ -190,6 +193,7 @@ Rectangle {
             Item { width: 1; height: Cfg.spacing }
 
             Text {
+                font.weight: Cfg.fontWeight
                 width: parent.width
                 visible: !root.editable
                 wrapMode: Text.WordWrap

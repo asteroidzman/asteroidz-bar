@@ -337,6 +337,20 @@ Singleton {
     readonly property real fontSize: fontParts.size
     readonly property int fontWeight: fontParts.weight
     readonly property bool fontItalic: fontParts.italic
+
+    // One step heavier than the configured weight, for the handful of places
+    // that mean "this is the heading".
+    //
+    // RELATIVE, because emphasis is. Those places said Font.DemiBold outright,
+    // which is emphasis only for as long as the body text is lighter than it:
+    // configure `theme { font "Ubuntu Bold 12" }` and every heading in the
+    // window comes out LIGHTER than the text underneath it, which is the
+    // opposite of what the hardcoded value was there for.
+    //
+    // Floored at DemiBold so emphasis is still visible when the configured
+    // weight is Light, and capped at Black because there is nothing above it.
+    readonly property int fontWeightEmphasis:
+        Math.min(900, Math.max(600, fontWeight + 200))
     // The compositor's Pango size is points at a fixed 96dpi (text-node.c sets
     // the resolution explicitly), so the pixel height is points * 96/72. Using
     // this rather than font.pointSize takes Qt's own DPI guess out of the

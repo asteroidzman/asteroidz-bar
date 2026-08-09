@@ -135,7 +135,7 @@ Item {
                 color: Cfg.fg
                 font.family: Cfg.fontFamily
                 font.pointSize: Cfg.fontSize
-                font.weight: Font.DemiBold
+                font.weight: Cfg.fontWeightEmphasis
                 font.hintingPreference: Font.PreferFullHinting
             }
 
@@ -157,6 +157,7 @@ Item {
                                               : "transparent"
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: pauseLabel
                         anchors.centerIn: parent
                         text: Clipboard.paused ? "paused" : "recording"
@@ -179,6 +180,7 @@ Item {
                            : "transparent"
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: clearLabel
                         anchors.centerIn: parent
                         text: "clear"
@@ -227,6 +229,7 @@ Item {
             TapHandler { onTapped: root.claimKeys() }
 
             TextInput {
+                font.weight: Cfg.fontWeight
                 id: search
                 anchors.fill: parent
                 anchors.leftMargin: 8
@@ -275,6 +278,7 @@ Item {
 
         // ── nothing to show ─────────────────────────────────────────────────
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: !Clipboard.available || root.shown.length === 0
             text: {
@@ -371,6 +375,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             anchors.left: thumb.visible ? thumb.right : parent.left
                             anchors.leftMargin: 8
                             anchors.right: kindLabel.left
@@ -388,6 +393,7 @@ Item {
                         // apart from the 400KB of HTML that looked identical
                         // once elided.
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: kindLabel
                             anchors.right: parent.right
                             anchors.rightMargin: 8

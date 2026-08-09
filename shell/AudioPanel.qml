@@ -197,11 +197,12 @@ Item {
                 color: Cfg.fg
                 font.family: Cfg.fontFamily
                 font.pointSize: Cfg.fontSize
-                font.weight: Font.DemiBold
+                font.weight: Cfg.fontWeightEmphasis
                 font.hintingPreference: Font.PreferFullHinting
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 visible: root.have && root.sink.audio.muted
@@ -278,7 +279,7 @@ Item {
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
             font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
-            font.weight: Font.DemiBold
+            font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -339,11 +340,12 @@ Item {
                 color: Cfg.fg
                 font.family: Cfg.fontFamily
                 font.pointSize: Cfg.fontSize
-                font.weight: Font.DemiBold
+                font.weight: Cfg.fontWeightEmphasis
                 font.hintingPreference: Font.PreferFullHinting
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 visible: root.haveSource && root.source.audio.muted
@@ -418,7 +420,7 @@ Item {
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
             font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
-            font.weight: Font.DemiBold
+            font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -460,7 +462,7 @@ Item {
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
             font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
-            font.weight: Font.DemiBold
+            font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -490,6 +492,7 @@ Item {
                         height: label.height + slider.height + 2
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: label
                             width: parent.width
                             text: root.streamLabel(stream.modelData)

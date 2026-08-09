@@ -94,6 +94,7 @@ Item {
         spacing: Cfg.spacing
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Rules apply in order and every match applies, so a later rule "
@@ -105,6 +106,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: page.status !== ""
             wrapMode: Text.WordWrap
@@ -116,6 +118,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: page.rules.length === 0
             wrapMode: Text.WordWrap

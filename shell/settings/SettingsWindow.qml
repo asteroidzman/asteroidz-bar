@@ -495,6 +495,7 @@ FloatingWindow {
                     }
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: nameText
                         anchors.left: shipIcon.right
                         anchors.leftMargin: Cfg.spacing
@@ -510,6 +511,7 @@ FloatingWindow {
                     }
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: versionText
                         anchors.left: shipIcon.right
                         anchors.leftMargin: Cfg.spacing
@@ -577,6 +579,20 @@ FloatingWindow {
                                  { name: "", label: "Push-to-talk",
                                    page: "discord",
                                    icon: "asteroidz-bar/settings/discord.svg" }])
+                        // Sorted by label.
+                        //
+                        // The order above is two accidents joined together: the
+                        // schema's declaration order, then whatever order the
+                        // pages happened to be written in. Appearance, Effects,
+                        // Layout, Animations, Overview, Input, Miscellaneous,
+                        // Displays, Wallpaper... is not alphabetical and not
+                        // grouped by anything a reader can name, so finding a
+                        // page means reading every entry.
+                        //
+                        // localeCompare, not `<`. Comparing strings by code
+                        // point puts every accented or non-ASCII label after Z,
+                        // and these are translatable text.
+                        .sort((a, b) => a.label.localeCompare(b.label))
 
                     delegate: Rectangle {
                         required property var modelData
@@ -611,6 +627,7 @@ FloatingWindow {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             anchors.left: rowIcon.right
                             anchors.leftMargin: Cfg.spacing
                             anchors.right: chevron.left
@@ -629,6 +646,7 @@ FloatingWindow {
                         // rather than given a colour of its own, so it stays
                         // secondary on either side of the selection.
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: chevron
                             anchors.right: parent.right
                             anchors.rightMargin: 8
@@ -706,6 +724,7 @@ FloatingWindow {
             height: titleText.implicitHeight + subtitleText.implicitHeight + 4
 
             Text {
+                font.weight: Cfg.fontWeight
                 id: titleText
                 anchors.left: parent.left
                 anchors.right: searchField.left
@@ -721,6 +740,7 @@ FloatingWindow {
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 id: subtitleText
                 anchors.left: parent.left
                 anchors.right: searchField.left
@@ -880,6 +900,7 @@ FloatingWindow {
                 // are states a person can land in and neither should render as
                 // an empty pane.
                 Text {
+                    font.weight: Cfg.fontWeight
                     width: parent.width
                     visible: win.onOptions
                              && (!Schema.ready || win.shownOptions.length === 0)
@@ -953,6 +974,7 @@ FloatingWindow {
                             }
 
                             Text {
+                                font.weight: Cfg.fontWeight
                                 // Only where it tells you something: with a group
                                 // selected in the sidebar every row is in it, and
                                 // repeating its name over the first one is noise.
@@ -971,6 +993,7 @@ FloatingWindow {
                             }
 
                             Text {
+                                font.weight: Cfg.fontWeight
                                 readonly property string sub:
                                     Schema.subgroupLabel(modelData.subgroup || "")
                                 visible: sub !== ""
@@ -1046,6 +1069,7 @@ FloatingWindow {
             // first edit -- a bar that materialises pushes the pane up, which
             // moves the control you were about to click next.
             Text {
+                font.weight: Cfg.fontWeight
                 anchors.left: parent.left
                 anchors.leftMargin: Cfg.panelPadding
                 anchors.right: buttons.left
@@ -1113,6 +1137,7 @@ FloatingWindow {
                                                : Qt.rgba(1, 1, 1, 0.08)
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             anchors.centerIn: parent
                             text: modelData
                             color: parent.primary && parent.live

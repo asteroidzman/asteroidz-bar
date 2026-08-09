@@ -217,6 +217,7 @@ Item {
         spacing: Cfg.spacing
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Push-to-talk"
@@ -228,6 +229,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Discord's own push-to-talk cannot work on Wayland: its "
@@ -246,6 +248,7 @@ Item {
         // ── the key you press ───────────────────────────────────────────────
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             text: "The key you press"
             color: Cfg.fg
@@ -256,6 +259,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Taken by the compositor before any application sees it, so "
@@ -277,6 +281,7 @@ Item {
                 color: Qt.rgba(1, 1, 1, 0.08)
 
                 Text {
+                    font.weight: Cfg.fontWeight
                     id: current
                     anchors.centerIn: parent
                     text: page.picking ? "press a key…" : page.effectiveTrigger
@@ -296,6 +301,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: page.picking
             wrapMode: Text.WordWrap
@@ -312,6 +318,7 @@ Item {
         // ── the key Discord hears ───────────────────────────────────────────
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             text: "The key Discord hears"
             color: Cfg.fg
@@ -322,6 +329,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Injected into XWayland, so it must match the key set in "
@@ -346,6 +354,7 @@ Item {
                 color: Qt.rgba(1, 1, 1, 0.08)
 
                 Text {
+                    font.weight: Cfg.fontWeight
                     id: currentKey
                     anchors.centerIn: parent
                     text: page.capturing ? "press a key…"
@@ -376,6 +385,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: page.captureNote !== ""
             wrapMode: Text.WordWrap
@@ -389,6 +399,7 @@ Item {
         Item { width: 1; height: Cfg.spacing }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Discord must be running under XWayland for any of this to "

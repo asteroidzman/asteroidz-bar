@@ -191,6 +191,7 @@ Item {
     }
 
     Text {
+        font.weight: Cfg.fontWeight
         id: readout
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter

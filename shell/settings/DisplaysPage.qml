@@ -140,6 +140,7 @@ Item {
         spacing: Cfg.spacing
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Drag a screen to arrange it, or click one to change its "
@@ -177,6 +178,7 @@ Item {
         // Elided: an output name is whatever the display's EDID says it is, and
         // a long one used to run off the panel.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             elide: Text.ElideRight
             text: page.current
@@ -340,6 +342,7 @@ Item {
             // Yields to the buttons rather than overrunning them: the status text
             // is the expendable half of this row.
             Text {
+                font.weight: Cfg.fontWeight
                 anchors.left: parent.left
                 anchors.right: buttons.left
                 anchors.rightMargin: Cfg.spacing
@@ -387,6 +390,7 @@ Item {
                                                : Qt.rgba(1, 1, 1, 0.08)
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             anchors.centerIn: parent
                             text: modelData
                             color: parent.primary && parent.live

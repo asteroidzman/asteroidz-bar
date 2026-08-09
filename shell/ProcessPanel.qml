@@ -73,7 +73,7 @@ Item {
                 color: Cfg.fg
                 font.family: Cfg.fontFamily
                 font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
-                font.weight: Font.DemiBold
+                font.weight: Cfg.fontWeightEmphasis
                 font.hintingPreference: Font.PreferFullHinting
             }
 
@@ -101,6 +101,7 @@ Item {
                                                  : "transparent"
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: sortLabel
                             anchors.centerIn: parent
                             text: modelData.label
@@ -167,6 +168,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: pidText
                             anchors.left: parent.left
                             anchors.leftMargin: 6
@@ -181,6 +183,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             anchors.left: pidText.right
                             anchors.leftMargin: 8
                             anchors.right: cpuText.left
@@ -195,6 +198,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: cpuText
                             anchors.right: memText.left
                             anchors.rightMargin: 8
@@ -213,6 +217,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: memText
                             anchors.right: parent.right
                             anchors.rightMargin: 6
@@ -240,6 +245,7 @@ Item {
         // losing a reading in a change that was supposed to ADD one would be a
         // poor trade. It is the network module's data, not this panel's.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             text: "↓ " + Metrics.rate(Metrics.rxRate) + "   ↑ " + Metrics.rate(Metrics.txRate)
                   + (Metrics.linkUp ? "" : "   (link down)")

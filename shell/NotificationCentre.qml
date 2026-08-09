@@ -41,7 +41,7 @@ Item {
                 color: Cfg.fg
                 font.family: Cfg.fontFamily
                 font.pointSize: Cfg.fontSize
-                font.weight: Font.DemiBold
+                font.weight: Cfg.fontWeightEmphasis
                 font.hintingPreference: Font.PreferFullHinting
             }
 
@@ -62,6 +62,7 @@ Item {
                                              : Qt.rgba(1, 1, 1, 0.07))
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: dndLabel
                         anchors.centerIn: parent
                         text: "quiet"
@@ -93,6 +94,7 @@ Item {
                                               : Qt.rgba(1, 1, 1, 0.07)
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: clearLabel
                         anchors.centerIn: parent
                         text: "clear all"
@@ -117,6 +119,7 @@ Item {
 
         // ── nothing to show ─────────────────────────────────────────────────
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: NotificationService.count === 0
             text: NotificationService.dnd

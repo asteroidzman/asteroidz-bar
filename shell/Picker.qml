@@ -76,6 +76,7 @@ Item {
         color: root.open ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
 
         Text {
+            font.weight: Cfg.fontWeight
             anchors.centerIn: parent
             text: root.current === "" ? "—" : root.current
             color: Cfg.fg
@@ -87,6 +88,7 @@ Item {
         // The affordance. Without it this reads as a label -- which is half of
         // why it was ever a stepper.
         Text {
+            font.weight: Cfg.fontWeight
             anchors.right: parent.right
             anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
@@ -229,6 +231,7 @@ Item {
                                     : "transparent"
 
                 Text {
+                    font.weight: Cfg.fontWeight
                     anchors.centerIn: parent
                     text: modelData
                     color: modelData === root.current ? Cfg.focusFg : Cfg.fg

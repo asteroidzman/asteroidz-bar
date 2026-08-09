@@ -110,6 +110,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: page.status !== ""
             wrapMode: Text.WordWrap
@@ -121,6 +122,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: page.binds.length === 0
             wrapMode: Text.WordWrap
@@ -155,6 +157,7 @@ Item {
         // with no note would be quietly claiming they do not exist, and someone
         // tidying their binds through this window would lose them.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: Rules.notListed.length > 0
             wrapMode: Text.WordWrap

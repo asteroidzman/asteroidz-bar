@@ -53,6 +53,7 @@ Rectangle {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             id: text
             anchors.verticalCenter: parent.verticalCenter
             text: root.label

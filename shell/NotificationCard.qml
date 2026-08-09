@@ -114,6 +114,7 @@ Rectangle {
             height: Math.max(appLabel.implicitHeight, closeBtn.height)
 
             Text {
+                font.weight: Cfg.fontWeight
                 id: appLabel
                 anchors.left: parent.left
                 anchors.right: closeBtn.left
@@ -150,6 +151,7 @@ Rectangle {
                 color: closeHover.hovered ? Qt.rgba(1, 1, 1, 0.16) : "transparent"
 
                 Text {
+                    font.weight: Cfg.fontWeight
                     anchors.centerIn: parent
                     text: "×"
                     color: Cfg.fg
@@ -208,11 +210,12 @@ Rectangle {
                     elide: Text.ElideRight
                     font.family: Cfg.fontFamily
                     font.pointSize: Cfg.fontSize
-                    font.weight: Font.DemiBold
+                    font.weight: Cfg.fontWeightEmphasis
                     font.hintingPreference: Font.PreferFullHinting
                 }
 
                 Text {
+                    font.weight: Cfg.fontWeight
                     width: parent.width
                     visible: text !== ""
                     text: root.notification ? root.notification.body : ""
@@ -253,6 +256,7 @@ Rectangle {
                                             : Qt.rgba(1, 1, 1, 0.07)
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: actLabel
                         anchors.centerIn: parent
                         text: modelData.text || modelData.identifier

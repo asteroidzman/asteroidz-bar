@@ -115,6 +115,7 @@ Rectangle {
     border.color: Cfg.focusBg
 
     TextInput {
+        font.weight: Cfg.fontWeight
         id: input
         anchors.fill: parent
         anchors.leftMargin: 6
@@ -159,6 +160,7 @@ Rectangle {
     // AND changed, so it is an instruction at the moment it is actionable rather
     // than decoration that is always there.
     Text {
+        font.weight: Cfg.fontWeight
         id: enterHint
         anchors.right: parent.right
         anchors.rightMargin: 6

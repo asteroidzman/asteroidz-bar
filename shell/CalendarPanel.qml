@@ -111,7 +111,7 @@ Item {
                 color: Cfg.fg
                 font.family: Cfg.fontFamily
                 font.pointSize: Cfg.fontSize
-                font.weight: Font.DemiBold
+                font.weight: Cfg.fontWeightEmphasis
                 font.hintingPreference: Font.PreferFullHinting
             }
 
@@ -136,6 +136,7 @@ Item {
                                            : "transparent"
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             anchors.centerIn: parent
                             text: modelData.glyph
                             color: Cfg.fg
@@ -223,7 +224,7 @@ Item {
                                             : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.3)
                         font.family: Cfg.fontFamily
                         font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
-                        font.weight: cell.isToday ? Font.DemiBold : Font.Normal
+                        font.weight: cell.isToday ? Cfg.fontWeightEmphasis : Cfg.fontWeight
                         font.hintingPreference: Font.PreferFullHinting
                     }
 
@@ -262,7 +263,7 @@ Item {
             color: Cfg.fg
             font.family: Cfg.fontFamily
             font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
-            font.weight: Font.DemiBold
+            font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -271,6 +272,7 @@ Item {
         // Text rather than four, because they are mutually exclusive states of
         // the same question.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: root.eventsOn(root.selectedDay).length === 0
             text: {
@@ -309,6 +311,7 @@ Item {
                                      : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, 0.12)
 
             Text {
+                font.weight: Cfg.fontWeight
                 id: authLabel
                 anchors.centerIn: parent
                 text: !Calendar.configured ? "Connect a calendar"
@@ -371,6 +374,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: when
                             anchors.left: spine.right
                             anchors.leftMargin: 8
@@ -385,6 +389,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: title
                             anchors.left: row.modelData.allDay ? spine.right : when.right
                             anchors.leftMargin: 8

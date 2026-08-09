@@ -56,6 +56,7 @@ Item {
     }
 
     Text {
+        font.weight: Cfg.fontWeight
         id: label
         anchors.left: parent.left
         anchors.right: control.left

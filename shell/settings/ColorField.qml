@@ -79,6 +79,7 @@ Item {
         // Says the text is not a colour, rather than showing the checkerboard
         // and leaving you to work out why the swatch went blank.
         Text {
+            font.weight: Cfg.fontWeight
             anchors.centerIn: parent
             visible: !root.valid && root.value !== ""
             text: "!"

@@ -111,6 +111,7 @@ Item {
         spacing: Cfg.spacing
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Drawn left to right within each section. A module can only "
@@ -163,7 +164,7 @@ Item {
                     color: Cfg.fg
                     font.family: Cfg.fontFamily
                     font.pointSize: Cfg.fontSize
-                    font.weight: Font.DemiBold
+                    font.weight: Cfg.fontWeightEmphasis
                     font.hintingPreference: Font.PreferFullHinting
                 }
 
@@ -199,6 +200,7 @@ Item {
                     }
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: shownLabel
                         anchors.left: parent.left
                         anchors.right: shownPick.left
@@ -248,6 +250,7 @@ Item {
                     }
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: emptyLabel
                         anchors.centerIn: parent
                         text: page.dragName !== "" ? "Drop here" : "Empty."
@@ -269,6 +272,7 @@ Item {
                     visible: sec.items.length > 0
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         anchors.right: parent.right
                         anchors.rightMargin: Cfg.spacing + Math.round(Cfg.fontPixelSize * 4.6)
                         text: "section"
@@ -356,6 +360,7 @@ Item {
                         }
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             anchors.left: parent.left
                             anchors.leftMargin: Cfg.spacing
                             anchors.verticalCenter: rowLine.verticalCenter
@@ -429,11 +434,12 @@ Item {
             color: Cfg.fg
             font.family: Cfg.fontFamily
             font.pointSize: Cfg.fontSize
-            font.weight: Font.DemiBold
+            font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: page.unplaced.length === 0
             wrapMode: Text.WordWrap
@@ -461,6 +467,7 @@ Item {
                     color: Qt.rgba(1, 1, 1, 0.06)
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         id: spareLabel
                         anchors.centerIn: parent
                         text: "+ " + spare.modelData

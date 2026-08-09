@@ -103,39 +103,18 @@ Singleton {
 
     // ── how the palette is generated, not just which role each colour takes ──
     //
-    // These are matugen's own generation settings, and they are CLI-ONLY. Putting
-    // `type`/`mode` in config.toml's [config] is accepted WITHOUT ERROR and then
-    // ignored -- I checked, and the output is byte-identical to the defaults. So
-    // every caller has to pass them, and any caller that forgets silently gets
-    // scheme-tonal-spot.
+    // `type` and `prefer` are GONE, not merely hidden.
     //
-    // That is not a small difference. Measured on one seed, 39 of matugen's 50
-    // roles differ between scheme-fidelity and scheme-tonal-spot. And `matugen
-    // image` re-renders EVERY template in the config, so a page that forgot these
-    // flags did not just mistheme the compositor -- it retoned rofi, kitty, btop,
-    // nvim and the rest, and the next wallpaper change put them all back.
-    readonly property var schemeTypes: [
-        "scheme-content", "scheme-expressive", "scheme-fidelity",
-        "scheme-fruit-salad", "scheme-monochrome", "scheme-neutral",
-        "scheme-rainbow", "scheme-tonal-spot", "scheme-vibrant"
-    ]
-    // No "(default)" here, and no empty member, because there is no such thing
-    // for us. When an image yields more than one candidate source colour matugen
-    // ASKS which to use -- and with no terminal to ask in it exits 1 with
-    // "Multiple source colors found, no preference was inputted, and a terminal
-    // was not detected". A settings window never has a terminal, so omitting
-    // --prefer is not a default, it is a guaranteed failure. It is not even
-    // limited to busy images: a 64x64 single-colour PNG fails the same way.
-    readonly property var preferModes: [
-        "saturation", "less-saturation", "lightness", "darkness", "value",
-        "closest-to-fallback"
-    ]
-    // matugen's own defaults, except `prefer` -- see above. `saturation` is what
-    // the wallpaper script here has always passed.
-    property var scheme: ({
-        type: "scheme-tonal-spot", mode: "dark", contrast: "0",
-        prefer: "saturation"
-    })
+    // They were matugen's CLI flags: which Material scheme to derive, and which
+    // candidate source colour to prefer when an image yields several. The
+    // palette is generated in-process by ColorEngine now, which takes a seed
+    // from the image and one tone map, so neither flag has anything to act on.
+    // Leaving them on the page meant two controls that wrote a config file and
+    // changed no colour on screen.
+    //
+    // What remains is what the engine actually reads: `mode` becomes
+    // ColorEngine.dark and `contrast` becomes ColorEngine.contrast.
+    property var scheme: ({ mode: "dark", contrast: "0" })
 
     function setScheme(field, value) {
         const s = Object.assign({}, scheme);
@@ -264,17 +243,13 @@ Singleton {
     function serialiseMapping() {
         const lines = [
             "# Which Material role each asteroidz colour is generated from.",
-            "# Written by the settings window; `off` means matugen does not set it.",
+            "# Written by the settings window; `off` means it is left alone.",
             "",
-            "# How the palette is generated. These are matugen's own flags, and",
-            "# they apply to EVERY template it renders, not just asteroidz -- so",
-            "# anything else that runs matugen (a wallpaper script, say) has to",
-            "# pass the same ones or the two will keep overwriting each other with",
-            "# different schemes. set-wallpaper.sh reads this file for that reason.",
-            "scheme.type=" + scheme.type,
+            "# How the palette is generated. The engine is built in now, so",
+            "# these are the only two knobs it has: the tone map to solve",
+            "# against, and how far to push contrast within it.",
             "scheme.mode=" + scheme.mode,
             "scheme.contrast=" + scheme.contrast,
-            "scheme.prefer=" + scheme.prefer,
             ""
         ];
         for (const d of keys) {
@@ -799,22 +774,58 @@ Singleton {
         // only colors.kdl left the other thirteen frozen at whatever the last
         // matugen run produced. Nothing would have reported that: the files
         // stay valid, they just stop agreeing with the wallpaper.
+        // One template that cannot be rendered must not take the rest with it.
+        //
+        // This used to `break` on the first failure, which meant a single
+        // unreadable input froze the WHOLE palette -- and reported it under
+        // that template's name, so the message named something unrelated to
+        // what the user was looking at. It is not a rare case now that matugen
+        // is gone: its config can list templates whose input files went with
+        // it, and the first of those aborts everything after it.
+        //
+        // So failures are collected and skipped, and the run fails only if
+        // NOTHING rendered. A partial palette is the right outcome: the
+        // compositor's own colours are one of these entries, and the reason to
+        // press Apply is almost always to see them change.
+        // The asteroidz entry is rendered whether or not the parsed list has
+        // caught up with the file.
+        //
+        // apply() calls wireMatugen() to add it to the config and then renders
+        // immediately, but `templates` is parsed from that file by a FileView
+        // and does not refresh synchronously -- so on the very Apply that wires
+        // the template in, the list still describes the file as it was, and the
+        // compositor's own colours were the one thing not rendered. Which is
+        // the reason anyone presses Apply.
+        //
+        // Merged by output path so that a list which HAS caught up does not
+        // render it twice.
+        const list = root.templates.slice();
+        if (root.templatePath !== "" && root.colorsOut !== ""
+            && !list.some(t => t.output === root.colorsOut)) {
+            list.push({ name: "asteroidz", input: root.templatePath,
+                        output: root.colorsOut, hook: "" });
+        }
+
         const hooks = [];
-        let failed = "";
-        for (const t of root.templates) {
+        const skipped = [];
+        let rendered = 0;
+        for (const t of list) {
             if (!t.input || !t.output || !root.templateEnabled(t.name))
                 continue;
             if (!ColorEngine.renderTemplate(t.input, t.output)) {
-                failed = t.name + ": " + ColorEngine.error;
-                break;
+                skipped.push(t.name + " (" + ColorEngine.error + ")");
+                continue;
             }
+            rendered++;
             if (t.hook)
                 hooks.push(t.hook);
         }
 
-        if (failed !== "") {
+        if (rendered === 0) {
             root.endRun();
-            root.status = failed;
+            root.status = skipped.length > 0
+                ? "nothing could be rendered — " + skipped.join(", ")
+                : "no templates to render";
             root.statusBad = true;
             return;
         }
@@ -832,6 +843,10 @@ Singleton {
         root.status = root.converted
             ? "palette applied, from a converted copy of the wallpaper"
             : "palette applied";
+        // Said plainly rather than swallowed. A template that is silently never
+        // rendered is a theme that quietly stops tracking the wallpaper.
+        if (skipped.length > 0)
+            root.status += " — skipped " + skipped.join(", ");
         root.statusBad = false;
     }
 

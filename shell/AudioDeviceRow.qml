@@ -39,7 +39,7 @@ Rectangle {
             color: Cfg.fg
             font.family: Cfg.fontFamily
             font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
-            font.weight: root.current ? Font.DemiBold : Font.Normal
+            font.weight: root.current ? Cfg.fontWeightEmphasis : Cfg.fontWeight
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -47,6 +47,7 @@ Rectangle {
         // convention you have to already know, and this list is read at a
         // glance while something is playing.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             text: root.current ? "Active" : "Available"
             color: root.current

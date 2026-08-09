@@ -148,6 +148,7 @@ Item {
         // frame 0 of 2, changes in 47 min" is what makes a badly authored one
         // diagnosable instead of just wrong.
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: page.dyn.dynamic === true
             wrapMode: Text.WordWrap
@@ -184,6 +185,7 @@ Item {
             visible: Wallpaper.scope === "per-monitor"
 
             Text {
+                font.weight: Cfg.fontWeight
                 width: parent.width
                 wrapMode: Text.WordWrap
                 text: "Picking below sets the wallpaper for the selected "
@@ -216,6 +218,7 @@ Item {
                         color: mon.chosen ? Cfg.focusBg : Qt.rgba(1, 1, 1, 0.06)
 
                         Text {
+                            font.weight: Cfg.fontWeight
                             id: label
                             anchors.centerIn: parent
                             // The name the compositor gives it: that is what
@@ -238,6 +241,7 @@ Item {
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 width: parent.width
                 visible: Wallpaper.knownMonitors.length === 0
                 wrapMode: Text.WordWrap
@@ -311,6 +315,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: Wallpaper.available.length === 0
             wrapMode: Text.WordWrap

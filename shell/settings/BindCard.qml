@@ -129,6 +129,7 @@ Rectangle {
             height: Math.max(24, Math.round(Cfg.fontPixelSize * 1.4))
 
             Text {
+                font.weight: Cfg.fontWeight
                 id: chordText
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
@@ -143,6 +144,7 @@ Rectangle {
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 anchors.left: chordText.right
                 anchors.leftMargin: Cfg.spacing * 2
                 anchors.right: chevron.left
@@ -157,6 +159,7 @@ Rectangle {
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 id: chevron
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
@@ -175,6 +178,7 @@ Rectangle {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             elide: Text.ElideRight
             text: {
@@ -251,6 +255,7 @@ Rectangle {
                                          Math.round(Cfg.fontPixelSize * 1.5))
 
                 Text {
+                    font.weight: Cfg.fontWeight
                     anchors.left: parent.left
                     anchors.right: holder.left
                     anchors.rightMargin: Cfg.spacing
@@ -314,6 +319,7 @@ Rectangle {
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 width: parent.width
                 visible: root.capturing || root.captureNote !== ""
                 wrapMode: Text.WordWrap
@@ -345,6 +351,7 @@ Rectangle {
             }
 
             Text {
+                font.weight: Cfg.fontWeight
                 width: parent.width
                 visible: text !== ""
                 wrapMode: Text.WordWrap
@@ -381,6 +388,7 @@ Rectangle {
                 visible: root.argKinds.length === 0 && root.action !== ""
 
                 Text {
+                    font.weight: Cfg.fontWeight
                     anchors.verticalCenter: parent.verticalCenter
                     text: "takes no arguments"
                     color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
@@ -421,6 +429,7 @@ Rectangle {
                     }
 
                     Text {
+                        font.weight: Cfg.fontWeight
                         width: parent.width
                         wrapMode: Text.WordWrap
                         text: modelData.desc

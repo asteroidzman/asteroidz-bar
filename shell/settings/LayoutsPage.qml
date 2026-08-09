@@ -93,6 +93,7 @@ Item {
         spacing: Cfg.spacing
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Rules apply in order and a later one wins, so the list is in "
@@ -105,6 +106,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: page.status !== ""
             wrapMode: Text.WordWrap
@@ -120,6 +122,7 @@ Item {
         // rather than drawing an empty list that looks like "you have no tag
         // rules".
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: !Rules.tagSchemaLoaded
             wrapMode: Text.WordWrap
@@ -132,6 +135,7 @@ Item {
         }
 
         Text {
+            font.weight: Cfg.fontWeight
             width: parent.width
             visible: Rules.tagSchemaLoaded && page.tagRules.length === 0
             wrapMode: Text.WordWrap
