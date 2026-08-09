@@ -23,6 +23,7 @@
 #include "calendar.hpp"
 #include "clipboard.hpp"
 #include "opticalicon.hpp"
+#include "palette.hpp"
 #include "paths.hpp"
 #include "processes.hpp"
 #include "windowicon.hpp"
@@ -86,6 +87,16 @@ public:
 		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
 			    Q_UNUSED(engine);
 			    return new Clipboard();
+		    }
+		);
+		qmlRegisterSingletonType<Palette>(
+		    uri,
+		    1,
+		    0,
+		    "Palette",
+		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
+			    Q_UNUSED(engine);
+			    return new Palette();
 		    }
 		);
 		// A singleton: /proc is the machine's, and two samplers would each see
