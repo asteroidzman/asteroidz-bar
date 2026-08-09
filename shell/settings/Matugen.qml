@@ -52,8 +52,6 @@ Singleton {
     readonly property string templatePath:
         Quickshell.env("ASTEROIDZ_MATUGEN_TEMPLATE")
         || (home + "/.config/matugen/templates/asteroidz-colors.kdl")
-    readonly property string matugenBin:
-        Quickshell.env("ASTEROIDZ_MATUGEN_BIN") || "matugen"
 
     // The packaged template, for seeding a user copy that is not there yet.
     //
@@ -148,16 +146,6 @@ Singleton {
 
     // The flags every invocation must carry. Empty strings are dropped rather
     // than passed as "", which matugen rejects.
-    function schemeArgs() {
-        const a = ["-t", scheme.type, "-m", scheme.mode];
-        if (String(scheme.contrast) !== "")
-            a.push("--contrast", String(scheme.contrast));
-        // Always, substituting a default rather than dropping the flag. An empty
-        // value can only reach here from a hand-edited matugen.conf, and both
-        // ways of honouring it -- `--prefer ""` or no --prefer at all -- exit 1.
-        a.push("--prefer", scheme.prefer || "saturation");
-        return a;
-    }
 
     // ── the other applications ──────────────────────────────────────────────
     //
@@ -218,7 +206,7 @@ Singleton {
     function load() {
         if (loaded)
             return;
-        roleProbe.running = true;
+        loadRoles();
         mapFile.reload();
         templateFile.reload();
     }
@@ -317,7 +305,7 @@ Singleton {
             const t = raw.trim();
             const m = /^\[templates\.([^\]]+)\]/.exec(t);
             if (m) {
-                cur = { name: m[1], output: "" };
+                cur = { name: m[1], output: "", input: "", hook: "" };
                 out.push(cur);
                 continue;
             }
@@ -325,11 +313,17 @@ Singleton {
                 cur = null;
                 continue;
             }
-            if (cur && t.startsWith("output_path")) {
-                const q = /=\s*"(.*)"/.exec(t);
-                if (q)
-                    cur.output = q[1];
-            }
+            if (!cur)
+                continue;
+            // input_path and post_hook matter now that this shell renders the
+            // templates itself: the list used to be for display only, so
+            // reading just the output path was enough.
+            const q = /=\s*"(.*)"/.exec(t);
+            if (!q)
+                continue;
+            if (t.startsWith("output_path")) cur.output = q[1];
+            else if (t.startsWith("input_path")) cur.input = q[1];
+            else if (t.startsWith("post_hook")) cur.hook = q[1];
         }
         return out;
     }
@@ -448,31 +442,20 @@ Singleton {
         }
     }
 
-    // The role list, from the installed matugen rather than from a table here.
+    // The role list, from the engine that will render them.
     //
-    // --dry-run is load-bearing: without it this would render every template the
-    // user has and fire every post-hook -- reloading waybar, kitty and the
-    // compositor -- just to find out what the roles are called.
-    Process {
-        id: roleProbe
-        command: [root.matugenBin, "--dry-run", "-q", "color", "hex",
-                  "#3f6ded", "--json", "hex"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    const d = JSON.parse(text);
-                    root.roles = Object.keys(d.colors || {}).sort();
-                } catch (e) {
-                    root.status = "could not read matugen's role list";
-                    root.statusBad = true;
-                }
-            }
-        }
-        onExited: (code, _) => {
-            if (code !== 0 && root.roles.length === 0) {
-                root.status = "matugen is not installed, or refused to run";
-                root.statusBad = true;
-            }
+    // It used to come from `matugen --dry-run`, and asking the tool rather than
+    // hardcoding a table was the right instinct -- it just has to be the tool
+    // that actually does the work. Reading it from ColorEngine keeps that
+    // property and drops the last reason this shell needs matugen installed at
+    // all: the page now cannot offer a role the renderer would not understand.
+    function loadRoles() {
+        root.roles = Object.keys(ColorEngine.roles).sort();
+        if (root.roles.length === 0) {
+            // Only before the first wallpaper has been read. Generating from
+            // the current one fills it in without touching any output file.
+            ColorEngine.source = Wallpaper.path;
+            root.roles = Object.keys(ColorEngine.roles).sort();
         }
     }
 
@@ -667,7 +650,6 @@ Singleton {
         busy = true;
         status = "";
         statusBad = false;
-        renderArgs = [];
         renderWallpaper = wallpaper;
         converted = false;
         runRender(wallpaper);
@@ -727,7 +709,6 @@ Singleton {
                 filteredWriter.setText(filteredToml(tomlFile.text()));
                 cfg = ["-c", root.filteredTomlPath];
             }
-            renderArgs = cfg;
             renderWallpaper = wallpaper;
             converted = false;
             runRender(wallpaper);
@@ -768,7 +749,6 @@ Singleton {
     // The failure is at decode, before any template is rendered or any post-hook
     // runs, so a first attempt that fails this way has changed nothing.
 
-    property var renderArgs: []
     property string renderWallpaper: ""
     property bool converted: false
 
@@ -778,11 +758,81 @@ Singleton {
         (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
         + "/asteroidz-bar-palette-source.png"
 
+    // The palette is generated IN THIS PROCESS now.
+    //
+    // matugen is gone from the theming path: the engine lives in the plugin
+    // (see plugin/palette.hpp for why it exists rather than what it replaces),
+    // so there is no binary to find, no subprocess per wallpaper change, and no
+    // "multiple source colors found, use --prefer" -- which is what matugen
+    // answered on this desktop's own wallpaper.
+    //
+    // Everything around this is unchanged. The role mapping, the template and
+    // the page that edits them all still work exactly as they did, because the
+    // template is still matugen's syntax and the roles still carry Material's
+    // names.
     function runRender(file) {
-        render.command = [root.matugenBin].concat(renderArgs)
-                         .concat(["image", file])
-                         .concat(schemeArgs());
-        render.running = true;
+        // The scheme block already records mode and contrast; they mean the
+        // same thing to this engine, so the page keeps driving them.
+        ColorEngine.dark = root.scheme.mode !== "light";
+        ColorEngine.contrast = Math.max(0, Math.min(1, Number(root.scheme.contrast) || 0));
+        ColorEngine.source = file;
+
+        if (ColorEngine.error !== "") {
+            // The image cannot be decoded -- an AVIF or JXL wallpaper, most
+            // likely, which QImage will not read without a plugin. Fall through
+            // to the PNG conversion the matugen path already used for exactly
+            // this, rather than failing.
+            if (!root.converted && root.renderWallpaper !== "") {
+                root.convertAndRetry();
+                return;
+            }
+            root.endRun();
+            root.status = ColorEngine.error;
+            root.statusBad = true;
+            return;
+        }
+
+        // EVERY enabled template, not just the compositor's.
+        //
+        // matugen rendered the whole config on each wallpaper change -- kitty,
+        // rofi, waybar, GTK and the rest -- and a version of this that wrote
+        // only colors.kdl left the other thirteen frozen at whatever the last
+        // matugen run produced. Nothing would have reported that: the files
+        // stay valid, they just stop agreeing with the wallpaper.
+        const hooks = [];
+        let failed = "";
+        for (const t of root.templates) {
+            if (!t.input || !t.output || !root.templateEnabled(t.name))
+                continue;
+            if (!ColorEngine.renderTemplate(t.input, t.output)) {
+                failed = t.name + ": " + ColorEngine.error;
+                break;
+            }
+            if (t.hook)
+                hooks.push(t.hook);
+        }
+
+        if (failed !== "") {
+            root.endRun();
+            root.status = failed;
+            root.statusBad = true;
+            return;
+        }
+
+        // The post-hooks the templates declare -- SIGUSR1 to kitty, a
+        // compositor reload -- in one shell rather than a process each. They
+        // are the templates' own, so the compositor reload is not issued here
+        // as well: that would be two reloads for one wallpaper.
+        if (hooks.length > 0) {
+            postHooks.command = ["sh", "-c", hooks.join("; ")];
+            postHooks.running = true;
+        }
+
+        root.endRun();
+        root.status = root.converted
+            ? "palette applied, from a converted copy of the wallpaper"
+            : "palette applied";
+        root.statusBad = false;
     }
 
     // Every path that ends a render comes through here, so a queued Apply
@@ -813,36 +863,15 @@ Singleton {
         runRender(convertedPath);
     }
 
+    // The templates' own post-hooks. Failures are not the shell's business to
+    // report: a hook that reloads an application which is not running fails
+    // every time by design (`pkill kitty` with no kitty), which is why the
+    // config's own hooks all end in `|| true`.
+    Process { id: postHooks }
+
     // The real thing: render every template and run every post-hook, which is
     // exactly what a wallpaper change does. One of those hooks reloads the
     // compositor, which is how the new palette reaches the screen.
-    Process {
-        id: render
-
-        // Without this the page could only ever say "exit 101", which names
-        // neither the file nor the reason -- the run's own account of what went
-        // wrong went to a stderr nobody was reading.
-        stderr: StdioCollector { id: renderErr }
-
-        onExited: (code, _) => {
-            if (code === 0) {
-                root.endRun();
-                root.status = root.converted
-                    ? "palette applied, from a converted copy of the wallpaper"
-                    : "palette applied";
-                root.statusBad = false;
-                return;
-            }
-            if (!root.converted && root.renderWallpaper !== "") {
-                root.convertAndRetry();
-                return;
-            }
-            root.endRun();
-            root.status = "matugen failed (exit " + code + ")"
-                          + root.firstLine(renderErr.text);
-            root.statusBad = true;
-        }
-    }
 
     // matugen's failures are several lines of panic decoration around one line
     // that says what happened. The row has one line to say it in.

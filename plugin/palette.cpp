@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include <QtCore/QFileInfo>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QUrl>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
@@ -393,10 +394,189 @@ void Palette::buildRoles() {
 	    {QStringLiteral("on_surface"), hex(onSurface)},
 	    {QStringLiteral("on_surface_variant"), hex(onSurfaceVariant)},
 	    {QStringLiteral("outline"), hex(outline)},
+
+	    // The rest of Material's role set. Not aspiration: these are the names
+	    // the templates on this machine actually reference, and a role a
+	    // template asks for and does not get is left as a literal {{...}} in a
+	    // config file -- which still looks like a config file, so the breakage
+	    // is silent until something reads it.
+	    {QStringLiteral("background"), hex(surface)},
+	    {QStringLiteral("on_background"), hex(onSurface)},
+	    {QStringLiteral("surface_dim"), hex(oklabToColor(atTone(seed, dark ? 0.12 : 0.88, 0.06)))},
+	    {QStringLiteral("surface_bright"), hex(oklabToColor(atTone(seed, dark ? 0.30 : 1.00, 0.07)))},
+	    {QStringLiteral("surface_container_lowest"),
+	     hex(oklabToColor(atTone(seed, dark ? 0.10 : 1.00, 0.04)))},
+	    // Inverse is the other scheme's surface, which is what makes a snackbar
+	    // read as "not part of the page".
+	    {QStringLiteral("inverse_surface"), hex(oklabToColor(atTone(seed, dark ? 0.90 : 0.20, 0.05)))},
+	    {QStringLiteral("inverse_on_surface"),
+	     hex(oklabToColor(atTone(seed, dark ? 0.18 : 0.94, 0.05)))},
+	    {QStringLiteral("outline_variant"),
+	     hex(oklabToColor(atTone(seed, dark ? 0.32 : 0.80, 0.10)))},
+	    // Scrim and shadow are black in every Material scheme, light or dark:
+	    // they are the absence of the surface, not a tint of it.
+	    {QStringLiteral("scrim"), QStringLiteral("#000000")},
+	    {QStringLiteral("shadow"), QStringLiteral("#000000")},
+	    {QStringLiteral("source_color"), hex(oklabToColor(seed))},
+	    {QStringLiteral("secondary_container"),
+	     hex(oklabToColor(atTone(seed, dark ? 0.30 : 0.88, 0.25)))},
+	    {QStringLiteral("on_secondary_container"), hex(onSurface)},
+	    {QStringLiteral("tertiary_container"),
+	     hex(oklabToColor(atTone(tertiaryLab, dark ? 0.30 : 0.88, 0.30)))},
+	    // The "fixed" family does not flip with the scheme -- that is the whole
+	    // point of it -- so these are the light-scheme tones either way.
+	    {QStringLiteral("primary_fixed"), hex(oklabToColor(atTone(seed, 0.86, 0.35)))},
+	    {QStringLiteral("primary_fixed_dim"), hex(oklabToColor(atTone(seed, 0.76, 0.50)))},
+	    {QStringLiteral("secondary_fixed_dim"), hex(oklabToColor(atTone(seed, 0.76, 0.28)))},
+	    {QStringLiteral("tertiary_fixed_dim"), hex(oklabToColor(atTone(tertiaryLab, 0.76, 0.40)))},
 	};
 
 	this->mSeed = hex(oklabToColor(seed));
 	emit this->rolesChanged();
+}
+
+bool Palette::renderTemplate(const QString& templatePath, const QString& outPath) {
+	if (this->mRoles.isEmpty()) {
+		this->setError(QStringLiteral("no palette to render"));
+		return false;
+	}
+
+	auto inPath = templatePath;
+	if (inPath.startsWith(QStringLiteral("file://"))) inPath = QUrl(inPath).toLocalFile();
+	auto dest = outPath;
+	if (dest.startsWith(QStringLiteral("file://"))) dest = QUrl(dest).toLocalFile();
+
+	QFile in(inPath);
+	if (!in.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		this->setError(QStringLiteral("cannot read template %1").arg(inPath));
+		return false;
+	}
+	auto text = QString::fromUtf8(in.readAll());
+	in.close();
+
+	// <* for name, value in colors *> ... <* endfor *>
+	//
+	// Expanded BEFORE the placeholders below, by emitting the body once per
+	// role with {{name}} and {{value...}} already substituted. Two of the
+	// templates on this machine use it to write out every colour, and without
+	// it those files would keep their loop markers and lose every colour in
+	// them -- worse than not rendering at all, because the result still looks
+	// like a config file.
+	static const QRegularExpression loopRe(
+	    QStringLiteral("<\\*\\s*for\\s+(\\w+)\\s*,\\s*(\\w+)\\s+in\\s+colors\\s*\\*>(.*?)<\\*\\s*endfor\\s*\\*>"),
+	    QRegularExpression::DotMatchesEverythingOption
+	);
+	while (true) {
+		const auto m = loopRe.match(text);
+		if (!m.hasMatch()) break;
+
+		const auto nameVar = m.captured(1);
+		const auto valueVar = m.captured(2);
+		const auto body = m.captured(3);
+
+		QString expanded;
+		auto keys = this->mRoles.keys();
+		keys.sort(); // stable output, so a diff of the file means a real change
+		for (const auto& role: std::as_const(keys)) {
+			auto piece = body;
+			piece.replace(QStringLiteral("{{") + nameVar + QStringLiteral("}}"), role);
+			// value.default.hex / .hex_stripped, the only forms in use
+			piece.replace(
+			    QStringLiteral("{{") + valueVar + QStringLiteral(".default.hex_stripped}}"),
+			    this->mRoles.value(role).toString().mid(1)
+			);
+			piece.replace(
+			    QStringLiteral("{{") + valueVar + QStringLiteral(".default.hex}}"),
+			    this->mRoles.value(role).toString()
+			);
+			expanded += piece;
+		}
+		text.replace(m.capturedStart(), m.capturedLength(), expanded);
+	}
+
+	// {{ colors.<role>.<variant>.<field> [| filter]... }}
+	static const QRegularExpression re(QStringLiteral("\\{\\{([^}]*)\\}\\}"));
+	QString out;
+	qsizetype at = 0;
+	auto it = re.globalMatch(text);
+	while (it.hasNext()) {
+		const auto m = it.next();
+		out += text.mid(at, m.capturedStart() - at);
+		at = m.capturedEnd();
+
+		const auto expr = m.captured(1).trimmed();
+		const auto parts = expr.split(QLatin1Char('|'));
+		const auto path = parts.at(0).trimmed().split(QLatin1Char('.'));
+
+		// colors.<role>.<variant>.<field>
+		if (path.size() < 2 || path.at(0) != QStringLiteral("colors")) {
+			out += m.captured(0); // not ours: leave it visible
+			continue;
+		}
+		const auto role = path.at(1);
+		if (!this->mRoles.contains(role)) {
+			out += m.captured(0);
+			continue;
+		}
+
+		auto colour = QColor(this->mRoles.value(role).toString());
+		auto stripped = path.size() >= 4 && path.at(3) == QStringLiteral("hex_stripped");
+		const auto wantsRgba = path.size() >= 4 && path.at(3) == QStringLiteral("rgba");
+		auto alpha = 1.0;
+
+		for (qsizetype i = 1; i < parts.size(); i++) {
+			const auto filter = parts.at(i).trimmed();
+			if (filter == QStringLiteral("grayscale")) {
+				// Luminance-preserving, not a channel average: the template
+				// uses this to make a border recede without shifting how
+				// light it looks.
+				//
+				// Back through the transfer function before it becomes a byte.
+				// luminance() is LINEAR light, and writing it straight out as
+				// an sRGB value crushes everything dark: #1b1a1e came out
+				// #030303, so the border and the bar background rendered a
+				// near-black that matched nothing in the palette.
+				const auto y = qRound(255.0 * linearToSrgb(luminance(colour)));
+				colour = QColor(y, y, y);
+			} else if (filter.startsWith(QStringLiteral("format:"))) {
+				stripped = filter.contains(QStringLiteral("hex_stripped"));
+			} else if (filter.startsWith(QStringLiteral("set_alpha:"))) {
+				alpha = filter.section(QLatin1Char(':'), 1).trimmed().toDouble();
+			}
+			// to_color is a no-op here: the value already IS a colour.
+		}
+
+		if (wantsRgba) {
+			out += QStringLiteral("rgba(%1, %2, %3, %4)")
+			           .arg(colour.red())
+			           .arg(colour.green())
+			           .arg(colour.blue())
+			           .arg(alpha, 0, 'g', 3);
+			continue;
+		}
+		const auto h = hex(colour);
+		out += stripped ? h.mid(1) : h;
+	}
+	out += text.mid(at);
+
+	// Written through a temporary and renamed, so a reload that lands mid-write
+	// cannot read half a file.
+	QFile tmp(dest + QStringLiteral(".new"));
+	if (!tmp.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+		this->setError(QStringLiteral("cannot write %1").arg(dest));
+		return false;
+	}
+	tmp.write(out.toUtf8());
+	tmp.close();
+
+	QFile::remove(dest);
+	if (!tmp.rename(dest)) {
+		this->setError(QStringLiteral("cannot replace %1").arg(dest));
+		return false;
+	}
+
+	this->setError({});
+	return true;
 }
 
 double Palette::contrastBetween(const QString& a, const QString& b) const {

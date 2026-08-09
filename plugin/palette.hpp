@@ -88,6 +88,22 @@ public:
 	// when dark/contrast move.
 	Q_INVOKABLE void regenerate();
 
+	// Render a matugen-syntax template to a file, substituting the roles above.
+	//
+	// The template stays matugen's rather than becoming a new format, because
+	// the settings page rewrites it by hand and the compositor's config sources
+	// the result -- a new syntax would mean rewriting both to gain nothing.
+	// Only the placeholder forms the shipped template actually uses are
+	// supported; anything else is left alone rather than silently emptied, so
+	// an unsupported filter shows up as itself in the output instead of as a
+	// colour that is quietly wrong.
+	//
+	// Returns false and sets `error` on failure, and in that case the
+	// destination is LEFT ALONE: a half-written colours file is sourced by the
+	// compositor on the next reload, and a theme that fails should leave the
+	// last good one in place.
+	Q_INVOKABLE bool renderTemplate(const QString& templatePath, const QString& outPath);
+
 	// The measured contrast between two roles, so a UI can show its work
 	// rather than asking you to trust it. WCAG ratio, 1..21.
 	Q_INVOKABLE double contrastBetween(const QString& a, const QString& b) const;

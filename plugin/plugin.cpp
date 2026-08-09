@@ -93,7 +93,12 @@ public:
 		    uri,
 		    1,
 		    0,
-		    "Palette",
+		    // NOT "Palette": QtQuick already has a Palette (QQuickPalette, the
+		    // one behind Item.palette), and registering ours under that name
+		    // does not conflict loudly -- it is simply shadowed, so every
+		    // ColorEngine.<x> silently reads Qt's palette instead. qmllint
+		    // caught it; nothing at runtime would have.
+		    "ColorEngine",
 		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
 			    Q_UNUSED(engine);
 			    return new Palette();
