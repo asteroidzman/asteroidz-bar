@@ -166,7 +166,7 @@ Rectangle {
                 text: root.expanded ? "▴" : "▾"
                 color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.6)
                 font.family: Cfg.fontFamily
-                font.pointSize: Cfg.fontSize * 0.8
+                font.pointSize: Cfg.fontSizeSmall
             }
 
             TapHandler {
@@ -203,7 +203,7 @@ Rectangle {
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b,
                            Cfg.fg.a * (root.editable ? 0.55 : 0.4))
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -329,7 +329,7 @@ Rectangle {
                     : root.captureNote
                 color: root.captureBad ? Cfg.urgent : Cfg.focusBg
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                font.pointSize: Cfg.fontSizeSmall
                 font.hintingPreference: Font.PreferFullHinting
             }
 
@@ -358,7 +358,7 @@ Rectangle {
                 text: root.actionSpec ? (root.actionSpec.desc || "") : ""
                 color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                font.pointSize: Cfg.fontSizeSmall
                 font.hintingPreference: Font.PreferFullHinting
             }
 
@@ -393,7 +393,7 @@ Rectangle {
                     text: "takes no arguments"
                     color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
                     font.family: Cfg.fontFamily
-                    font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                    font.pointSize: Cfg.fontSizeSmall
                     font.hintingPreference: Font.PreferFullHinting
                 }
             }
@@ -436,7 +436,7 @@ Rectangle {
                         color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b,
                                        Cfg.fg.a * 0.5)
                         font.family: Cfg.fontFamily
-                        font.pointSize: Math.max(7, Cfg.fontSize * 0.76)
+                        font.pointSize: Cfg.fontSizeSmall
                         font.hintingPreference: Font.PreferFullHinting
                     }
                 }

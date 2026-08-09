@@ -72,7 +72,7 @@ Item {
                       + root.human(Processes.memUsed) + " / " + root.human(Processes.memTotal)
                 color: Cfg.fg
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+                font.pointSize: Cfg.fontSizeSmall
                 font.weight: Cfg.fontWeightEmphasis
                 font.hintingPreference: Font.PreferFullHinting
             }
@@ -107,7 +107,7 @@ Item {
                             text: modelData.label
                             color: parent.on ? Cfg.focusFg : Cfg.fg
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(6, Cfg.fontSize * 0.72)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
                         HoverHandler { id: sortHover; cursorShape: Qt.PointingHandCursor }
@@ -178,7 +178,7 @@ Item {
                             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
                             horizontalAlignment: Text.AlignRight
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(6, Cfg.fontSize * 0.7)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
@@ -193,7 +193,10 @@ Item {
                             color: Cfg.fg
                             elide: Text.ElideRight
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+                            // The row's subject, so the configured size. The
+                            // pid and the figures beside it are the quiet half
+                            // and stay a step down.
+                            font.pointSize: Cfg.fontSize
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
@@ -212,7 +215,7 @@ Item {
                                    ? Cfg.fg
                                    : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(6, Cfg.fontSize * 0.72)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
@@ -231,7 +234,7 @@ Item {
                                    ? Cfg.fg
                                    : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(6, Cfg.fontSize * 0.72)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
                     }
@@ -251,7 +254,7 @@ Item {
                   + (Metrics.linkUp ? "" : "   (link down)")
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(6, Cfg.fontSize * 0.72)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
     }

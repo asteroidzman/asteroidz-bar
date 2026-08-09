@@ -59,7 +59,7 @@ Rectangle {
             text: root.label
             color: root.active ? Cfg.focusFg : Cfg.fg
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
     }

@@ -355,6 +355,20 @@ Singleton {
     // the resolution explicitly), so the pixel height is points * 96/72. Using
     // this rather than font.pointSize takes Qt's own DPI guess out of the
     // picture entirely -- see bin/asteroidz-bar for why that matters.
+    // One step down, for genuinely secondary text, and the only step there is.
+    //
+    // The shell had ninety ad-hoc multipliers between 0.6 and 0.9 of the
+    // configured size. At `theme { font "Roboto 12" }` the common 0.7 lands on
+    // 8.4pt and 0.6 on 7.2pt, so the process list and the calendar were drawn
+    // at sizes nobody chose and could not change: raising the configured font
+    // moved them, but they stayed the same fraction of it -- illegible in
+    // proportion.
+    //
+    // 0.95 rather than 0.7, and floored at 9pt so a small configured font
+    // cannot push it into the unreadable. Secondary means slightly quieter,
+    // not half the size -- a step you notice only when you look for it.
+    readonly property real fontSizeSmall: Math.max(9, fontSize * 0.95)
+
     readonly property real fontPixelSize: fontSize * 96.0 / 72.0
 
     // ── module lists ────────────────────────────────────────────────────────

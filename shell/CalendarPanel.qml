@@ -175,7 +175,8 @@ Item {
                     text: modelData
                     color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
                     font.family: Cfg.fontFamily
-                    font.pointSize: Math.max(6, Cfg.fontSize * 0.7)
+                    // A day number is the grid's content, not a caption.
+                    font.pointSize: Cfg.fontSize
                     font.hintingPreference: Font.PreferFullHinting
                 }
             }
@@ -223,7 +224,7 @@ Item {
                              : cell.inMonth ? Cfg.fg
                                             : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.3)
                         font.family: Cfg.fontFamily
-                        font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
+                        font.pointSize: Cfg.fontSizeSmall
                         font.weight: cell.isToday ? Cfg.fontWeightEmphasis : Cfg.fontWeight
                         font.hintingPreference: Font.PreferFullHinting
                     }
@@ -262,7 +263,7 @@ Item {
             text: Qt.formatDate(root.selectedDay, "dddd d MMMM")
             color: Cfg.fg
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+            font.pointSize: Cfg.fontSizeSmall
             font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
@@ -289,7 +290,7 @@ Item {
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             wrapMode: Text.WordWrap
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -319,7 +320,7 @@ Item {
                                          : "Reauthorise (test)"
                 color: authHover.hovered ? Cfg.focusFg : Cfg.fg
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                font.pointSize: Cfg.fontSizeSmall
                 font.hintingPreference: Font.PreferFullHinting
             }
             HoverHandler { id: authHover; cursorShape: Qt.PointingHandCursor }
@@ -384,7 +385,7 @@ Item {
                             text: Qt.formatTime(row.modelData.start, "HH:mm")
                             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(6, Cfg.fontSize * 0.75)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
@@ -399,7 +400,7 @@ Item {
                             color: Cfg.fg
                             elide: Text.ElideRight
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
                     }

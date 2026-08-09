@@ -92,7 +92,7 @@ Item {
                   + "race it for the bus name."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.5)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -117,7 +117,7 @@ Item {
                   + "counted by the bell."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -141,7 +141,7 @@ Item {
                   + "and the notification still lands in the centre."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -192,7 +192,7 @@ Item {
             textFormat: Text.StyledText
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -225,7 +225,7 @@ Item {
                   + "failed backup is still there when you come back."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -250,7 +250,7 @@ Item {
                   + "have already read."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -303,7 +303,7 @@ Item {
                   + "below hands it back."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 

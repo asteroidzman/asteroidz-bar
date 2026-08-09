@@ -163,7 +163,7 @@ Item {
                         text: Clipboard.paused ? "paused" : "recording"
                         color: Clipboard.paused ? Cfg.focusFg : Cfg.fg
                         font.family: Cfg.fontFamily
-                        font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                        font.pointSize: Cfg.fontSizeSmall
                         font.hintingPreference: Font.PreferFullHinting
                     }
                     HoverHandler { id: pauseHover; cursorShape: Qt.PointingHandCursor }
@@ -186,7 +186,7 @@ Item {
                         text: "clear"
                         color: Cfg.fg
                         font.family: Cfg.fontFamily
-                        font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                        font.pointSize: Cfg.fontSizeSmall
                         font.hintingPreference: Font.PreferFullHinting
                     }
                     HoverHandler { id: clearHover; cursorShape: Qt.PointingHandCursor }
@@ -237,7 +237,7 @@ Item {
                 verticalAlignment: TextInput.AlignVCenter
                 color: Cfg.fg
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+                font.pointSize: Cfg.fontSizeSmall
                 font.hintingPreference: Font.PreferFullHinting
                 selectByMouse: true
                 // TextInput draws its own caret from activeFocus, which this
@@ -293,7 +293,7 @@ Item {
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             wrapMode: Text.WordWrap
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -385,7 +385,7 @@ Item {
                             color: row.ink
                             elide: Text.ElideRight
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
@@ -403,7 +403,7 @@ Item {
                                   : Math.round(row.modelData.size / 1024) + " K"
                             color: Qt.rgba(row.ink.r, row.ink.g, row.ink.b, 0.45)
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(6, Cfg.fontSize * 0.7)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
 

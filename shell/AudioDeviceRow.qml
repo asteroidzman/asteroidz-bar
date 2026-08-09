@@ -38,7 +38,7 @@ Rectangle {
             elide: Text.ElideRight
             color: Cfg.fg
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+            font.pointSize: Cfg.fontSizeSmall
             font.weight: root.current ? Cfg.fontWeightEmphasis : Cfg.fontWeight
             font.hintingPreference: Font.PreferFullHinting
         }
@@ -54,7 +54,7 @@ Rectangle {
                    ? Cfg.focusBg
                    : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(6, Cfg.fontSize * 0.7)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
     }

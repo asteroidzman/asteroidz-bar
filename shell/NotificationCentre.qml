@@ -69,7 +69,7 @@ Item {
                         color: NotificationService.dnd
                                ? Cfg.legibleOn(Cfg.focusFg, Cfg.focusBg) : Cfg.fg
                         font.family: Cfg.fontFamily
-                        font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                        font.pointSize: Cfg.fontSizeSmall
                         font.hintingPreference: Font.PreferFullHinting
                     }
                     HoverHandler { id: dndHover; cursorShape: Qt.PointingHandCursor }
@@ -100,7 +100,7 @@ Item {
                         text: "clear all"
                         color: Cfg.fg
                         font.family: Cfg.fontFamily
-                        font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                        font.pointSize: Cfg.fontSizeSmall
                         font.hintingPreference: Font.PreferFullHinting
                     }
                     HoverHandler { id: clearHover; cursorShape: Qt.PointingHandCursor }
@@ -128,7 +128,7 @@ Item {
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             wrapMode: Text.WordWrap
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 

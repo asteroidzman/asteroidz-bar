@@ -110,7 +110,7 @@ Item {
                   + "back to your config, where the Appearance page can edit it."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -122,7 +122,7 @@ Item {
             text: Matugen.status
             color: Matugen.statusBad ? Cfg.urgent : Cfg.focusBg
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.82)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -170,7 +170,7 @@ Item {
                   + "to every template rendered below, not just the compositor."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -202,7 +202,7 @@ Item {
                           : modelData.label
                     color: Cfg.fg
                     font.family: Cfg.fontFamily
-                    font.pointSize: Math.max(7, Cfg.fontSize * 0.85)
+                    font.pointSize: Cfg.fontSizeSmall
                     font.hintingPreference: Font.PreferFullHinting
                 }
 
@@ -332,7 +332,7 @@ Item {
                             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b,
                                            Cfg.fg.a * 0.7)
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
 
@@ -355,7 +355,7 @@ Item {
                               + "template, so your own config decides it."
                         color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.5)
                         font.family: Cfg.fontFamily
-                        font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+                        font.pointSize: Cfg.fontSizeSmall
                         font.hintingPreference: Font.PreferFullHinting
                     }
                 }
@@ -390,7 +390,7 @@ Item {
                   + "wallpaper change still renders it."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -403,7 +403,7 @@ Item {
                   + "Apply will create one with the compositor's template in it."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -431,7 +431,7 @@ Item {
                            ? Cfg.fg
                            : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
                     font.family: Cfg.fontFamily
-                    font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                    font.pointSize: Cfg.fontSizeSmall
                     font.hintingPreference: Font.PreferFullHinting
                 }
 
@@ -462,7 +462,7 @@ Item {
                   + "previous template is kept beside it as .bak."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.78)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
     }

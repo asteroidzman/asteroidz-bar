@@ -129,7 +129,7 @@ Rectangle {
                 text: root.expanded ? "▴" : "▾"
                 color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.6)
                 font.family: Cfg.fontFamily
-                font.pointSize: Cfg.fontSize * 0.8
+                font.pointSize: Cfg.fontSizeSmall
             }
 
             TapHandler {
@@ -169,7 +169,7 @@ Rectangle {
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b,
                            Cfg.fg.a * (root.editable ? 0.55 : 0.4))
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -220,7 +220,7 @@ Rectangle {
                       + "to every window; one that also sets nothing does nothing."
                 color: Cfg.urgent
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                font.pointSize: Cfg.fontSizeSmall
                 font.hintingPreference: Font.PreferFullHinting
             }
 

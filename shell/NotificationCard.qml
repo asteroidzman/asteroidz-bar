@@ -137,7 +137,7 @@ Rectangle {
                 }
                 color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                font.pointSize: Cfg.fontSizeSmall
                 font.hintingPreference: Font.PreferFullHinting
             }
 
@@ -262,7 +262,7 @@ Rectangle {
                         text: modelData.text || modelData.identifier
                         color: Cfg.fg
                         font.family: Cfg.fontFamily
-                        font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                        font.pointSize: Cfg.fontSizeSmall
                         font.hintingPreference: Font.PreferFullHinting
                     }
                     HoverHandler { id: actHover; cursorShape: Qt.PointingHandCursor }

@@ -106,7 +106,7 @@ Item {
                 text: tile.modelData.name
                 color: tile.modelData.name === root.selected ? Cfg.focusFg : Cfg.fg
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(6, Cfg.fontSize * 0.6)
+                font.pointSize: Cfg.fontSizeSmall
                 font.hintingPreference: Font.PreferFullHinting
             }
 
@@ -181,7 +181,7 @@ Item {
         text: "drag to arrange · click to select"
         color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.6)
         font.family: Cfg.fontFamily
-        font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+        font.pointSize: Cfg.fontSizeSmall
         font.hintingPreference: Font.PreferFullHinting
     }
 }

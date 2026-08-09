@@ -209,7 +209,7 @@ Item {
                 text: "muted"
                 color: Cfg.urgent
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                font.pointSize: Cfg.fontSizeSmall
                 font.hintingPreference: Font.PreferFullHinting
             }
         }
@@ -278,7 +278,7 @@ Item {
             text: "Output"
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
@@ -352,7 +352,7 @@ Item {
                 text: "muted"
                 color: Cfg.urgent
                 font.family: Cfg.fontFamily
-                font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+                font.pointSize: Cfg.fontSizeSmall
                 font.hintingPreference: Font.PreferFullHinting
             }
         }
@@ -419,7 +419,7 @@ Item {
             text: "Input"
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
@@ -461,7 +461,7 @@ Item {
             text: "Playing"
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Math.max(7, Cfg.fontSize * 0.8)
+            font.pointSize: Cfg.fontSizeSmall
             font.weight: Cfg.fontWeightEmphasis
             font.hintingPreference: Font.PreferFullHinting
         }
@@ -499,7 +499,7 @@ Item {
                             elide: Text.ElideRight
                             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.8)
                             font.family: Cfg.fontFamily
-                            font.pointSize: Math.max(6, Cfg.fontSize * 0.75)
+                            font.pointSize: Cfg.fontSizeSmall
                             font.hintingPreference: Font.PreferFullHinting
                         }
 

@@ -239,7 +239,7 @@ Item {
                 + "XWayland, where Discord is listening."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.6)
             font.family: Cfg.fontFamily
-            font.pointSize: Cfg.fontSize * 0.9
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -267,7 +267,7 @@ Item {
                 + "require changing anything in Discord."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.6)
             font.family: Cfg.fontFamily
-            font.pointSize: Cfg.fontSize * 0.9
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -309,7 +309,7 @@ Item {
                 + "Escape cancels."
             color: Cfg.focusBg
             font.family: Cfg.fontFamily
-            font.pointSize: Cfg.fontSize * 0.9
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -340,7 +340,7 @@ Item {
                 + "using the default for something else."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.6)
             font.family: Cfg.fontFamily
-            font.pointSize: Cfg.fontSize * 0.9
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -392,7 +392,7 @@ Item {
             text: page.captureNote
             color: Cfg.urgent
             font.family: Cfg.fontFamily
-            font.pointSize: Cfg.fontSize * 0.9
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
 
@@ -408,7 +408,7 @@ Item {
                 + "~/.local/bin/discord-xwayland starts it correctly."
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.45)
             font.family: Cfg.fontFamily
-            font.pointSize: Cfg.fontSize * 0.85
+            font.pointSize: Cfg.fontSizeSmall
             font.hintingPreference: Font.PreferFullHinting
         }
     }

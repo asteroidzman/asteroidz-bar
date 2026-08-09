@@ -95,7 +95,7 @@ Item {
             text: root.open ? "▴" : "▾"
             color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.6)
             font.family: Cfg.fontFamily
-            font.pointSize: Cfg.fontSize * 0.7
+            font.pointSize: Cfg.fontSizeSmall
         }
 
         TapHandler {
