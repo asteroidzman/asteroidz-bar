@@ -13,6 +13,7 @@
 // panel, which is the one thing that reliably makes room.
 
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import "."
 
@@ -32,7 +33,37 @@ Item {
     // Sized from the font, not a constant: the rows use the bar's font now,
     // and 24px was chosen when they were drawing it at 80%.
     readonly property int rowHeight: Math.max(24, Math.round(Cfg.fontPixelSize * 1.5))
-    implicitHeight: rowHeight + (open ? listBox.height + 4 : 0)
+
+    // Where an open list is drawn: the window's own content item, so it can
+    // hang outside the scrolling pane this row lives in.
+    //
+    // QsWindow.window FIRST, then Qt's own Window attached property, and the
+    // fallback is the entire point rather than belt-and-braces. QsWindow.window
+    // is NULL inside the settings window -- a FloatingWindow -- and everything
+    // here depended on it: the list fell back to expanding inside the row,
+    // where the pane's clip cut it away completely. What that looks like is a
+    // dropdown that opens (the arrow flips to ▴), pushes the rows under it out
+    // of view, and shows NOTHING to click. Reported as being unable to change
+    // an output's scale back after setting it to 1.75, and reproduced headlessly
+    // at that scale: `PICKERDBG parentIsRoot=true win=false winH=0`.
+    //
+    // Qt's Window attached property resolves for any QQuickWindow, which a
+    // FloatingWindow is, so it answers where the Quickshell one does not.
+    readonly property Item overlayParent: {
+        if (QsWindow.window && QsWindow.window.contentItem)
+            return QsWindow.window.contentItem;
+        if (Window.window && Window.contentItem)
+            return Window.contentItem;
+        return null;
+    }
+    readonly property bool inlineList: overlayParent === null
+
+    // Only when the list really is drawn INSIDE this row. It grew
+    // unconditionally before, so even a correctly reparented list shoved the
+    // rows below it down by its own height for no reason -- and when the
+    // reparenting silently failed, that displacement was the only visible
+    // evidence that anything had opened at all.
+    implicitHeight: rowHeight + (open && inlineList ? listBox.height + 4 : 0)
     // Above the settings below it while open, so the list is not drawn under
     // the next row as the panel reflows.
     z: open ? 10 : 0
@@ -88,8 +119,8 @@ Item {
     // entry, and above the header, so clicking the header while open closes it
     // through here rather than toggling twice.
     Loader {
-        active: root.open && QsWindow.window !== null
-        parent: QsWindow.window ? QsWindow.window.contentItem : root
+        active: root.open && root.overlayParent !== null
+        parent: root.overlayParent ? root.overlayParent : root
         anchors.fill: parent
         z: 9
         sourceComponent: Item {
@@ -127,17 +158,17 @@ Item {
         // Reparented to the window while open, for the same reason as the
         // catcher above: inside the Flickable it is clipped to the visible
         // pane, so a list opened near the bottom lost its last rows.
-        parent: root.open && QsWindow.window ? QsWindow.window.contentItem : root
+        parent: root.open && root.overlayParent ? root.overlayParent : root
         z: 11
 
         // Placed by mapping, since the parent is no longer the header's. The
         // HEADER's own top-left, not the row below it, so the arithmetic below
         // can put the list on either side of it.
-        readonly property point at: root.open && QsWindow.window
-            ? root.mapToItem(QsWindow.window.contentItem, 0, 0)
+        readonly property point at: root.open && root.overlayParent
+            ? root.mapToItem(root.overlayParent, 0, 0)
             : Qt.point(0, 0)
         readonly property int winHeight:
-            QsWindow.window ? QsWindow.window.contentItem.height : 0
+            root.overlayParent ? root.overlayParent.height : 0
 
         x: parent === root ? 0 : at.x
 
