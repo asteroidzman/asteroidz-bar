@@ -33,14 +33,21 @@ class Processes: public QObject {
 	//          same number the cpu pill is showing
 	//   mem    resident bytes
 	//   memPct percent of total RAM
+	//   rx/tx  bytes per second over TCP, and only while sortBy is "net" --
+	//          see the note on sampleNet() for what that number does and does
+	//          not include
 	Q_PROPERTY(QVariantList list READ list NOTIFY listChanged)
 
 	// Off by default. The panel turns it on while it is open; nothing else
 	// should.
 	Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
 
-	// "cpu" or "mem". The cpu pill opens sorted by cpu, the memory pill by
-	// memory, because the pill you pressed is the question you asked.
+	// "cpu", "mem" or "net". The pill you pressed is the question you asked.
+	//
+	// "net" is the expensive one and is opt-in for that reason: it needs a
+	// netlink round trip AND a readlink of every open fd on the machine to map
+	// sockets back to processes, so it runs only while something is sorting
+	// by it.
 	Q_PROPERTY(QString sortBy READ sortBy WRITE setSortBy NOTIFY sortByChanged)
 
 	Q_PROPERTY(int limit READ limit WRITE setLimit NOTIFY limitChanged)
@@ -89,7 +96,16 @@ private:
 		bool seen = false;              // survives the sweep that drops dead pids
 	};
 
+	// Cumulative TCP bytes per pid, for the delta. Keyed by pid rather than by
+	// socket so a process that opens and closes connections keeps a continuous
+	// figure instead of resetting to zero each time one goes away.
+	struct NetSample {
+		qulonglong rx = 0;
+		qulonglong tx = 0;
+	};
+
 	void sample();
+	void sampleNet(QHash<int, NetSample>* out);
 	void rebuild();
 
 	QTimer mTimer;
@@ -100,11 +116,16 @@ private:
 	QHash<int, Sample> mPrev;
 	unsigned long long mPrevTotal = 0;
 
+	QHash<int, NetSample> mPrevNet;
+	qint64 mPrevNetMs = 0;
+
 	struct Row {
 		int pid = 0;
 		QString name;
 		double cpu = 0;
 		qulonglong rss = 0;
+		double rx = 0; // bytes/sec
+		double tx = 0;
 	};
 	QList<Row> mRows;
 

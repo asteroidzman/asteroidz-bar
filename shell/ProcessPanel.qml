@@ -23,7 +23,7 @@ Item {
 
     signal closeRequested()
 
-    // Which column the panel was opened on: "cpu" or "mem".
+    // Which column the panel was opened on: "cpu", "mem" or "net".
     property string sortBy: "cpu"
 
     implicitWidth: Cfg.processWidth
@@ -40,6 +40,12 @@ Item {
     // a timer left running in a destroyed panel is a walk of /proc a second
     // for the rest of the session.
     Component.onDestruction: Processes.active = false
+
+    function rate(bps) {
+        if (bps >= 1048576) return (bps / 1048576).toFixed(1) + "M";
+        if (bps >= 1024) return Math.round(bps / 1024) + "K";
+        return Math.round(bps) + "B";
+    }
 
     function human(bytes) {
         if (bytes >= 1073741824)
@@ -80,6 +86,7 @@ Item {
                     model: [
                         { label: "cpu", key: "cpu" },
                         { label: "mem", key: "mem" },
+                        { label: "net", key: "net" },
                     ]
 
                     delegate: Rectangle {
@@ -143,8 +150,19 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             height: parent.height
                             radius: Cfg.themeRadius
-                            width: parent.width * Math.min(1, (Processes.sortBy === "mem"
-                                       ? row.modelData.memPct : row.modelData.cpu) / 100)
+                            width: {
+                                if (Processes.sortBy === "net") {
+                                    // Relative to the busiest row, because there
+                                    // is no "100%" for a network the way there is
+                                    // for a core or for RAM.
+                                    const top = Processes.list.length > 0
+                                        ? Processes.list[0].rx + Processes.list[0].tx : 0;
+                                    const mine = row.modelData.rx + row.modelData.tx;
+                                    return top > 0 ? parent.width * Math.min(1, mine / top) : 0;
+                                }
+                                return parent.width * Math.min(1, (Processes.sortBy === "mem"
+                                    ? row.modelData.memPct : row.modelData.cpu) / 100);
+                            }
                             color: Qt.rgba(Cfg.focusBg.r, Cfg.focusBg.g, Cfg.focusBg.b, 0.22)
                         }
 
@@ -181,9 +199,11 @@ Item {
                             anchors.right: memText.left
                             anchors.rightMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
-                            width: Math.round(Cfg.fontPixelSize * 2.2)
+                            width: Math.round(Cfg.fontPixelSize * (Processes.sortBy === "net" ? 3.4 : 2.2))
                             horizontalAlignment: Text.AlignRight
-                            text: row.modelData.cpu.toFixed(1)
+                            text: Processes.sortBy === "net"
+                                  ? "\u2193 " + root.rate(row.modelData.rx)
+                                  : row.modelData.cpu.toFixed(1)
                             color: Processes.sortBy === "cpu"
                                    ? Cfg.fg
                                    : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
@@ -197,9 +217,11 @@ Item {
                             anchors.right: parent.right
                             anchors.rightMargin: 6
                             anchors.verticalCenter: parent.verticalCenter
-                            width: Math.round(Cfg.fontPixelSize * 2.4)
+                            width: Math.round(Cfg.fontPixelSize * (Processes.sortBy === "net" ? 3.4 : 2.4))
                             horizontalAlignment: Text.AlignRight
-                            text: root.human(row.modelData.mem)
+                            text: Processes.sortBy === "net"
+                                  ? "\u2191 " + root.rate(row.modelData.tx)
+                                  : root.human(row.modelData.mem)
                             color: Processes.sortBy === "mem"
                                    ? Cfg.fg
                                    : Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)

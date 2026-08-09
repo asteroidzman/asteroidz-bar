@@ -1064,7 +1064,7 @@ it works on a Tuesday than the morning the token dies.
 `status` reports counts and flags only, never event contents — it is meant to
 be safe to paste into a bug report.
 
-## cpu and memory
+## cpu, memory and network
 
 `cpu` and `memory` in a module list. Two icon-only pills whose **tint** is the
 reading — four bands saying resting / working / heavy / saturated. No number on
@@ -1094,6 +1094,31 @@ which at a two-second interval would mean reading a column of zeros for two
 seconds after opening — so a second sample is taken 400ms in, and the interval
 settles afterwards. Percentages are of the whole machine, not of one core, so
 the column sums toward the same figure the header and the pill are showing.
+
+The `network` pill opens the same panel, sorted by throughput, with the CPU and
+memory columns replaced by ↓ and ↑ rates.
+
+**What the network column cannot see, which matters more than what it can.**
+Linux does not expose per-process network bytes. `/proc/<pid>/net/dev` is per
+network *namespace* — two unrelated processes report the machine's totals, byte
+for byte — and `/proc/<pid>/io` counts all I/O, files included. What does exist
+is `tcp_info`, which the kernel keeps per socket and which carries
+`bytes_sent`/`bytes_received`; `sock_diag` hands those out with each socket's
+inode, and an inode maps to a pid through `/proc/<pid>/fd`. That is what
+`ss -tinp` does, and this asks the kernel the same question directly rather
+than forking `ss` every tick.
+
+The consequence is that **it is TCP only**:
+
+- **UDP is invisible** — DNS, WireGuard, most games, and above all **HTTP/3**.
+  A browser on QUIC can move hundreds of megabytes and appear idle here.
+- Sockets that open *and* close between two samples are never observed.
+- Attribution is same-user, so a system daemon's traffic lands nowhere.
+
+The pill's own totals come from the interface and **do** include all of that,
+so the pill and the list disagreeing is expected rather than a bug in either.
+Nothing short of eBPF or a packet-capture helper fixes this, and neither
+belongs in a bar running as your user.
 
 ```kdl
 processes {

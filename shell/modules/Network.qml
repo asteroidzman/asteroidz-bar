@@ -19,15 +19,25 @@ Pill {
 
     property var bar: null
 
+    // The pill's artwork already says up/down/how fast; the menu that used to
+    // open here said it again in words. What it could not answer is WHICH
+    // process, so it opens the process list sorted by throughput instead --
+    // the same panel the cpu and memory pills open, asking its third question.
     onClicked: button => {
         if (button !== Qt.LeftButton || !bar)
             return;
-        bar.showMenu(root, [
-            { text: "Down  " + Metrics.rate(Metrics.rxRate), enabled: false },
-            { text: "Up    " + Metrics.rate(Metrics.txRate), enabled: false },
-            { separator: true },
-            { text: Metrics.linkUp ? "Link up" : "Link down", enabled: false }
-        ]);
+        bar.showPanel(root, processes);
+    }
+
+    Component {
+        id: processes
+        // `bar` resolves here and not inside ProcessPanel.qml: a Component
+        // captures the scope it is DECLARED in, and the panel is a separate
+        // file that knows nothing about the bar hosting it.
+        ProcessPanel {
+            sortBy: "net"
+            onCloseRequested: bar.closeMenu()
+        }
     }
 
     Item {
