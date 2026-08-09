@@ -27,6 +27,7 @@
 // reverts at the next reload and looks like settings that forget themselves.
 
 import Quickshell
+import Quickshell.Io
 import QtQuick
 import Asteroidz.Bar
 import "."
@@ -38,8 +39,107 @@ FloatingWindow {
     title: "asteroidz settings"
     minimumSize: Qt.size(Math.round(Cfg.fontPixelSize * 26),
                          Math.round(Cfg.fontPixelSize * 18))
-    implicitWidth: Math.round(Cfg.fontPixelSize * 40)
-    implicitHeight: Math.round(Cfg.fontPixelSize * 30)
+
+    // ── the size it was left at ─────────────────────────────────────────────
+    //
+    // Resizing this window and closing it threw the size away: every reopen
+    // came back at the font-derived default, so anyone who wanted it bigger had
+    // to drag it bigger again, every time.
+    //
+    // In the CACHE, not the config. This is not a setting -- nobody edits it,
+    // nothing else reads it, and losing it costs one drag -- so it does not
+    // belong in a file the user maintains by hand. Same directory and the same
+    // shape as Location's cache, which is the existing convention here.
+    readonly property string sizeCachePath:
+        (Quickshell.env("XDG_CACHE_HOME")
+         || (Quickshell.env("HOME") + "/.cache"))
+        + "/asteroidz-bar/settings-window.json"
+
+    property int rememberedWidth: 0
+    property int rememberedHeight: 0
+
+    readonly property int defaultWidth: Math.round(Cfg.fontPixelSize * 40)
+    readonly property int defaultHeight: Math.round(Cfg.fontPixelSize * 30)
+
+    // Clamped to the screen, not taken on trust.
+    //
+    // A size remembered from a 3840x2160 output is bigger than a 1920x1080 one
+    // can show, and a window larger than its screen is one whose Apply bar
+    // cannot be reached. The same applies after a scale change: at scale 1.75
+    // the logical screen is 1097px tall, and a height remembered at 1.5 is
+    // taller than that.
+    function fitToScreen(v, avail, fallback) {
+        if (v <= 0)
+            return fallback;
+        if (avail > 0)
+            return Math.min(v, avail);
+        return v;
+    }
+
+    implicitWidth: fitToScreen(rememberedWidth,
+                               win.screen ? win.screen.width : 0, defaultWidth)
+    implicitHeight: fitToScreen(rememberedHeight,
+                                win.screen ? win.screen.height : 0, defaultHeight)
+
+    // Two views, one to read and one to write, which is the pattern the rest of
+    // this shell uses (Matugen's templateFile/templateWriter). One FileView doing
+    // both did not write at all: it is preloaded for the read, and setText on a
+    // preloaded view whose file does not exist yet went nowhere -- the test saw
+    // an unchanged cache and a window that only appeared to remember, because
+    // the compositor had kept the size of a window that was merely hidden.
+    FileView {
+        id: sizeCache
+        path: win.sizeCachePath
+        preload: true
+        onLoaded: {
+            try {
+                const o = JSON.parse(text());
+                win.rememberedWidth = Number(o.width) || 0;
+                win.rememberedHeight = Number(o.height) || 0;
+            } catch (e) {
+                // A cache is allowed to be junk. Falling back to the default
+                // beats refusing to open the window over a file nobody edits.
+            }
+        }
+    }
+
+    FileView {
+        id: sizeWriter
+        path: win.sizeCachePath
+        preload: false
+    }
+
+    // Saved on the RESIZE, debounced -- not on close.
+    //
+    // Saving in onVisibleChanged was the obvious place and it never ran once:
+    // the window does not get a visible=false on the way out. Closing it from
+    // the compositor -- which is how it is closed, since it opens tiled with no
+    // titlebar -- takes the object with it, and Settings.open() then rebuilds a
+    // fresh one. Nothing on the window is reachable at that point, so the size
+    // has to already be on disk before it goes.
+    //
+    // 400ms after the last change, so a drag that emits a size per frame writes
+    // once at the end of the gesture rather than sixty times through it.
+    onWidthChanged: sizeSaveDebounce.restart()
+    onHeightChanged: sizeSaveDebounce.restart()
+
+    Timer {
+        id: sizeSaveDebounce
+        interval: 400
+        onTriggered: win.rememberSize()
+    }
+
+    function rememberSize() {
+        if (width <= 0 || height <= 0)
+            return;
+        // Only a real change, so closing a window nobody resized does not
+        // rewrite the file every time.
+        if (width === rememberedWidth && height === rememberedHeight)
+            return;
+        rememberedWidth = width;
+        rememberedHeight = height;
+        sizeWriter.setText(JSON.stringify({ width: width, height: height }));
+    }
     // panelColor, not `bg`.
     //
     // Visually this IS a panel -- the same surface the popovers are drawn on --
@@ -406,10 +506,14 @@ FloatingWindow {
     }
 
     onVisibleChanged: {
-        if (visible)
+        if (visible) {
             Schema.load();
-        else
+        } else {
+            // Before discardPending(), which is bookkeeping; the size has to be
+            // read off the window while it still has one.
+            rememberSize();
             discardPending();
+        }
     }
 
     // The ship, as this window's icon.
