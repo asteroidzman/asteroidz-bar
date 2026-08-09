@@ -460,9 +460,30 @@ FloatingWindow {
             border.width: 1
             border.color: parent.cardEdge
 
-            Column {
+            // Scrollable, because the list outgrew the window.
+            //
+            // The entries are one per option group plus nine fixed pages, and
+            // the group list comes from the compositor -- so how tall this
+            // wants to be is not something the window can know. It was a plain
+            // Column filling the sidebar: everything past the bottom edge was
+            // simply unreachable, with nothing on screen to say there was more.
+            //
+            // Scrolling rather than growing the window: the window is already
+            // as tall as a short output allows (a 1.75-scaled display gives it
+            // ~520 logical pixels), so "make it fit" is not available on the
+            // display where it matters most.
+            Flickable {
+                id: navScroll
                 anchors.fill: parent
                 anchors.margins: Cfg.panelPadding
+                contentWidth: width
+                contentHeight: navColumn.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+            Column {
+                id: navColumn
+                width: navScroll.width
                 spacing: 2
 
                 // The ship, the name, and which build this is.
@@ -530,10 +551,16 @@ FloatingWindow {
 
                 Item { width: 1; height: Cfg.spacing }
 
-                // The compositor's groups in the order it declares them -- that
-                // order is curated in config-schema.h and sorting it here would
-                // throw away the one thing a schema cannot express as a field --
-                // then the pages that are not options.
+                // The compositor's groups, then the pages that are not
+                // options, all sorted by label.
+                //
+                // The declaration order in config-schema.h is curated, and this
+                // used to keep it for that reason. It stopped being defensible
+                // once the fixed pages were appended after it: the list read
+                // Appearance, Effects, Layout, Animations, Overview, Input,
+                // Miscellaneous, Displays, Wallpaper... which is neither the
+                // curated order nor any order a reader can name, so finding a
+                // page meant reading every entry.
                 //
                 // No "All settings" row. It was the first entry and the default,
                 // and it listed all ninety-five options at once, which is a list
@@ -681,6 +708,24 @@ FloatingWindow {
                     }
                 }
             }
+                }
+
+                // A scroll position indicator, drawn rather than imported, the
+                // same one the content pane uses.
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 1
+                    width: 4
+                    radius: 2
+                    visible: navScroll.contentHeight > navScroll.height
+                    y: navScroll.contentY
+                       + (navScroll.contentY
+                          / Math.max(1, navScroll.contentHeight - navScroll.height))
+                         * (navScroll.height - height)
+                    height: Math.max(24, navScroll.height * navScroll.height
+                                         / Math.max(1, navScroll.contentHeight))
+                    color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, 0.25)
+                }
 
             // No file list here any more.
             //

@@ -278,16 +278,31 @@ PY
 #
 # There is no "All settings" row any more, so row 0 is the FIRST GROUP and that
 # is also what a freshly opened window selects.
-NGROUPS="$(hl_get "get config-schema" | jq '.groups | length')"
-FIRST_GROUP_ROW=0
-DISPLAYS_ROW=$NGROUPS
-WALLPAPER_ROW=$((1 + NGROUPS))
-MODULES_ROW=$((2 + NGROUPS))
-LAYOUTS_ROW=$((3 + NGROUPS))
-RULES_ROW=$((4 + NGROUPS))
-BINDS_ROW=$((5 + NGROUPS))
+# Indices come from the SORTED label list, because the sidebar is sorted now.
+#
+# They were arithmetic over the schema order -- Displays at NGROUPS, Wallpaper
+# at NGROUPS+1 and so on. Sorting the sidebar made every one of those point at
+# a different page, and the damage did not surface as "wrong page": it surfaced
+# thirteen assertions later as fields that would not commit and modules that
+# would not move, because those pages were never open.
+eval "$(hl_get "get config-schema" | python3 -c '
+import json, sys
+groups = [g["label"] for g in json.load(sys.stdin)["groups"]]
+fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+         "Keybinds", "Palette", "Notifications", "Push-to-talk"]
+rows = sorted(groups + fixed, key=lambda s: s.lower())
+for name, label in [("DISPLAYS", "Displays"), ("WALLPAPER", "Wallpaper"),
+                    ("MODULES", "Modules"), ("LAYOUTS", "Layouts"),
+                    ("RULES", "Window rules"), ("BINDS", "Keybinds")]:
+    print("%s_ROW=%d" % (name, rows.index(label)))
+# The row a freshly opened window selects is the first GROUP, which after
+# sorting is no longer row 0 -- and it is the row the accent scan calibrates
+# SB_TOP from, so every index below is measured against it.
+print("FIRST_GROUP_ROW=%d" % rows.index(groups[0]))
+')"
 
-SB0=$SB_TOP
+# SB_TOP is the top of the SELECTED row, not of the list.
+SB0=$((SB_TOP - FIRST_GROUP_ROW * (SB_H + 2)))
 SIDEBAR_X=$((WX + 60))
 
 sidebar_entry_y() { # sidebar_entry_y <index>  ->  the row's vertical centre
@@ -1351,7 +1366,9 @@ print(grp[0], grp[-1] - grp[0] + 1)
 PY
 )"
 
-SB0=$SB_TOP
+# Same correction as the first calibration: the accent pill is the SELECTED
+# row, which the sort moved off row 0.
+SB0=$((SB_TOP - FIRST_GROUP_ROW * (SB_H + 2)))
 SIDEBAR_X=$((WX + 60))
 
 if [ "${SB_H:-0}" -gt 10 ] && [ "$SB0" -gt "$WY" ]; then
@@ -1791,7 +1808,13 @@ fi
 # because visiting is the only way its QML is compiled at all: the page is
 # behind a Loader that stays inactive until selected, so a missing type or a
 # bad binding in it cannot show up at startup.
-NOTIFY_ROW=$((7 + NGROUPS))
+NOTIFY_ROW="$(hl_get "get config-schema" | python3 -c '
+import json, sys
+groups = [g["label"] for g in json.load(sys.stdin)["groups"]]
+fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+         "Keybinds", "Palette", "Notifications", "Push-to-talk"]
+print(sorted(groups + fixed, key=lambda s: s.lower()).index("Notifications"))
+')"
 NOTIFY_Y="$(sidebar_entry_y "$NOTIFY_ROW")"
 hl_move "$SIDEBAR_X" "$NOTIFY_Y"; sleep 1
 hl_click "$SIDEBAR_X" "$NOTIFY_Y"; sleep 2
@@ -1818,7 +1841,13 @@ else
 	ok "the notifications page builds without a QML error"
 fi
 
-PTT_ROW=$((8 + NGROUPS))
+PTT_ROW="$(hl_get "get config-schema" | python3 -c '
+import json, sys
+groups = [g["label"] for g in json.load(sys.stdin)["groups"]]
+fixed = ["Displays", "Wallpaper", "Modules", "Layouts", "Window rules",
+         "Keybinds", "Palette", "Notifications", "Push-to-talk"]
+print(sorted(groups + fixed, key=lambda s: s.lower()).index("Push-to-talk"))
+')"
 PTT_Y="$(sidebar_entry_y "$PTT_ROW")"
 hl_move "$SIDEBAR_X" "$PTT_Y"; sleep 1
 hl_click "$SIDEBAR_X" "$PTT_Y"; sleep 2
