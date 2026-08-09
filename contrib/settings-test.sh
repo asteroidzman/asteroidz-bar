@@ -45,6 +45,7 @@ WORK="$HL_OUTDIR"
 # shellcheck disable=SC1091
 . "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
+BAR_XDG="$(bar_xdg_home)"
 # The guard headless.sh cannot make for us: if the instance did not come up,
 # every `hl_get` below answers nothing and every assertion "passes" against an
 # empty string. An earlier run of the sibling script did exactly that -- a stale
@@ -85,7 +86,7 @@ CONFIG_BEFORE="$(cat "$HL_CONFIG")"
 
 setsid dbus-run-session -- \
 	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-	HOME="$HOME" PATH="$PATH" \
+	HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 	ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 	ASTEROIDZ_BAR_SHELL="${PROBE_SHELL:-$HERE/shell}/shell.qml" \

@@ -53,6 +53,7 @@ WORK="$HL_OUTDIR"
 # shellcheck disable=SC1091
 . "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
+BAR_XDG="$(bar_xdg_home)"
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -77,8 +78,8 @@ EOF
 # notify-blur-test.sh, for the same reason.
 cat > "$WORK/run.sh" <<'INNER'
 #!/usr/bin/env bash
-WORK="$1"; HERE="$2"; SIG="$3"; WD="$4"; XRD="$5"; QMLROOT="$6"; BAR_CONF="$7"; MON="$8"
-env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WD" HOME="$HOME" PATH="$PATH" \
+WORK="$1"; HERE="$2"; SIG="$3"; WD="$4"; XRD="$5"; QMLROOT="$6"; BAR_CONF="$7"; MON="$8"; BAR_XDG="$9"
+env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WD" HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" \
 	ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
@@ -100,7 +101,7 @@ wait "$QS" 2>/dev/null
 INNER
 chmod +x "$WORK/run.sh"
 setsid dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
-	"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" "$HL_MON"
+	"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" "$HL_MON" "$BAR_XDG"
 
 MARGIN_X=8
 RESULT="$(python3 - "$WORK/toast.png" "$CARD_W" "$MARGIN_X" <<'MEASURE'

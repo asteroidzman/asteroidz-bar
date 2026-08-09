@@ -54,6 +54,7 @@ WORK="$HL_OUTDIR"
 # shellcheck disable=SC1091
 . "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
+BAR_XDG="$(bar_xdg_home)"
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -78,9 +79,10 @@ cat > "$WORK/run.sh" <<'INNER'
 #!/usr/bin/env bash
 set -u
 WORK="$1"; HERE="$2"; SIG="$3"; WL="$4"; XRD="$5"; QMLROOT="$6"; BAR_CONF="$7"
-MON="$8"; SHOT="$9"
+MON="$8"; SHOT="$9"; BAR_XDG="${10}"
 
 env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
+	XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" \
 	ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
@@ -131,7 +133,7 @@ notify { width $CARD_W }
 EOF
 	setsid dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
 		"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" \
-		"$HL_MON" "$2"
+		"$HL_MON" "$2" "$BAR_XDG"
 }
 
 run_with_blur "#true" frosted

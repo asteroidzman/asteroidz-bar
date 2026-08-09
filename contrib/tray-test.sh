@@ -48,6 +48,7 @@ WORK="$HL_OUTDIR"
 # shellcheck disable=SC1091
 . "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
+BAR_XDG="$(bar_xdg_home)"
 
 # The C++ plugin the shell imports as `Asteroidz.Bar`, staged where quickshell
 # will find it. Without this the shell does not merely lose the plugin -- it
@@ -81,6 +82,7 @@ QMLROOT="$8"
 # before the applications are, and adopting an item that appears later is the
 # case that matters.
 WAYLAND_DISPLAY="$WL" XDG_RUNTIME_DIR="$XRD" \
+	XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" \
 	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \
 	ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \

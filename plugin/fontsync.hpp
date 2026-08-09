@@ -12,10 +12,16 @@
 // and the compositor said "Ubuntu 13". Four sources, four answers, and no way
 // to tell which an application would obey.
 //
-// Files are edited in place through QSettings rather than rewritten: these
-// hold the user's other choices -- icon theme, cursor size, style -- and a
-// generated file that replaced them would be a font sync that quietly reset
-// the desktop.
+// Files are edited in place rather than rewritten: these hold the user's other
+// choices -- icon theme, cursor size, style -- and a generated file that
+// replaced them would be a font sync that quietly reset the desktop.
+//
+// Everything is written under XDG_CONFIG_HOME, never a hard-coded
+// $HOME/.config. That is not pedantry about the specification: a bar started
+// by a test is a real bar and pushes a real font, so the hard-coded version
+// rewrote the developer's own desktop font to the test fixture's value the
+// first time the suite ran. Reading the variable is what lets the harness
+// point this somewhere harmless.
 
 #include <QtCore/QObject>
 #include <QtCore/QString>

@@ -38,6 +38,7 @@ WORK="$HL_OUTDIR"
 # shellcheck disable=SC1091
 . "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
+BAR_XDG="$(bar_xdg_home)"
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar" "$WORK/bin"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -105,6 +106,7 @@ SOUND_LOG="$WORK/sounds.log"
 
 env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
 	PATH="$WORK/bin:$PATH" SOUND_LOG="$SOUND_LOG" \
+	XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" \
 	ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 	ASTEROIDZ_BAR_SHELL="$HERE/shell/shell.qml" \

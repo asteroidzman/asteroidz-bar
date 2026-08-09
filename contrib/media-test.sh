@@ -40,6 +40,7 @@ WORK="$HL_OUTDIR"
 # shellcheck disable=SC1091
 . "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
+BAR_XDG="$(bar_xdg_home)"
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -103,6 +104,7 @@ done
 playerctl -l > "$WORK/players.txt" 2>&1 || true
 
 WAYLAND_DISPLAY="$WL" XDG_RUNTIME_DIR="$XRD" \
+	XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$SIG" \
 	ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 	ASTEROIDZ_BAR_SHELL="${PROBE_SHELL:-$HERE/shell}/shell.qml" \

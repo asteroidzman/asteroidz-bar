@@ -175,7 +175,7 @@ Singleton {
     readonly property var builtins: [
         "tags", "layout", "title", "clock", "battery", "network", "volume",
         "media", "idle", "notify", "weather", "tray", "power",
-        "cpu", "memory"
+        "cpu", "memory", "clipboard"
     ]
 
     readonly property var available: {

@@ -1,6 +1,5 @@
 #include "fontsync.hpp"
 
-#include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QProcess>
 #include <QtCore/QRegularExpression>
@@ -80,13 +79,37 @@ bool FontSync::apply(const QString& font) {
 	// "Roboto,  10" -- which GTK does parse, but writing it back that way would
 	// be copying a typo forward.
 	const auto pango = QStringLiteral("%1 %2").arg(family).arg(size);
-	const auto home = QDir::homePath();
+
+	// XDG_CONFIG_HOME, not $HOME/.config -- and that distinction is the whole
+	// reason this function can be run at all without consequences.
+	//
+	// The first version hard-coded QDir::homePath() + "/.config". Every headless
+	// test starts a real bar, and a real bar reaches Component.onCompleted and
+	// pushes the font: contrib/process-test.sh declares `theme { font "Ubuntu
+	// 16" }`, so running the test suite rewrote the developer's ACTUAL desktop
+	// font to the test's value -- GTK, Qt and gsettings, all five targets. It
+	// was found the way these are always found, by someone noticing their
+	// desktop had changed.
+	//
+	// The bug was not the missing sandbox in the harness. It was that no
+	// sandbox was POSSIBLE: a hard-coded $HOME/.config cannot be pointed
+	// anywhere else, so no amount of care in the test scripts could have
+	// contained it. Honouring the variable the specification already defines
+	// for exactly this is what makes the harness able to set it -- and dconf
+	// keeps its user database under the same root, so gsettings is contained by
+	// the same one variable.
+	const auto cfg = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+	if (cfg.isEmpty()) {
+		this->setError(QStringLiteral("no config directory"));
+		emit this->appliedChanged();
+		return false;
+	}
 
 	auto any = false;
-	any |= this->writeGtkIni(home + QStringLiteral("/.config/gtk-3.0/settings.ini"), pango);
-	any |= this->writeGtkIni(home + QStringLiteral("/.config/gtk-4.0/settings.ini"), pango);
-	any |= this->writeQtConf(home + QStringLiteral("/.config/qt6ct/qt6ct.conf"), family, size);
-	any |= this->writeQtConf(home + QStringLiteral("/.config/qt5ct/qt5ct.conf"), family, size);
+	any |= this->writeGtkIni(cfg + QStringLiteral("/gtk-3.0/settings.ini"), pango);
+	any |= this->writeGtkIni(cfg + QStringLiteral("/gtk-4.0/settings.ini"), pango);
+	any |= this->writeQtConf(cfg + QStringLiteral("/qt6ct/qt6ct.conf"), family, size);
+	any |= this->writeQtConf(cfg + QStringLiteral("/qt5ct/qt5ct.conf"), family, size);
 	any |= this->writeGSettings(pango);
 
 	this->setError(any ? QString() : QStringLiteral("nothing could be written"));

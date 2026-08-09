@@ -62,6 +62,7 @@ WORK="$HL_OUTDIR"
 # shellcheck disable=SC1091
 . "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
+BAR_XDG="$(bar_xdg_home)"
 # Nothing on the bar: this suite is about the wallpaper behind it.
 bar_conf "" "" ""
 
@@ -95,7 +96,7 @@ run_shell() { # run_shell <image> <logfile>
 	printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$(dirname "$image")" "$image" > "$conf"
 
 	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-		HOME="$HOME" PATH="$PATH" \
+		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 		QT_QPA_PLATFORM=wayland QT_FONT_DPI=96 \
 		QML2_IMPORT_PATH="$QMLROOT" QML_IMPORT_PATH="$QMLROOT" \

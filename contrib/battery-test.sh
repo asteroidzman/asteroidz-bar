@@ -44,6 +44,7 @@ WORK="$HL_OUTDIR"
 # shellcheck disable=SC1091
 . "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
+BAR_XDG="$(bar_xdg_home)"
 QMLROOT="$WORK/qml"
 mkdir -p "$QMLROOT/Asteroidz/Bar"
 cp "$HERE/build/libasteroidzbarplugin.so" "$QMLROOT/Asteroidz/Bar/"
@@ -70,7 +71,7 @@ mkdir -p "$BATDIR"
 start_bar() {
 	setsid dbus-run-session -- \
 		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-		HOME="$HOME" PATH="$PATH" \
+		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 		ASTEROIDZ_BAR_BATTERY_DIR="$BATDIR" \

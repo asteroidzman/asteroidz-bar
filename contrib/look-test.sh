@@ -39,6 +39,7 @@ WORK="$HL_OUTDIR"
 # shellcheck disable=SC1091
 . "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
+BAR_XDG="$(bar_xdg_home)"
 
 # The C++ module, laid out the way an import path expects. The launcher in
 # bin/ is a TEMPLATE -- its @SHELLDIR@ is only substituted at install time --
@@ -78,7 +79,7 @@ EOF
 	# happened to be playing anything.
 	setsid dbus-run-session -- \
 		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-		HOME="$HOME" PATH="$PATH" \
+		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 		ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
@@ -146,7 +147,7 @@ EOF
 	sleep 1
 	setsid dbus-run-session -- \
 		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-		HOME="$HOME" PATH="$PATH" \
+		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 		ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
@@ -181,7 +182,7 @@ EOF
 	sleep 1
 	setsid dbus-run-session -- \
 		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-		HOME="$HOME" PATH="$PATH" \
+		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 		ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
@@ -247,7 +248,7 @@ EOF
 	sleep 1
 	setsid dbus-run-session -- \
 		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-		HOME="$HOME" PATH="$PATH" \
+		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
 		ASTEROIDZ_BAR_WALLPAPER_CONF="$WORK/wallpaper.conf" \
 		ASTEROIDZ_BAR_CONFIG="$BAR_CONF" \
