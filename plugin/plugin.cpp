@@ -23,6 +23,7 @@
 #include "calendar.hpp"
 #include "clipboard.hpp"
 #include "opticalicon.hpp"
+#include "fontsync.hpp"
 #include "palette.hpp"
 #include "paths.hpp"
 #include "processes.hpp"
@@ -87,6 +88,16 @@ public:
 		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
 			    Q_UNUSED(engine);
 			    return new Clipboard();
+		    }
+		);
+		qmlRegisterSingletonType<FontSync>(
+		    uri,
+		    1,
+		    0,
+		    "FontSync",
+		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
+			    Q_UNUSED(engine);
+			    return new FontSync();
 		    }
 		);
 		qmlRegisterSingletonType<Palette>(

@@ -228,6 +228,7 @@ plugin_moc = qt6.preprocess(
 		'plugin/calendar.hpp',
 		'plugin/processes.hpp',
 		'plugin/palette.hpp',
+		'plugin/fontsync.hpp',
 	],
 	# plugin.cpp declares its class in the .cpp and ends with
 	# `#include "plugin.moc"`, which is the form moc expects for a type that
@@ -248,6 +249,7 @@ shared_module(
 		'plugin/calendar.cpp',
 		'plugin/processes.cpp',
 		'plugin/palette.cpp',
+		'plugin/fontsync.cpp',
 		plugin_protos,
 		plugin_moc,
 	],

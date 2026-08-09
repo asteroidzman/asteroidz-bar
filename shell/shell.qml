@@ -12,6 +12,7 @@
 
 import Quickshell
 import QtQuick
+import Asteroidz.Bar
 import "."
 
 ShellRoot {
@@ -46,9 +47,28 @@ ShellRoot {
         // to suggest why. The panel refers to the C++ Calendar singleton, not
         // to this one, so there is no other reference to rely on.
         void CalendarService.objectName;
+        // One font setting, pushed to the toolkits that each keep their own.
+        //
+        // `theme { font }` is where a font is chosen, and nothing else on the
+        // desktop reads it: GTK has settings.ini, GTK under a portal has
+        // gsettings, Qt has qt6ct's file. Before this they simply disagreed --
+        // four sources, four answers.
+        fontSync.push();
         if (!Ipc.connected)
             console.warn("asteroidz-bar: ASTEROIDZ_INSTANCE_SIGNATURE not set;"
                          + " running with defaults and no compositor state");
+    }
+
+    // Re-pushed whenever the compositor's font changes, not only at startup:
+    // a config reload is exactly when someone has just edited it.
+    Connections {
+        id: fontSync
+        target: Cfg
+        function onFontDescChanged() { fontSync.push(); }
+        function push() {
+            if (Cfg.fontDesc !== "")
+                FontSync.apply(Cfg.fontDesc);
+        }
     }
 
     Variants {
