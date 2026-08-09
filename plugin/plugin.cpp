@@ -24,6 +24,7 @@
 #include "clipboard.hpp"
 #include "opticalicon.hpp"
 #include "paths.hpp"
+#include "processes.hpp"
 #include "windowicon.hpp"
 #include "wallpaper.hpp"
 
@@ -85,6 +86,18 @@ public:
 		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
 			    Q_UNUSED(engine);
 			    return new Clipboard();
+		    }
+		);
+		// A singleton: /proc is the machine's, and two samplers would each see
+		// half the other's CPU deltas.
+		qmlRegisterSingletonType<Processes>(
+		    uri,
+		    1,
+		    0,
+		    "Processes",
+		    [](QQmlEngine* engine, QJSEngine* /*script*/) -> QObject* {
+			    Q_UNUSED(engine);
+			    return new Processes();
 		    }
 		);
 		qmlRegisterSingletonType<WindowIcon>(

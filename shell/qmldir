@@ -36,3 +36,4 @@ ClipboardPanel 1.0 ClipboardPanel.qml
 singleton ClipboardService 1.0 ClipboardService.qml
 CalendarPanel 1.0 CalendarPanel.qml
 singleton CalendarService 1.0 CalendarService.qml
+ProcessPanel 1.0 ProcessPanel.qml

@@ -1064,6 +1064,46 @@ it works on a Tuesday than the morning the token dies.
 `status` reports counts and flags only, never event contents — it is meant to
 be safe to paste into a bug report.
 
+## cpu and memory
+
+`cpu` and `memory` in a module list. Two icon-only pills whose **tint** is the
+reading — four bands saying resting / working / heavy / saturated. No number on
+the bar: these sit in a tight run of artwork, and a percentage beside each would
+double the width of the group for a figure nobody reads continuously.
+
+Clicking one opens `top`.
+
+That is the question you actually have when a pill goes red — not "how red", but
+**what is doing it**. The pills previously opened a five-row menu of totals, two
+of which were the numbers the tint already conveyed. The panel lists processes
+by pid, name, CPU and resident memory, with a faint bar behind each row for the
+column being sorted on.
+
+The pill you pressed picks the sort: `cpu` opens by CPU, `memory` by memory. The
+header toggles it without closing, and re-sorts the sample already in hand
+rather than refetching.
+
+**It only samples while the panel is open.** A walk of `/proc` is several
+hundred file reads, and doing that forever to fill a list nobody has opened is
+the kind of idle cost this shell avoids elsewhere. Closing the panel also drops
+the previous sample, so reopening it measures now rather than reporting an
+average over however long it was shut.
+
+CPU is a **delta**, so it needs two samples. The first one can only report zero,
+which at a two-second interval would mean reading a column of zeros for two
+seconds after opening — so a second sample is taken 400ms in, and the interval
+settles afterwards. Percentages are of the whole machine, not of one core, so
+the column sums toward the same figure the header and the pill are showing.
+
+```kdl
+processes {
+	width       23    // ems; a row is four columns and the name must survive
+	height      16    // ems of list before it scrolls
+	limit       14    // rows kept after sorting
+	interval-ms 2000  // slower than the pills: a reshuffling list is harder to read
+}
+```
+
 ## Idle
 
 `swayidle` is gone: the bar does idle itself. asteroidz implements

@@ -179,6 +179,20 @@ Singleton {
     // month a network round trip.
     readonly property int calendarHorizon: num(calendar, "horizon-days", 60)
 
+    // The process list, under the cpu and memory pills.
+    //
+    // Wider than the other panels because a row is five columns -- pid, name,
+    // cpu, memory -- and a name elided to nothing is the one column that has
+    // to survive.
+    readonly property var processes: BarConfig.groups.processes || ({})
+    readonly property int processWidth: num(processes, "width", em(23))
+    readonly property int processHeight: num(processes, "height", em(16))
+    readonly property int processLimit: num(processes, "limit", 14)
+    // Slower than the pills' own interval on purpose: a walk of /proc is
+    // several hundred file reads, and a list that reshuffles faster than you
+    // can read it is harder to use, not more informative.
+    readonly property int processInterval: num(processes, "interval-ms", 2000)
+
     // On by default, unlike the sound. A toast over a fullscreen film or game
     // is an intrusion with no way to dismiss it that does not leave what you
     // are doing, so the useful default is the quiet one -- and the

@@ -55,6 +55,7 @@ install_data(
 		'shell/CalendarPanel.qml',
 		'shell/CalendarService.qml',
 		'shell/ClipboardPanel.qml',
+		'shell/ProcessPanel.qml',
 		'shell/ClipboardService.qml',
 		'shell/AudioPanel.qml',
 		'shell/AudioDeviceRow.qml',
@@ -225,6 +226,7 @@ plugin_moc = qt6.preprocess(
 		'plugin/windowicon.hpp',
 		'plugin/clipboard.hpp',
 		'plugin/calendar.hpp',
+		'plugin/processes.hpp',
 	],
 	# plugin.cpp declares its class in the .cpp and ends with
 	# `#include "plugin.moc"`, which is the form moc expects for a type that
@@ -243,6 +245,7 @@ shared_module(
 		'plugin/opticalicon.cpp',
 		'plugin/clipboard.cpp',
 		'plugin/calendar.cpp',
+		'plugin/processes.cpp',
 		plugin_protos,
 		plugin_moc,
 	],

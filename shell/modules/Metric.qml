@@ -28,20 +28,26 @@ Pill {
 
     property var bar: null
 
-    // The tint says which BAND you are in; the popover says the number. That
-    // split is why the pill carries no label: a percentage nobody reads
-    // continuously would double the width of a group that is otherwise all
-    // artwork.
+    // The tint says which BAND you are in; the panel says what is causing it.
+    //
+    // It used to open a five-row menu of totals, two of which were the numbers
+    // this pill's own tint already conveys. "How busy" is not the question you
+    // have when a pill goes red -- "what is doing it" is -- so it opens `top`
+    // instead, sorted by whichever pill you pressed.
     onClicked: button => {
         if (button !== Qt.LeftButton || !bar)
             return;
-        bar.showMenu(root, [
-            { text: "CPU     " + Metrics.cpuPct + "%", enabled: false },
-            { text: "Memory  " + Metrics.memPct + "%", enabled: false },
-            { separator: true },
-            { text: "Down    " + Metrics.rate(Metrics.rxRate), enabled: false },
-            { text: "Up      " + Metrics.rate(Metrics.txRate), enabled: false },
-            { text: Metrics.linkUp ? "Link up" : "Link down", enabled: false }
-        ]);
+        bar.showPanel(root, processes);
+    }
+
+    Component {
+        id: processes
+        // `bar` resolves here and not inside ProcessPanel.qml: a Component
+        // captures the scope it is DECLARED in, and the panel is a separate
+        // file that knows nothing about the bar hosting it.
+        ProcessPanel {
+            sortBy: root.kind === "memory" ? "mem" : "cpu"
+            onCloseRequested: bar.closeMenu()
+        }
     }
 }
