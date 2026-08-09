@@ -441,7 +441,7 @@ wait "$QS" 2>/dev/null
 INNER
 chmod +x "$WORK/run.sh"
 
-setsid dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
+setsid $(bar_limits) dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
 	"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" "$HL_MON" \
 	"$HL_WLVPTR" "$HL_PTR_EXTENT_W" "$HL_PTR_EXTENT_H"
 

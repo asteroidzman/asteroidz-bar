@@ -73,6 +73,114 @@ bar_xdg_home() { # bar_xdg_home -> path to use as XDG_CONFIG_HOME
 	echo "$dst"
 }
 
+# ── resource limits, and a teardown that cannot leak ────────────────────────
+#
+# Both halves of this exist because a run of these suites took the machine's
+# memory. Two separate faults, and fixing either alone leaves the other:
+#
+#   NOTHING WAS BOUNDED. A test bar is a real bar: it loads the wallpaper, every
+#   module and the settings window, and several suites start one per case. A
+#   handful of those at once is gigabytes, and nothing said stop.
+#
+#   NOTHING WAS REAPED. `setsid dbus-run-session -- … &` then `kill "$QS"` kills
+#   the shell and leaves the bus: dbus-run-session's dbus-daemon is reparented
+#   to init and stays for the session. Worse, each private bus ACTIVATES its own
+#   xdg-desktop-portal, which stays too. This session ended with 54 orphaned
+#   dbus-daemons and 53 orphaned portals holding memory, and 648M of /tmp.
+#
+# So each run gets a transient systemd scope. Everything the run starts lands in
+# one cgroup: the bar, its dbus-daemon, every portal that bus activates, and any
+# helper they fork. MemoryMax makes the cgroup the thing that fails instead of
+# the desktop, and stopping the scope at teardown kills the WHOLE tree, which is
+# the only reaping that does not depend on remembering a PID.
+#
+# Degrades to no limits rather than refusing to run, since a checkout on a
+# machine without a user systemd instance should still be testable.
+_bar_scope_unit="asteroidz-bartest-$$"
+
+# The REAL runtime dir, not the harness's.
+#
+# hl_start points XDG_RUNTIME_DIR at the test's own directory so the test
+# compositor gets a private one. `systemctl --user` reaches the user manager
+# through that variable, so under the harness it cannot connect at all -- which
+# is not an error anyone sees, it just makes the check below fail and bar_limits
+# return nothing. The first version did exactly that: every launch ran
+# unlimited, `NO SCOPE ACTIVE` mid-run, and the leak was unchanged.
+#
+# Overriding it for the systemd calls only is safe because every launch site
+# re-sets XDG_RUNTIME_DIR explicitly with `env` for the bar itself, so the
+# child still gets the test's one.
+_bar_real_runtime_dir() { echo "/run/user/$(id -u)"; }
+
+bar_limits() { # -> argv prefix that runs a command inside this run's scope
+	command -v systemd-run >/dev/null 2>&1 || return 0
+	XDG_RUNTIME_DIR="$(_bar_real_runtime_dir)" \
+		systemctl --user show-environment >/dev/null 2>&1 || return 0
+	printf '%s ' env "XDG_RUNTIME_DIR=$(_bar_real_runtime_dir)" \
+		systemd-run --user --scope --quiet --collect \
+		--unit="$_bar_scope_unit" \
+		-p MemoryMax=4G -p MemorySwapMax=0 -p TasksMax=512 -p CPUQuota=400%
+}
+
+# When this run began, so the reaper below can tell its own leftovers from
+# whatever was already on the machine.
+_bar_run_started="$(date +%s)"
+
+# Reap the private buses this run started.
+#
+# The scope alone is not enough, and the measurement says so: it is created (a
+# scope is live twelve seconds in) and gone by twenty-four, while the bar is
+# still running and the test still passes -- quickshell re-parents itself out of
+# the cgroup, so from then on nothing bounds it and stopping the scope kills
+# nothing. The scope still earns its place by bounding the STARTUP burst, which
+# is when several bars at once take the memory, but it cannot be the reaper.
+#
+# `dbus-run-session` forks a dbus-daemon that is reparented to init when the
+# session ends, and every one of those private buses activates its own
+# xdg-desktop-portal, which stays with it. Killing the daemon takes its portals
+# with it -- measured: 54 daemons killed, 53 orphaned portals went too.
+#
+# Identified by BINARY plus START TIME, never by a pattern over a command line.
+# The session bus here is dbus-broker, a different program, so it cannot match;
+# and requiring a start time after this run began means a daemon that was
+# already running when the suite started is left alone.
+_bar_reap_buses() {
+	local p start
+	for p in $(pgrep -x dbus-daemon 2>/dev/null); do
+		[ -d "/proc/$p" ] || continue
+		# Seconds since boot -> wall clock, via /proc/uptime, so this does not
+		# depend on ps output formats.
+		start="$(awk -v t="$(awk "{print \$22}" "/proc/$p/stat" 2>/dev/null)" \
+			-v hz=100 -v now="$(date +%s)" -v up="$(cut -d. -f1 /proc/uptime)" \
+			'BEGIN { printf "%d", now - up + (t / hz) }' 2>/dev/null)"
+		[ -n "$start" ] || continue
+		[ "$start" -ge "$_bar_run_started" ] 2>/dev/null || continue
+		kill "$p" 2>/dev/null
+	done
+	return 0
+}
+
+# Stop the scope, and with it everything the run started. Safe to call twice and
+# safe when no scope was ever made.
+bar_scope_stop() {
+	_bar_reap_buses
+	command -v systemctl >/dev/null 2>&1 || return 0
+	XDG_RUNTIME_DIR="$(_bar_real_runtime_dir)" \
+		systemctl --user stop "$_bar_scope_unit.scope" >/dev/null 2>&1
+	return 0
+}
+
+# Chained into hl_stop rather than added to twenty traps.
+#
+# Every suite here already does `trap 'hl_stop' EXIT` before sourcing this file,
+# so hooking the function is what reaches all of them -- including the ones that
+# exit early on a failed premise, which are exactly the runs that used to leak.
+if declare -f hl_stop >/dev/null 2>&1 \
+	&& ! declare -f _bar_orig_hl_stop >/dev/null 2>&1; then
+	eval "_bar_orig_hl_stop() $(declare -f hl_stop | tail -n +2)"
+	hl_stop() { bar_scope_stop; _bar_orig_hl_stop "$@"; }
+fi
+
 # bar_conf <left> <center> <right> [extra KDL on stdin]
 #
 # Writes the whole file: the module placement, then anything else the test

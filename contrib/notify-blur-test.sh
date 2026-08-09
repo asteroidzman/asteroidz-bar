@@ -131,7 +131,7 @@ panel { enable #true; radius 9; padding 12; blur $1; shadow #true }
 bar { height $BAR_H; margin-x $MARGIN_X; margin-y $MARGIN_Y }
 notify { width $CARD_W }
 EOF
-	setsid dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
+	setsid $(bar_limits) dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
 		"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" \
 		"$HL_MON" "$2" "$BAR_XDG"
 }

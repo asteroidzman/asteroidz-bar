@@ -152,7 +152,7 @@ EOF
 hl_dispatch "reload_config" 1
 sleep 1
 
-setsid dbus-run-session -- \
+setsid $(bar_limits) dbus-run-session -- \
 	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 	HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
@@ -455,62 +455,61 @@ else
 	bad "...and what it renders to is valid KDL"
 	"$REPO/build/asteroidz" -p -c "$WORK/rendered.kdl" 2>&1 | head -4 | sed 's/^/       /'
 fi
-# And matugen was actually asked to re-render, with the current wallpaper.
-if grep -q "image $WORK/wall.png" "$MG_CALLS"; then
-	ok "...and matugen was re-run against the current wallpaper"
+# And the template was actually RENDERED, to the file it names as its output.
+#
+# This asserted a matugen invocation -- `image <wallpaper>` in the stub's call
+# log, then the -t/-m/--contrast/--prefer flags on it. There is no invocation
+# any more: the palette is generated in-process by ColorEngine and templates are
+# rendered by ColorEngine.renderTemplate, so those assertions were testing a
+# program that is no longer part of the pipeline. They stayed green only for as
+# long as the stub was still being called.
+#
+# What replaces them is the thing that actually has to be true either way: the
+# output file exists, and it holds COLOURS rather than the expressions that
+# stand in for them.
+if [ -s "$MG_OUT" ]; then
+	ok "...and the template was rendered to its output"
 else
-	bad "...and matugen was re-run against the current wallpaper"
-	sed 's/^/       /' "$MG_CALLS"
+	bad "...and the template was rendered to its output ($MG_OUT missing or empty)"
+fi
+if [ -s "$MG_OUT" ] && ! grep -q '{{' "$MG_OUT"; then
+	ok "...with every expression substituted, not copied through"
+else
+	bad "...with every expression substituted, not copied through"
+	[ -f "$MG_OUT" ] && grep -n '{{' "$MG_OUT" | head -3 | sed 's/^/       /'
+fi
+# Real colours, not black. A renderer that substituted every expression with an
+# empty string would satisfy the check above and produce a config of 0x000000ff
+# -- which is also what a seed that failed to load looks like, so it is worth
+# separating from success.
+if [ -s "$MG_OUT" ] && grep -qiE '0x[0-9a-f]{6,8}' "$MG_OUT" \
+	&& [ "$(grep -ciE '0x000000ff' "$MG_OUT")" -lt "$(grep -ciE '0x[0-9a-f]{6,8}' "$MG_OUT")" ]; then
+	ok "...and the colours are the wallpaper's, not a page of black"
+else
+	bad "...and the colours are the wallpaper's, not a page of black"
+	[ -f "$MG_OUT" ] && head -6 "$MG_OUT" | sed 's/^/       /'
 fi
 
 # ── the generation settings ─────────────────────────────────────────────────
 #
-# The scheme flags have to be ON that invocation. They are CLI-only: matugen
-# accepts `type`/`mode` under [config] in config.toml WITHOUT ERROR and then
-# ignores them, so a caller that omits them silently gets scheme-tonal-spot.
-#
-# Which is exactly what this page used to do. A wallpaper script running
-# `-t scheme-fidelity` and an Apply running bare disagree on 39 of matugen's 50
-# roles, so pressing Apply retoned every themed application on the machine and
-# the next wallpaper change put them all back -- with nothing on screen, in
-# either direction, to say so.
-RENDER_CALL="$(grep "image $WORK/wall.png" "$MG_CALLS" | tail -1)"
-for flag in "-t" "-m" "--contrast" "--prefer"; do
-	if printf '%s ' "$RENDER_CALL" | grep -q -- " $flag "; then
-		ok "...carrying $flag, so the scheme is not silently the default"
-	else
-		bad "...carrying $flag, so the scheme is not silently the default"
-		printf '       %s\n' "$RENDER_CALL"
-	fi
-done
-
-# --prefer is the one flag that is not a preference at all. Given an image with
-# several candidate source colours matugen ASKS which to use, and with nothing on
-# a terminal it exits 1 instead of choosing:
-#
-#   Multiple source colors found, no preference was inputted, and a terminal was
-#   not detected. Use --prefer=PREFERENCE to find suitable colors without needing
-#   user input.
-#
-# A settings window never has a terminal, so leaving it out is not a default, it
-# is a guaranteed failure -- and not only on busy photographs: a 64x64 flat PNG
-# fails identically. The page shipped with "(default)" in that dropdown, which
-# meant "omit the flag", so changing the scheme type and pressing Apply reported
-# `matugen failed (exit 1)`.
-if printf '%s ' "$RENDER_CALL" | grep -qE -- ' --prefer +[a-z]'; then
-	ok "...with a real --prefer value, never an omitted one"
+# Two knobs now, not four. `type` (which Material scheme) and `prefer` (which
+# candidate source colour) were matugen's CLI flags; the engine is built in and
+# takes a seed and one tone map, so both wrote a config file and changed no
+# colour on screen. What remains is what ColorEngine reads: mode -> dark,
+# contrast -> contrast.
+if grep -q '^scheme\.mode=' "$MG_CONF" && grep -q '^scheme\.contrast=' "$MG_CONF"; then
+	ok "...and the two generation settings are recorded"
 else
-	bad "...with a real --prefer value, never an omitted one"
-	printf '       %s\n' "$RENDER_CALL"
-fi
-
-# Recorded in the mapping file too, because the wallpaper script reads it to
-# pass the same values. Two callers, one source of truth.
-if grep -q '^scheme\.type=' "$MG_CONF" && grep -q '^scheme\.mode=' "$MG_CONF"; then
-	ok "...and recorded for the wallpaper script to read back"
-else
-	bad "...and recorded for the wallpaper script to read back"
+	bad "...and the two generation settings are recorded"
 	sed 's/^/       /' "$MG_CONF"
+fi
+# The retired ones must be GONE, not merely unused. A key that is still written
+# is a key something will read back and act on.
+if ! grep -qE '^scheme\.(type|prefer)=' "$MG_CONF"; then
+	ok "...and the retired matugen flags are not written any more"
+else
+	bad "...and the retired matugen flags are not written any more"
+	grep -E '^scheme\.(type|prefer)=' "$MG_CONF" | sed 's/^/       /'
 fi
 
 # ── the wiring ──────────────────────────────────────────────────────────────

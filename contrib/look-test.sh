@@ -77,7 +77,7 @@ EOF
 	# MPRIS off whatever session bus it is given, and this test used to
 	# inherit the user's -- where it passed only for as long as nobody
 	# happened to be playing anything.
-	setsid dbus-run-session -- \
+	setsid $(bar_limits) dbus-run-session -- \
 		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
@@ -145,7 +145,7 @@ $(bar_conf_panel)
 EOF
 	hl_dispatch "reload_config" 1
 	sleep 1
-	setsid dbus-run-session -- \
+	setsid $(bar_limits) dbus-run-session -- \
 		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
@@ -180,7 +180,7 @@ $(bar_conf_panel)
 EOF
 	hl_dispatch "reload_config" 1
 	sleep 1
-	setsid dbus-run-session -- \
+	setsid $(bar_limits) dbus-run-session -- \
 		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
@@ -246,7 +246,7 @@ idle { enable #true; dpms-timeout 600 }
 EOF
 	hl_dispatch "reload_config" 1
 	sleep 1
-	setsid dbus-run-session -- \
+	setsid $(bar_limits) dbus-run-session -- \
 		env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 		HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 		ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \

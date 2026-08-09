@@ -100,7 +100,7 @@ kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
 INNER
 chmod +x "$WORK/run.sh"
-setsid dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
+setsid $(bar_limits) dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
 	"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" "$HL_MON" "$BAR_XDG"
 
 MARGIN_X=8

@@ -103,7 +103,7 @@ sleep 1
 	exit 1
 }
 
-setsid dbus-run-session -- \
+setsid $(bar_limits) dbus-run-session -- \
 	env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
 	HOME="$HOME" PATH="$PATH" XDG_CONFIG_HOME="$BAR_XDG" GSETTINGS_BACKEND=memory \
 	ASTEROIDZ_INSTANCE_SIGNATURE="$HL_SIG" \
