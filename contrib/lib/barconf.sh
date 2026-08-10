@@ -97,6 +97,20 @@ bar_xdg_home() { # bar_xdg_home -> path to use as XDG_CONFIG_HOME
 # Degrades to no limits rather than refusing to run, since a checkout on a
 # machine without a user systemd instance should still be testable.
 _bar_scope_unit="asteroidz-bartest-$$"
+# One unit name per LAUNCH, not per script.
+#
+# A single name looked right until a suite started a SECOND bar: systemd
+# answers "Unit ... was already loaded or has a fragment file", systemd-run
+# exits non-zero, and because it is the head of the launch command the bar
+# never starts at all. Nothing reports that -- the suite carries on comparing
+# two screenshots of a window that is not there, which is a pair of identical
+# images and therefore a pass. Found in wallpaper-thumb-test.sh, where "an SDR
+# file is unchanged by the provider" had been certifying an empty screen.
+#
+# The names go in a FILE rather than a variable because bar_limits is used as
+# `$(bar_limits)`: it runs in a subshell, so anything it assigns is gone by the
+# time the caller reads it.
+_bar_scope_dir="${TMPDIR:-/tmp}/asteroidz-bartest-scopes-$$"
 
 # The REAL runtime dir, not the harness's.
 #
@@ -116,9 +130,12 @@ bar_limits() { # -> argv prefix that runs a command inside this run's scope
 	command -v systemd-run >/dev/null 2>&1 || return 0
 	XDG_RUNTIME_DIR="$(_bar_real_runtime_dir)" \
 		systemctl --user show-environment >/dev/null 2>&1 || return 0
+	local unit="$_bar_scope_unit-$(date +%s%N)"
+	mkdir -p "$_bar_scope_dir" 2>/dev/null \
+		&& printf '%s\n' "$unit" >> "$_bar_scope_dir/units"
 	printf '%s ' env "XDG_RUNTIME_DIR=$(_bar_real_runtime_dir)" \
 		systemd-run --user --scope --quiet --collect \
-		--unit="$_bar_scope_unit" \
+		--unit="$unit" \
 		-p MemoryMax=4G -p MemorySwapMax=0 -p TasksMax=512 -p CPUQuota=400%
 }
 
@@ -165,8 +182,14 @@ _bar_reap_buses() {
 bar_scope_stop() {
 	_bar_reap_buses
 	command -v systemctl >/dev/null 2>&1 || return 0
-	XDG_RUNTIME_DIR="$(_bar_real_runtime_dir)" \
-		systemctl --user stop "$_bar_scope_unit.scope" >/dev/null 2>&1
+	if [ -f "$_bar_scope_dir/units" ]; then
+		while read -r _bs_unit; do
+			[ -n "$_bs_unit" ] || continue
+			XDG_RUNTIME_DIR="$(_bar_real_runtime_dir)" \
+				systemctl --user stop "$_bs_unit.scope" >/dev/null 2>&1
+		done < "$_bar_scope_dir/units"
+		rm -rf "$_bar_scope_dir"
+	fi
 	return 0
 }
 
