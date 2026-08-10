@@ -36,6 +36,15 @@ ShellRoot {
         // all -- exactly the shape of thing that goes missing without a
         // reference. It does nothing until `bar { idle { enable true } }`.
         void IdleService.enabled;
+        // And the lock screen, which is an IpcHandler and a WlSessionLock that
+        // is not locked -- no pixels at all until something asks for it. The
+        // idle service reaches it too, but only on a timeout that may never
+        // come, and `ipc call lock lock` has to work on a desktop that has
+        // been busy all day.
+        void LockScreen.active;
+        // And the launcher, which is the same shape again: an IpcHandler and a
+        // window that does not exist until a bind asks for it.
+        void Launcher.open;
         // And the notification server. This shell IS
         // org.freedesktop.Notifications -- a singleton nothing refers to is
         // never constructed, so without this the bus name would simply never

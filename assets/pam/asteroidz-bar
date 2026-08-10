@@ -1,0 +1,13 @@
+#
+# PAM configuration for asteroidz-bar's lock screen.
+#
+# Includes `login` rather than restating a stack: whatever authenticates you at
+# a login prompt on this machine -- password, fingerprint, whatever the
+# distribution wired up -- is what should unlock the screen, and duplicating
+# that here would be a second copy to keep in step.
+#
+# Its own file, not swaylock's. Borrowing another package's PAM configuration
+# means the lock screen stops working the day that package is uninstalled, and
+# the failure appears as "wrong password" for a password that is right.
+#
+auth include login

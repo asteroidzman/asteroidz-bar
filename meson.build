@@ -1,7 +1,7 @@
 project(
 	'asteroidz-bar',
 	['c', 'cpp'],
-	version: '0.3.2',
+	version: '0.4.0',
 	license: 'MIT',
 	meson_version: '>=0.59.0',
 	default_options: ['cpp_std=c++20'],
@@ -62,6 +62,9 @@ install_data(
 		'shell/NotificationPopups.qml',
 		'shell/Logo.qml',
 		'shell/IdleService.qml',
+		'shell/LockScreen.qml',
+		'shell/Launcher.qml',
+		'shell/Frecency.qml',
 		'shell/Arrange.qml',
 		'shell/FormRow.qml',
 		'shell/Picker.qml',
@@ -266,6 +269,17 @@ shared_module(
 )
 
 install_data('plugin/qmldir', install_dir: qmlplugindir)
+
+# PAM, for the lock screen.
+#
+# Into /etc, absolutely: PAM reads its configuration from there and nowhere
+# else, so a prefix-relative install would produce a lock screen that cannot
+# authenticate and says so only at the moment somebody needs to get back in.
+install_data(
+	'assets/pam/asteroidz-bar',
+	install_dir: get_option('sysconfdir') / 'pam.d',
+	install_mode: 'rw-r--r--',
+)
 
 # The matugen template.
 #

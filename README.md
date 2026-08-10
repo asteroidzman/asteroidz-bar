@@ -945,6 +945,83 @@ The transitions are plain `systemctl`, without `--user`: they are system
 transitions and polkit decides whether this session may make them. Where it may
 not, systemctl says so rather than this module guessing.
 
+## The lock screen
+
+`ext-session-lock-v1`, spoken by the shell. There is no second locker to
+install, theme or keep in step.
+
+The protocol is what makes this safe to own. A lock client that crashes does
+**not** drop the lock — the compositor keeps every output blanked until
+something authenticates — so the worst a bug here can do is leave the session
+locked, and locked is the safe direction. It also means a mistake is only
+recoverable from a TTY, which is why `contrib/lock-test.sh` is headless-only and
+why it asserts the negatives (IPC cannot unlock it, it does not unlock itself,
+locking twice does not toggle) rather than only that it appears.
+
+It shows the wallpaper, a clock and the date. The wallpaper is **drawn on the
+lock surface**, not shown through it: a session lock hides every other surface
+and the wallpaper is a layer surface like any other. It goes through
+`Paths.wallpaperThumb()`, so an HDR file arrives tone mapped rather than as raw
+PQ. Per-monitor wallpapers are honoured — each output draws its own, because a
+lock screen showing the shared one on a pair of screens would be showing a
+picture that is on neither.
+
+Typing reveals a password field; nothing echoes the password and the dot count
+is capped, so the length cannot be read off the screen either. It authenticates
+through `/etc/pam.d/asteroidz-bar`, which this package installs. Its own file,
+not swaylock's: borrowing another package's PAM configuration means the lock
+screen stops working the day that package is uninstalled, and the failure
+appears as "wrong password" for a password that is right.
+
+**Every way of locking goes through one function.** The power menu, the idle
+timeout and `ipc call lock lock` used to disagree — a script running swaylock,
+the same script, and this. `idle { lock-command }` is still read, and still
+wins where it is set, but it is read in one place. There is deliberately no
+`unlock` over IPC: that socket is reachable by anything running as you, which is
+what the lock exists to make irrelevant.
+
+```kdl
+lock { clock-format "HH:mm"; date-format "dddd, d MMMM" }
+```
+
+Qt's format language rather than strftime, and read straight — the bar's
+`clock-format` is the compositor's string, sized for a 24px strip.
+
+## The launcher
+
+`ipc call launcher drun` for applications, `run` for executables on `PATH`.
+Bind them to whatever `rofi` had.
+
+**Ranked, not filtered.** A launcher that only filters falls back to
+alphabetical order, which for `man` puts "Archive Manager" above "Manuals" — it
+has no way to say that one of them *starts* with what was typed. Four bands, in
+the order a person means them: the name starts with the query, a word in the
+name starts with it, the name contains it, the description or id contains it.
+Within a band, whatever has been launched most often comes first, so the second
+character you type does not reorder the thing you were about to press Enter on.
+The counts live in `XDG_CACHE_HOME` — nobody edits them and losing them costs a
+few days of ordinary use.
+
+**Whatever you type is offered as a command**, in either mode, always last and
+never pre-selected. The pool is a list of *names*, so `grim -o DP-1 shot.png`
+matches nothing and would otherwise be unrunnable; putting it first instead
+would mean Enter on a matched application could launch a shell command that
+happens to share its name.
+
+Opaque, and it dims the desktop behind it. Both are deliberate reversals of the
+popovers' frosted look: a popover is glanced at and a launcher is *read*, and
+what shows through a translucent panel is whatever the wallpaper happens to be
+under those rows. The fill is the theme's `panel { color }` with its alpha
+discarded, so a palette change still moves it.
+
+```kdl
+launcher { terminal "kitty"; dim 80 }
+```
+
+`dim` is a percentage, `0` disables it. The terminal is configured rather than
+probed: a list of emulators tried in order picks whichever happens to be
+installed, and the answer is already written down in the keybind that opens one.
+
 ## The clipboard
 
 `clipboard` in a module list. The last hundred things you copied, searchable,
@@ -1366,6 +1443,15 @@ contrib/wallpaper-thumb-test.sh
                            #   dark, an SDR file is bit-identical through it,
                            #   and the themer reads a PQ file as a different
                            #   colour from the same code values left untagged
+contrib/lock-test.sh       # the lock screen, headless only: locking covers the
+                           #   desktop, the wallpaper and clock are on it, IPC
+                           #   cannot unlock it, it does not unlock itself, and
+                           #   an idle timeout locks with no lock-command set
+contrib/launcher-test.sh   # the launcher: it opens and toggles, NoDisplay
+                           #   entries stay hidden, `man` ranks Manuals above
+                           #   Archive Manager, a typed command with arguments
+                           #   is runnable, icons are sharp at scale 1.5, the
+                           #   panel is opaque, and the desktop dims behind it
 contrib/settings-test.sh   # the settings window: the pill opens it on Displays,
                            #   it is populated, search narrows it, a click
                            #   previews, Apply persists, closing undoes an

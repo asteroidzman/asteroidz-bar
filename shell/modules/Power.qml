@@ -44,8 +44,12 @@ Pill {
             // Straight through, no confirmation. Locking loses nothing, and a
             // "really lock?" step would make the one safe entry the slowest.
             confirm: "",
-            run: () => Quickshell.execDetached(
-                ["sh", "-c", "~/.config/asteroidz/scripts/lock.sh"])
+            // The shell's own lock screen, in this process. This used to spawn
+            // ~/.config/asteroidz/scripts/lock.sh, which exec'd swaylock with
+            // the wallpaper passed on the command line -- a second locker with
+            // its own theme, its own config file and its own copy of which
+            // picture is on screen, none of which could follow this desktop.
+            run: () => LockScreen.lock()
         },
         {
             id: "logout",

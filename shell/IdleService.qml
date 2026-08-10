@@ -100,9 +100,14 @@ Singleton {
         Quickshell.execDetached(["sh", "-c", cmd]);
     }
 
+    // Locking is LockScreen's decision, not this file's.
+    //
+    // `lock-command` used to be read here and acted on here, which is why the
+    // power menu and the idle timeout could do different things -- the menu
+    // ran a script, this ran the same script, and `ipc call lock lock` ran the
+    // shell's own lock screen. One owner now; see LockScreen.command.
     function lock() {
-        if (root.lockCommand)
-            run(root.lockCommand);
+        LockScreen.lock();
     }
 
     // ── screen off ──────────────────────────────────────────────────────────
@@ -133,8 +138,11 @@ Singleton {
 
     // ── lock ────────────────────────────────────────────────────────────────
     IdleMonitor {
-        enabled: root.enabled && root.lockTimeout > 0 && root.lockCommand !== ""
-                 && !root.manualInhibit
+        // No `lockCommand !== ""` any more. That gate made `lock-timeout` do
+        // nothing at all unless a locker had been named, which was correct
+        // when a named locker was the only thing that could lock and is a
+        // silently ignored timeout now that the shell can.
+        enabled: root.enabled && root.lockTimeout > 0 && !root.manualInhibit
         timeout: root.lockTimeout
         respectInhibitors: root.respectInhibitors
         // Only on the way IN. A lock screen is dismissed by the person, not by

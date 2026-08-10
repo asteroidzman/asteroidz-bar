@@ -34,6 +34,8 @@ Singleton {
     readonly property var bar: BarConfig.groups.bar || ({})
     readonly property var panel: BarConfig.groups.panel || ({})
     readonly property var popover: BarConfig.groups.popover || ({})
+    readonly property var lock: BarConfig.groups.lock || ({})
+    readonly property var launcher: BarConfig.groups.launcher || ({})
 
     // The theme is still the compositor's: matugen rewrites it at runtime, and
     // titlebars and the overview draw from the same palette.
@@ -374,6 +376,39 @@ Singleton {
     // ── module lists ────────────────────────────────────────────────────────
 
     readonly property string clockFormat: str(bar, "clock-format", "%H:%M:%S")
+
+    // The lock screen's own clock and date, in Qt's format language rather
+    // than strftime.
+    //
+    // Not the bar's `clock-format`, and not converted from it: the bar's is
+    // strftime because the COMPOSITOR hands that string over, and it is sized
+    // for a 24px strip -- "%H:%M:%S" across a 4K panel is a clock with a
+    // seconds hand nobody asked to watch. These are read straight, so what is
+    // written is what Qt renders.
+    readonly property string lockClockFormat:
+        str(lock, "clock-format", "HH:mm")
+    readonly property string lockDateFormat:
+        str(lock, "date-format", "dddd, d MMMM")
+
+    // What a `Terminal=true` desktop entry is opened in.
+    //
+    // Configured rather than probed. A list of emulators tried in order picks
+    // whichever happens to be installed, which on a machine with three of them
+    // is not the one you use -- and the answer is already written down in the
+    // keybind that opens a terminal.
+    readonly property string launcherTerminal:
+        str(launcher, "terminal", "kitty")
+
+    // How far the screen goes down behind the launcher.
+    //
+    // 0 disables it. The default is deep enough to push the desktop back
+    // without hiding it -- the point is to take the eye off a busy wallpaper
+    // while the list is being read, not to black the screen out and lose the
+    // sense of what is behind. 80 leaves a fifth of the desktop's brightness:
+    // the wallpaper reads as a dark shape rather than as a picture, which is
+    // the point, and it is still visibly there.
+    readonly property real launcherDim:
+        Math.max(0, Math.min(1, Number(num(launcher, "dim", 80)) / 100))
     // Where the icons live. The compositor's package installs them and used to
     // serve this path along with everything else; the default is the same
     // search list it built, so an unconfigured bar still finds the ship and the
