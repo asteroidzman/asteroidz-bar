@@ -73,6 +73,18 @@ public:
 	// the call that needs the provider is the call that creates it.
 	Q_INVOKABLE [[nodiscard]] static QString opticalIcon(const QString& url, int box);
 
+	// The `image://wallthumb/...` URL that draws `path` as a thumbnail no
+	// larger than `box` on its long side, tone mapped to sRGB if the file is
+	// HDR.
+	//
+	// For the wallpaper picker, which drew its tiles from the file directly and
+	// so showed an HDR wallpaper's PQ code values as if they were sRGB: a
+	// 1000-nit sunset as a flat grey rectangle. Here for the same reason
+	// opticalIcon() is -- touching this singleton is what installs the provider
+	// -- and it takes a plain path rather than a URL because the picker's model
+	// is `find` output.
+	Q_INVOKABLE [[nodiscard]] static QString wallpaperThumb(const QString& path, int box);
+
 private:
 	// Icons are asked for repeatedly -- every pill that draws one asks on
 	// every config change -- and the answer only changes when a file is

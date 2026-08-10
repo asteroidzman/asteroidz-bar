@@ -8,8 +8,10 @@
 //   Clipboard  the selection history, read off ext-data-control-v1 on that
 //              same connection -- no cliphist, no wl-paste subprocess
 //
-// Plus one image provider, `image://opticalicon/...`, which normalises tray
-// artwork by ink coverage -- see opticalicon.hpp.
+// Plus two image providers: `image://opticalicon/...`, which normalises tray
+// artwork by ink coverage (opticalicon.hpp), and `image://wallthumb/...`,
+// which tone maps an HDR wallpaper down to sRGB for the picker's tiles
+// (hdrthumb.hpp).
 //
 // Registered by hand through QQmlExtensionPlugin rather than declared with
 // QML_ELEMENT: the declarative form needs qmltyperegistrar wired into the
@@ -22,6 +24,7 @@
 
 #include "calendar.hpp"
 #include "clipboard.hpp"
+#include "hdrthumb.hpp"
 #include "opticalicon.hpp"
 #include "fontsync.hpp"
 #include "palette.hpp"
@@ -59,6 +62,13 @@ public:
 				        QStringLiteral("opticalicon"),
 				        new OpticalIconProvider(engine)
 				    );
+			    }
+			    // Same reasoning, same moment: Paths.wallpaperThumb() is what
+			    // builds the URLs this one answers, so the provider cannot be
+			    // missing by the time the picker asks for a tile.
+			    if (engine != nullptr
+			        && engine->imageProvider(QStringLiteral("wallthumb")) == nullptr) {
+				    engine->addImageProvider(QStringLiteral("wallthumb"), new HdrThumbProvider());
 			    }
 			    return new Paths();
 		    }

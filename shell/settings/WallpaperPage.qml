@@ -12,6 +12,8 @@
 // tiles of however many you own.
 
 import QtQuick
+// Paths, for the thumbnail provider the grid's tiles come from.
+import Asteroidz.Bar
 import "."
 import ".."
 
@@ -284,12 +286,24 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: "file://" + modelData
+                    // Through the plugin, not `file://` directly.
+                    //
+                    // Qt reads JPEG XL and AVIF, and for an HDR one it hands
+                    // back the file's code values untouched -- which under PQ
+                    // are not colours but an encoding of absolute luminance.
+                    // Drawn as sRGB, a 1000-nit sunset is a flat grey
+                    // rectangle. Reported as "jxl files are not shown in the
+                    // wallpaper picker": they were shown, they just did not
+                    // look like pictures. The provider tone maps those and
+                    // hands everything else to QImageReader unchanged.
+                    //
+                    // Thumbnails, not wallpapers: the box is in the URL, so it
+                    // bounds the decode as well as the tile -- a folder of 4K
+                    // files does not cost a gigabyte to browse -- and it is
+                    // what Qt caches on, so two tiles of one file is one
+                    // decode.
+                    source: Paths.wallpaperThumb(modelData, 320)
                     fillMode: Image.PreserveAspectCrop
-                    // Thumbnails, not wallpapers: asking for the full 4K decode
-                    // of every file in the folder to draw a 140px tile is how a
-                    // browser like this eats a gigabyte.
-                    sourceSize.width: 320
                     asynchronous: true
                     clip: true
                 }

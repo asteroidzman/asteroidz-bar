@@ -77,3 +77,10 @@ QString Paths::opticalIcon(const QString& url, int box) {
 	    .arg(box)
 	    .arg(QString::fromUtf8(QUrl::toPercentEncoding(url)));
 }
+
+QString Paths::wallpaperThumb(const QString& path, int box) {
+	if (path.isEmpty() || box <= 0) return {};
+	return QStringLiteral("image://wallthumb/%1/%2")
+	    .arg(box)
+	    .arg(QString::fromUtf8(QUrl::toPercentEncoding(path)));
+}

@@ -1,5 +1,7 @@
 #include "palette.hpp"
 
+#include "hdrthumb.hpp"
+
 #include <cmath>
 
 #include <QtCore/QFileInfo>
@@ -172,20 +174,26 @@ bool Palette::quantise() {
 	}
 	if (this->mQuantisedSource == path && !this->mClusters.isEmpty()) return true;
 
-	QImage image(path);
+	// 128px on the long edge, through the HDR-aware decoder. Quantisation wants
+	// the distribution of colour, not detail, and a 4K decode scaled down is
+	// both faster and less noisy than sampling the original sparsely -- so the
+	// size is asked for up front rather than scaled to afterwards.
+	//
+	// NOT `QImage image(path)`, which is what this was. Qt reads JPEG XL and
+	// AVIF here, and for an HDR file it hands back the file's code values
+	// untouched: under PQ those are an encoding of absolute luminance, not
+	// colours. Quantising them themes the desktop from the ENCODING --
+	// washed-out, mid-grey, with an accent picked out of a picture nobody is
+	// looking at, while the wallpaper on screen is a saturated sunset. The
+	// same conversion the picker's tiles go through (plugin/tonemap.h) puts
+	// the palette back on the pixels a person can actually see.
+	QImage image = HdrThumbProvider::thumbnail(path, 128);
 	if (image.isNull()) {
-		// QImage cannot read AVIF or JPEG XL without a plugin, and those are
-		// exactly the formats an HDR wallpaper arrives in here. Said plainly
-		// rather than themed from nothing.
+		// Said plainly rather than themed from nothing.
 		this->setError(QStringLiteral("cannot decode %1").arg(QFileInfo(path).fileName()));
 		return false;
 	}
-
-	// 128px on the long edge. Quantisation wants the distribution of colour,
-	// not detail, and a 4K decode scaled down is both faster and less noisy
-	// than sampling the original sparsely.
-	image = image.scaled(128, 128, Qt::KeepAspectRatio, Qt::SmoothTransformation)
-	            .convertToFormat(QImage::Format_RGB888);
+	image = image.convertToFormat(QImage::Format_RGB888);
 
 	QList<LabT> points;
 	points.reserve(image.width() * image.height());

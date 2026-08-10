@@ -245,6 +245,8 @@ shared_module(
 		'plugin/paths.cpp',
 		'plugin/windowicon.cpp',
 		'plugin/opticalicon.cpp',
+		'plugin/hdrthumb.cpp',
+		'plugin/tonemap.cpp',
 		'plugin/clipboard.cpp',
 		'plugin/calendar.cpp',
 		'plugin/processes.cpp',
@@ -329,6 +331,16 @@ configure_file(
 #
 # Pure functions only. Anything needing a compositor, a bus or a running bar
 # lives in contrib/*-test.sh, which is a different kind of slow.
+test(
+	'tonemap',
+	executable(
+		'test-tonemap',
+		['tests/test_tonemap.cpp', 'plugin/tonemap.cpp'],
+		dependencies: [qt6_dep],
+		build_by_default: false,
+	),
+)
+
 test(
 	'opticalicon',
 	executable(

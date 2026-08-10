@@ -1358,6 +1358,14 @@ contrib/palette-test.sh    # the matugen palette page, fully sandboxed: its
                            #   runs beside. The stub can be told to refuse a
                            #   format, which is how the convert-and-retry path
                            #   is reachable without a HEIC encoder
+contrib/wallpaper-thumb-test.sh
+                           # an HDR wallpaper's thumbnail looks like the
+                           #   picture: the provider is reachable from QML, a
+                           #   1000-nit patch comes out near white where the raw
+                           #   file reads 0.75 grey, a sub-nit shadow comes out
+                           #   dark, an SDR file is bit-identical through it,
+                           #   and the themer reads a PQ file as a different
+                           #   colour from the same code values left untagged
 contrib/settings-test.sh   # the settings window: the pill opens it on Displays,
                            #   it is populated, search narrows it, a click
                            #   previews, Apply persists, closing undoes an
@@ -1406,6 +1414,35 @@ nothing else writes one — never changed it, so the browser was empty forever
 rather than stale. Setting `folder` by hand to the value it already held did not
 help either, which is the give-away: assigning a property its current value is
 not a change.
+
+The tiles do **not** come from the file. They come through
+`image://wallthumb/<box>/<path>`, because Qt reads JPEG XL and AVIF here and for
+an HDR file it hands the code values back untouched — and under PQ those are not
+colours, they are an encoding of absolute luminance. Drawn as sRGB, a 1000-nit
+sunset is a flat grey rectangle. Reported as *"jxl files are not shown in the
+wallpaper picker"*: they were listed, they were on screen, they just did not look
+like pictures.
+
+So an HDR file is decoded through asteroidzbg — the same decoder that puts it on
+the screen, so a tile cannot disagree with the wallpaper about what the file
+contains — and tone mapped: PQ or HLG to absolute luminance, divided by BT.2408
+reference white, converted to BT.709, rolled off with an extended Reinhard whose
+white point is the image's own peak, and sRGB encoded. The downscale happens in
+**linear light** during that conversion rather than afterwards, because averaging
+PQ code values averages an encoding: a 4000-nit pixel beside a 4-nit one comes
+out near 500 nits when the light was 2002, which is precisely where an HDR
+photograph keeps its highlights. Everything that is not HDR goes to
+`QImageReader` untouched, at the box size, so a folder of 4K JPEGs costs no more
+than it did.
+
+The **themer** reads the wallpaper too, and read it the same wrong way: `QImage`
+on a PQ file quantised the encoding, so the desktop was themed from washed-out
+mid-grey while the wallpaper on screen was a sunset. It goes through the same
+conversion now, at the 128px it wanted anyway.
+
+The curve is a unit test (`tests/test_tonemap.cpp`) because it is pure
+arithmetic; that it is reachable from QML, and that a real PQ file comes out
+looking like the picture, is `contrib/wallpaper-thumb-test.sh`.
 
 ### The battery
 
