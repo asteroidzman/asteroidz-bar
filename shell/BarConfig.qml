@@ -255,7 +255,11 @@ Singleton {
         return "\"" + String(v).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + "\"";
     }
 
-    // Numbers bare, booleans as KDL spells them, everything else quoted.
+    // Numbers bare, booleans as KDL spells them, everything else quoted --
+    // including a STRING that happens to look like a number. Writing "12"
+    // bare reads back as the number twelve, so one save round-trip silently
+    // changed a value's type; parse() already turns bare numerals into real
+    // numbers, so anything still a string here is one on purpose.
     function literal(v) {
         if (typeof v === "number")
             return String(v);
@@ -263,8 +267,6 @@ Singleton {
             return v ? "#true" : "#false";
         const s = String(v);
         if (s === "#true" || s === "#false")
-            return s;
-        if (s !== "" && !isNaN(Number(s)))
             return s;
         return quote(s);
     }
@@ -509,6 +511,11 @@ Singleton {
     FileView {
         id: conf
         path: root.path
+        // Written to a temp file and renamed into place, so a crash mid-save
+        // truncates nothing: this file is the user's whole module layout, and
+        // "the bar came up with the default modules" is how a torn write would
+        // present. Logo.qml and Frecency.qml already write this way.
+        atomicWrites: true
         // Read synchronously, because the bar is built from it. Loaded async
         // the first frame comes from the defaults and the real values arrive a
         // moment later, so every module is created, destroyed and created

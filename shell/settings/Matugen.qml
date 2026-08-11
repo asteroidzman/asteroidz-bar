@@ -563,8 +563,8 @@ Singleton {
         }
     }
 
-    FileView { id: tomlWriter; path: root.matugenToml;          preload: false }
-    FileView { id: tomlBackup; path: root.matugenToml + ".bak"; preload: false }
+    FileView { id: tomlWriter; path: root.matugenToml;          preload: false; atomicWrites: true }
+    FileView { id: tomlBackup; path: root.matugenToml + ".bak"; preload: false; atomicWrites: true }
 
     // The filtered copy lives in the runtime dir, not beside the real config: it
     // is derived, per-run, and must never be mistaken for the file matugen is
@@ -572,7 +572,7 @@ Singleton {
     readonly property string filteredTomlPath:
         (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
         + "/asteroidz-bar-matugen.toml"
-    FileView { id: filteredWriter; path: root.filteredTomlPath; preload: false }
+    FileView { id: filteredWriter; path: root.filteredTomlPath; preload: false; atomicWrites: true }
 
     function wireMatugen() {
         if (!tomlExists) {
@@ -693,11 +693,11 @@ Singleton {
         }
     }
 
-    FileView { id: mapWriter;      path: root.mapPath;              preload: false }
-    FileView { id: templateWriter; path: root.templatePath;         preload: false }
+    FileView { id: mapWriter;      path: root.mapPath;              preload: false; atomicWrites: true }
+    FileView { id: templateWriter; path: root.templatePath;         preload: false; atomicWrites: true }
     // The previous template, kept beside it. The same promise the config writer
     // makes: an Apply must never be the thing that loses a file you tuned.
-    FileView { id: backupWriter;   path: root.templatePath + ".bak"; preload: false }
+    FileView { id: backupWriter;   path: root.templatePath + ".bak"; preload: false; atomicWrites: true }
 
     // ── running it, and the format matugen cannot read ──────────────────────
     //

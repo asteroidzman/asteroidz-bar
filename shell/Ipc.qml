@@ -41,7 +41,9 @@ Singleton {
     // Open a `watch` subscription. `onJson` is called with the parsed object
     // for every update, starting with the initial state the compositor pushes
     // on subscribe -- so a caller never has to `get` first and then `watch`,
-    // which would race with the very first change.
+    // which would race with the very first change. That initial push is also
+    // what makes RECONNECTING sound: a re-subscribe replays the full current
+    // state, so nothing accumulated during an outage is missed.
     function watch(command, onJson) {
         if (!connected)
             return null;
@@ -51,27 +53,111 @@ Singleton {
         });
     }
 
+    // A subscription is a CONTROLLER holding a socket, not a socket.
+    //
+    // Reconnecting cannot be done by flipping `connected` on one Socket.
+    // quickshell redials by itself only when an ESTABLISHED connection closes
+    // (socket.cpp: onSocketDisconnected), and that one immediate attempt races
+    // a compositor that is still restarting. When the attempt fails,
+    // QLocalSocket parks in UnconnectedState with no disconnected() signal, so
+    // quickshell's internal socket pointer never clears -- and setConnected
+    // only dials when that pointer is null. A Socket whose connect attempt has
+    // failed is therefore inert for the life of the object, and before this
+    // controller existed, one compositor restart left every subscription --
+    // the theme, the tags, the focus, the idle state -- frozen at its last
+    // value until the shell was restarted by hand.
+    //
+    // So each retry builds a FRESH Socket. The dead one is destroyed first,
+    // which is also what makes reconnection deterministic: there is never more
+    // than one socket per subscription, a destroyed socket's parser cannot
+    // deliver anything, and the compositor re-pushes the full current state on
+    // re-subscribe, so state converges regardless of what was missed during
+    // the outage. No generation counter is needed -- object lifetime is the
+    // epoch.
     Component {
         id: watchComponent
 
-        Socket {
+        QtObject {
+            id: ctl
             required property string command
             required property var handler
+
+            // Failed attempts in a row, for the backoff. Reset on success so
+            // the next outage starts from the short interval again.
+            property int failures: 0
+            property var sock: null
+
+            property Timer retry: Timer {
+                // Capped exponential backoff: a compositor restart is over in
+                // seconds, and a permanently absent one should cost a wakeup
+                // every few seconds, not a storm.
+                interval: Math.min(5000,
+                                   250 * Math.pow(2, Math.min(ctl.failures, 5)))
+                onTriggered: {
+                    if (ctl.sock && ctl.sock.connected)
+                        return;
+                    ctl.dial();
+                }
+            }
+
+            function scheduleRetry() {
+                failures++;
+                retry.restart();
+            }
+
+            function dial() {
+                if (sock) {
+                    sock.destroy();
+                    sock = null;
+                }
+                sock = watchSocketComponent.createObject(ctl, { ctl: ctl });
+            }
+
+            Component.onCompleted: dial()
+            Component.onDestruction: {
+                if (sock) {
+                    sock.destroy();
+                    sock = null;
+                }
+            }
+        }
+    }
+
+    Component {
+        id: watchSocketComponent
+
+        Socket {
+            required property var ctl
 
             path: root.socketPath
             connected: true
 
             onConnectionStateChanged: {
-                if (connected)
-                    write(command + "\n");
+                if (connected) {
+                    ctl.failures = 0;
+                    ctl.retry.stop();
+                    write(ctl.command + "\n");
+                } else {
+                    // The connection dropped. quickshell dials once, right
+                    // now; if that lands, the branch above runs again and
+                    // stops the timer. If it does not, onError fires and the
+                    // timer is already pending from here.
+                    ctl.scheduleRetry();
+                }
             }
+
+            // A connect ATTEMPT that fails lands here and ONLY here:
+            // QLocalSocket emits disconnected() only for a connection that
+            // existed. Without this, one failed retry used to be the end of
+            // the subscription for the life of the process.
+            onError: ctl.scheduleRetry()
 
             parser: SplitParser {
                 onRead: line => {
                     if (line.length === 0)
                         return;
                     try {
-                        handler(JSON.parse(line));
+                        ctl.handler(JSON.parse(line));
                     } catch (e) {
                         // A malformed line is the compositor's problem, not a
                         // reason to tear down a subscription that will very
@@ -119,9 +205,31 @@ Singleton {
             path: root.socketPath
             connected: true
 
+            // One shot means one lifetime: a request whose connection FAILS
+            // (compositor down), or closes without ever delivering a line,
+            // must not sit in memory forever -- and before this guard, it did:
+            // the only destroy() was in the reply path, so every dispatch and
+            // request made while the compositor was away leaked a Socket.
+            //
+            // Guarded, because teardown is reachable twice in one turn: the
+            // reply path sets connected = false, which re-enters through
+            // onConnectionStateChanged. destroy() is deferred, so the handler
+            // running after finish() is safe; calling destroy() twice is not.
+            property bool finished: false
+            function finish() {
+                if (finished)
+                    return;
+                finished = true;
+                req.destroy();
+            }
+
+            onError: finish()
+
             onConnectionStateChanged: {
                 if (connected)
                     write(command + "\n");
+                else
+                    finish();
             }
 
             parser: SplitParser {
@@ -143,7 +251,7 @@ Singleton {
                     }
                     if (obj !== null && req.handler)
                         req.handler(obj);
-                    req.destroy();
+                    req.finish();
                 }
             }
         }
@@ -168,19 +276,32 @@ Singleton {
             path: root.socketPath
             connected: true
 
+            // Same lifetime guard as a request's, and for the same leak.
+            property bool finished: false
+            function finish() {
+                if (finished)
+                    return;
+                finished = true;
+                sock.destroy();
+            }
+
+            onError: finish()
+
             onConnectionStateChanged: {
                 if (connected) {
                     write(command + "\n");
                     // Closing immediately would race the write. The reply is
                     // the signal that the command was seen, so use it as the
                     // cue to hang up.
+                } else {
+                    finish();
                 }
             }
 
             parser: SplitParser {
                 onRead: _ => {
                     sock.connected = false;
-                    sock.destroy();
+                    sock.finish();
                 }
             }
         }

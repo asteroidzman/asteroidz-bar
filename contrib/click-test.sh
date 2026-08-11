@@ -650,12 +650,21 @@ else
 	else
 		bad "...and a pill that acts on a click asks for the pointer (got '$ON_PILL', bar $CL..$CR)"
 	fi
+	# The clock used to be the counter-example here -- the one readout pill,
+	# asserting that `interactive: false` keeps the plain arrow. It is a
+	# BUTTON now: the calendar lives under it, `interactive: root.bar !==
+	# null` is true on any real bar, and this assertion went stale the day
+	# that landed -- it had been failing against correct behaviour ever
+	# since. There is no readout-only module left on a bar to point it at
+	# (the readout case survives only in Clock instances with no bar, which
+	# cannot appear here), so the assertion now checks the clock claims the
+	# click it takes.
 	hl_move $((CL + 20)) "$PILL_Y"; sleep 1
 	ON_CLOCK="$(cursor_shape)"
-	if [ "$ON_CLOCK" != "pointer" ]; then
-		ok "...and a pill that is only a readout does not (got '$ON_CLOCK')"
+	if [ "$ON_CLOCK" = "pointer" ]; then
+		ok "...and the clock, which opens the calendar, asks for it too"
 	else
-		bad "...and a pill that is only a readout does not (got '$ON_CLOCK')"
+		bad "...and the clock, which opens the calendar, asks for it too (got '$ON_CLOCK')"
 	fi
 fi
 

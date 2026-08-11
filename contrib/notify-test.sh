@@ -100,6 +100,10 @@ cat > "$WORK/run.sh" <<'INNER'
 set -u
 WORK="$1"; HERE="$2"; SIG="$3"; WL="$4"; XRD="$5"; QMLROOT="$6"; BAR_CONF="$7"
 MON="$8"; VPTR="$9"; EW="${10}"; EH="${11}"
+# The sandbox XDG_CONFIG_HOME. This heredoc is quoted, so the outer BAR_XDG
+# never expanded into it -- under `set -u` the whole inner script died on the
+# first reference and the suite timed out with no assertion ever printed.
+BAR_XDG="${12}"
 
 SOUND_LOG="$WORK/sounds.log"
 : > "$SOUND_LOG"
@@ -116,7 +120,16 @@ env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
 QS=$!
 sleep 10
 
-shot() { grim -o "$MON" "$WORK/$1.png" 2>/dev/null; }
+# XDG_RUNTIME_DIR re-set explicitly on every probe, exactly as the bar's own
+# launch does: bar_limits routes this whole script through `env
+# XDG_RUNTIME_DIR=/run/user/<uid> systemd-run --user`, so anything in here
+# that does NOT re-set it talks to the REAL session -- grim found no
+# HEADLESS-1 there and quickshell found no instances, which failed every
+# probe-based assertion below while the crash checks kept passing.
+shot() {
+	env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
+		grim -o "$MON" "$WORK/$1.png" 2>/dev/null
+}
 
 # Is the name even taken? Everything below is meaningless if it is not, and
 # "nothing was drawn" would be the symptom either way.
@@ -177,9 +190,13 @@ shot withdrawn
 # one has `Sending event "opened"` to a tray menu immediately before the fault.
 # A popover has a Repeater of its own, so a notification arriving while one is
 # incubating is the case where a second regenerate lands mid-incubation.
-"$VPTR" $((EW - 30)) 33 "$EW" "$EH" >/dev/null 2>&1
+# The env prefix for the reason shot() carries one: wlvptr is a Wayland
+# client and has to reach the HARNESS's display, not the session's.
+env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
+	"$VPTR" $((EW - 30)) 33 "$EW" "$EH" >/dev/null 2>&1
 sleep 1
-"$VPTR" $((EW - 30)) 33 "$EW" "$EH" click >/dev/null 2>&1
+env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
+	"$VPTR" $((EW - 30)) 33 "$EW" "$EH" click >/dev/null 2>&1
 sleep 2
 for i in 1 2 3; do
 	notify "WithPanel $i" "arriving while the centre is open" &
@@ -214,7 +231,12 @@ if kill -0 "$QS" 2>/dev/null; then echo alive > "$WORK/burst-alive"; else echo d
 # swaync had `swaync-client -t`, so replacing swaync without an equivalent
 # would leave every existing Super+n binding silently doing nothing. Last of
 # all, because `clear` empties the list every assertion above measures.
-qsipc() { timeout 5 quickshell -p "$HERE/shell/shell.qml" ipc call notify "$@" 2>/dev/null; }
+# The env prefix for the same reason as shot()'s: the instance registry lives
+# in the harness's runtime dir, not the session's.
+qsipc() {
+	timeout 5 env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
+		quickshell -p "$HERE/shell/shell.qml" ipc call notify "$@" 2>/dev/null
+}
 
 # `quiet` is a TOGGLE, so a stage that wants a known state has to look first.
 #
@@ -354,7 +376,10 @@ shot fs_windowed
 # module reads is_fullscreen off `watch all-clients`, so nothing short of an
 # actual fullscreen window exercises it.
 if command -v kitty >/dev/null 2>&1; then
-	kitty --title fsclient -o background_opacity=1.0 -o background=#202030 \
+	# The env prefix for the reason shot() carries one: kitty must open on
+	# the HARNESS's display or there is no fullscreen window in the shot.
+	env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
+		kitty --title fsclient -o background_opacity=1.0 -o background=#202030 \
 		sh -c 'echo fs; exec sleep 120' > "$WORK/fsclient.log" 2>&1 &
 	FSPID=$!
 	sleep 4
@@ -443,7 +468,7 @@ chmod +x "$WORK/run.sh"
 
 setsid $(bar_limits) dbus-run-session -- "$WORK/run.sh" "$WORK" "$HERE" "$HL_SIG" \
 	"$WAYLAND_DISPLAY" "$XDG_RUNTIME_DIR" "$QMLROOT" "$BAR_CONF" "$HL_MON" \
-	"$HL_WLVPTR" "$HL_PTR_EXTENT_W" "$HL_PTR_EXTENT_H"
+	"$HL_WLVPTR" "$HL_PTR_EXTENT_W" "$HL_PTR_EXTENT_H" "$BAR_XDG"
 
 # How much of the bell is drawn in the accent? That is the whole state: the
 # glyph is tinted with the accent when something is unread and with the

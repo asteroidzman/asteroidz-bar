@@ -103,13 +103,7 @@ Singleton {
         scan.running = true;
     }
 
-    onFolderChanged: {
-        // The watcher is watching the OLD directory: a Process picks up a
-        // changed `command` when it starts, not while it runs.
-        watcher.running = false;
-        watcher.running = Qt.binding(() => root.folder !== "");
-        rescan();
-    }
+    onFolderChanged: rescan()
     Component.onCompleted: rescan()
 
     // ── the folder, watched ─────────────────────────────────────────────────
@@ -120,28 +114,19 @@ Singleton {
     // session was scanned and then removed before it drew, so the grid asked the
     // renderer for a file that had gone.
     //
-    // inotify rather than a timer. A poll is a `find` over the directory every
-    // few seconds forever, for an event that happens a handful of times a day,
-    // and it is still late by up to its own interval. This is idle until the
-    // kernel says something changed.
-    //
-    // OPTIONAL: inotify-tools is an optdepend. Without it the process simply
-    // fails to start and the scan-on-open path carries on doing its job, which
-    // is why nothing here treats a missing binary as an error.
-    Process {
-        id: watcher
-        running: root.folder !== ""
-        command: ["inotifywait", "-m", "-q",
-                  "-e", "create,delete,moved_to,moved_from,close_write",
-                  "--format", ".", root.folder]
-        stdout: SplitParser {
-            // Every event is one line, and the content does not matter -- the
-            // rescan reads the directory again regardless. What matters is that
-            // a burst is ONE rescan: copying fifty files in emits fifty lines,
-            // and a `find` per line would be fifty scans of a directory that is
-            // still being written to.
-            onRead: debounce.restart()
-        }
+    // inotify rather than a timer -- idle until the kernel says something
+    // changed -- and IN-PROCESS rather than an `inotifywait -m` subprocess.
+    // That process was this shell's one unkillable orphan: it noticed the bar
+    // was gone only by taking SIGPIPE on a write to the dead pipe, and a
+    // watcher over a quiet folder never writes, so every crash-restart cycle
+    // stranded one on ~/Pictures. An fd in this process cannot outlive it,
+    // and inotify-tools stops being a dependency of any kind.
+    DirWatcher {
+        path: root.folder
+        // A burst is ONE rescan: copying fifty files in emits fifty events,
+        // and a `find` per event would be fifty scans of a directory that is
+        // still being written to.
+        onChanged: debounce.restart()
     }
 
     Timer {
@@ -329,6 +314,10 @@ Singleton {
     FileView {
         id: conf
         path: root.confPath
+        // Atomic, because this file is shared: hotkeys and scripts read it,
+        // and a torn write would hand them half a config. A rename is also
+        // one inotify event rather than a stream of partial ones.
+        atomicWrites: true
         watchChanges: true
         onFileChanged: reload()
         onLoaded: root.applyConfig(root.parseText(text()))

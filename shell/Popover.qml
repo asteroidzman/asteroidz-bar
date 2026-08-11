@@ -158,15 +158,21 @@ PopupWindow {
 
     // The panel: the part you can see, inset from the window by the shadow.
     //
-    // Pinned to the TOP of the window rather than centred in it. The window is
-    // now a fixed tall box (see above) and only the panel tracks the content,
-    // so centring would float the panel down the middle of that box and away
-    // from the pill it hangs off.
+    // Pinned to the EDGE NEAREST THE PILL rather than centred. The window is
+    // a fixed tall box (see above) and only the panel tracks the content, so
+    // centring would float the panel down the middle of that box and away
+    // from the pill it hangs off. Which edge is nearest depends on where the
+    // bar is: a top bar's popup hangs below the pill, so the panel pins to the
+    // box's top; a bottom bar's popup stands above the pill, so it pins to the
+    // bottom -- anything else leaves the panel a whole box-height away from
+    // the thing that opened it.
     Item {
         id: panelBox
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
+        anchors.top: Cfg.bottom ? undefined : parent.top
+        anchors.bottom: Cfg.bottom ? parent.bottom : undefined
         anchors.topMargin: root.shadowRoom
+        anchors.bottomMargin: root.shadowRoom
         width: root.panelWidth
         height: root.panelHeight
 

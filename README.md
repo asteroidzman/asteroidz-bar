@@ -51,17 +51,31 @@ Two follow-on traps once you have the ids:
   treats that exactly like a crash: it writes a report, pops the "Quickshell has
   crashed" dialog, and restarts the shell under a *new* instance id with the
   same pid. To actually stop a bar, signal the process itself.
-- **A crash leaks the shell's children.** Graceful exit reaps them
-  (see [Plugins have to die with the bar](#plugins-have-to-die-with-the-bar)),
-  but a `SIGKILL`ed shell cannot, so every crash-restart cycle strands another
-  generation of `asteroidz-bar-*` plugins and one `inotifywait` on `~/Pictures`.
-  Four crashes left four watchers and some twenty unreaped zombies. Sweep them
-  by explicit pid afterwards.
+- **A crash can leave zombies behind.** Graceful exit reaps the shell's
+  children (see
+  [Plugins have to die with the bar](#plugins-have-to-die-with-the-bar)), and
+  the plugins exit on their own when their stdin pipe dies with the shell --
+  but a crash-restart keeps the *pid* (the supervisor re-execs in place), so
+  plugins that exited during the transition are children the new shell never
+  waits for. They hold no resources beyond the process-table entry, and they
+  are gone with the next real restart. The `inotifywait` this list used to
+  name is no longer spawned at all: the wallpaper folder is watched in-process
+  (`DirWatcher`, plugin/dirwatcher.hpp), so there is nothing left that can
+  outlive the shell.
 
 ## How it talks to the compositor
 
 One unix socket, newline-delimited JSON, the same one `amsg` uses
 (`$ASTEROIDZ_INSTANCE_SIGNATURE`). State is pushed, not polled:
+
+The connection survives the compositor. A subscription that loses its socket —
+a compositor restart, mostly — redials with a capped backoff until the server
+is back, and the compositor re-pushes the full current state on re-subscribe,
+so the bar converges on the truth however long the outage was. Before that,
+one failed reconnect attempt was terminal: the theme, the tags and the focus
+froze at their last values until the shell was restarted by hand.
+`contrib/ipc-reconnect-test.sh` stages the restart against a stub server and
+asserts every subscription comes back.
 
 | subscription | what it carries |
 |---|---|
@@ -1478,21 +1492,43 @@ contrib/discord-ptt-test.sh # the push-to-talk bridge: the app id resolves, the
                            #   portal offers the signals, and the rebind path
                            #   writes what it claims to (sandboxed XDG, no
                            #   compositor, no Discord)
+contrib/ipc-reconnect-test.sh # the compositor connection, against a stub
+                           #   server that fragments its writes, dies, and
+                           #   comes back: every subscription re-installs
+                           #   itself, and a malformed line is dropped without
+                           #   tearing anything down
+contrib/plugin-crashloop-test.sh # a plugin that dies on arrival is retried a
+                           #   BOUNDED number of times (capped backoff), one
+                           #   that crashes after a healthy stretch is back in
+                           #   seconds, and nothing outlives the bar
+contrib/bottom-bar-test.sh # popovers on `bar { position "bottom" }`: the
+                           #   panel stands just above the bar rather than
+                           #   floating mid-screen, and Escape still works;
+                           #   the top-bar geometry is asserted alongside
+contrib/barconfig-roundtrip-test.sh # parse(render(parse(x))) == parse(x) for
+                           #   the bar's own KDL, escaping and TYPES included
+                           #   ("123" must come back a string), plus the
+                           #   in-process DirWatcher's change/re-arm contract
 ```
 
 ### The wallpaper browser
 
 The folder is scanned at startup, whenever it changes, and every time the page
-opens — and **watched** in between, through `inotifywait`. A poll would be a
-`find` over the directory every few seconds forever, for an event that happens a
-handful of times a day, and would still be late by up to its own interval; this
-is idle until the kernel says something changed. A burst is debounced into one
-rescan, because copying fifty files in emits fifty events while the directory is
-still being written to.
+opens — and **watched** in between, in-process (`DirWatcher`, a
+QFileSystemWatcher in the C++ plugin). A poll would be a `find` over the
+directory every few seconds forever, for an event that happens a handful of
+times a day, and would still be late by up to its own interval; this is idle
+until the kernel says something changed. A burst is debounced into one rescan,
+because copying fifty files in emits fifty events while the directory is still
+being written to.
 
-`inotify-tools` is an *optdepend*: without it the watcher process simply fails to
-start and the scan-on-open path carries on, so the browser is merely less
-immediate rather than broken.
+This used to be an `inotifywait -m` subprocess, and that process was the
+shell's one unkillable orphan: it only ever noticed the bar was gone by taking
+SIGPIPE on a write to the dead pipe, and a watcher over a quiet folder never
+writes — so every crash-restart cycle stranded one on `~/Pictures`. An fd in
+this process cannot outlive it, and `inotify-tools` stops being a dependency
+of any kind. If the watched directory itself is deleted (removable media), the
+watch re-arms itself when the path returns.
 
 The scan used to run **only** from `onFolderChanged`, and `folder` starts at
 `~/Pictures`. A `wallpaper.conf` with no `folder=` line — the common case, since

@@ -308,6 +308,21 @@ PanelWindow {
     function showRows(rows) {
         menu.rows = rows;
         menu.visible = rows.length > 0;
+        if (menu.visible)
+            Popovers.opened(root);
+    }
+
+    // One popover session-wide is a RULE, not a property of the object model:
+    // every bar owns a popover, so a menu on one monitor and a menu on another
+    // could both be up, each with its own full-output catcher and its own
+    // claim to Exclusive keyboard focus -- which only one surface can hold, so
+    // Escape answered on one screen and was swallowed on the other.
+    Connections {
+        target: Popovers
+        function onOpened(owner) {
+            if (owner !== root)
+                menu.visible = false;
+        }
     }
 
     // A plugin answering with a menu while its own is already up is
@@ -345,10 +360,22 @@ PanelWindow {
         }
         menu.rows = [];
         menu.anchor.item = item;
-        menu.anchor.edges = Edges.Bottom;
-        menu.anchor.gravity = Edges.Bottom;
+        setMenuSide();
         menu.panel = component;
         menu.visible = true;
+        Popovers.opened(root);
+    }
+
+    // Which side of the pill the popover hangs off: away from the screen edge
+    // the bar is on. Edges is the anchor point on the PILL's rect, gravity the
+    // direction the popup grows from it -- so a top bar anchors at the pill's
+    // bottom edge and grows down, and a bottom bar anchors at the pill's top
+    // edge and grows up. Unconditionally Bottom/Bottom, a bottom bar's menus
+    // opened downward into the screen edge, where the compositor's constraint
+    // adjustment slid them back over the bar rather than above it.
+    function setMenuSide() {
+        menu.anchor.edges = Cfg.bottom ? Edges.Top : Edges.Bottom;
+        menu.anchor.gravity = Cfg.bottom ? Edges.Top : Edges.Bottom;
     }
 
     // Open a menu under `item`, which must be a pill in this bar. Anchored to
@@ -360,8 +387,7 @@ PanelWindow {
             return;
         }
         menu.anchor.item = item;
-        menu.anchor.edges = Edges.Bottom;
-        menu.anchor.gravity = Edges.Bottom;
+        setMenuSide();
         // Clear any panel: the popover is shared, and a menu opened after a
         // settings panel would otherwise draw the panel with the menu's rows
         // hidden behind it.

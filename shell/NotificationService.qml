@@ -81,6 +81,21 @@ Singleton {
             // exactly this.
             n.closed.connect(function() { root.hidePopup(n); });
 
+            // The history is BOUNDED here, on arrival, because nothing else
+            // bounds it: a tracked notification lives until something
+            // dismisses it, artwork included. Oldest out first -- the entries
+            // at the front of the model -- and through dismiss(), so the
+            // sender gets its NotificationClosed like any other dismissal.
+            // Over a copy, because dismissing mutates the model being walked.
+            const cap = Cfg.notifyHistoryLimit;
+            const vals = server.trackedNotifications.values;
+            if (cap > 0 && vals.length > cap) {
+                const excess = vals.slice(0, vals.length - cap);
+                for (const old of excess)
+                    if (old && old !== n)
+                        old.dismiss();
+            }
+
             root.arrived(n);
         }
     }

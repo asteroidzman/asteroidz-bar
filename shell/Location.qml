@@ -65,6 +65,7 @@ Singleton {
     FileView {
         id: cache
         path: root.cachePath
+        atomicWrites: true
         preload: true
         onLoaded: {
             // Only as a head start. The lookup below runs regardless and

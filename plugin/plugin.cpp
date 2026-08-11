@@ -24,6 +24,7 @@
 
 #include "calendar.hpp"
 #include "clipboard.hpp"
+#include "dirwatcher.hpp"
 #include "hdrthumb.hpp"
 #include "opticalicon.hpp"
 #include "fontsync.hpp"
@@ -42,6 +43,9 @@ public:
 		Q_ASSERT(qstrcmp(uri, "Asteroidz.Bar") == 0);
 
 		qmlRegisterType<Backdrop>(uri, 1, 0, "Backdrop");
+		// A type, not a singleton: a watcher is one directory's, and the
+		// wallpaper is not the only thing that may one day want one.
+		qmlRegisterType<DirWatcher>(uri, 1, 0, "DirWatcher");
 		qmlRegisterSingletonType<Paths>(
 		    uri,
 		    1,

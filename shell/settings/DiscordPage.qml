@@ -123,7 +123,7 @@ Item {
         onLoadFailed: page.conf = ({ trigger: "F12", key: "F12" })
     }
 
-    FileView { id: confWriter; path: page.confPath; preload: false }
+    FileView { id: confWriter; path: page.confPath; preload: false; atomicWrites: true }
 
     FileView {
         id: shortcutsReader

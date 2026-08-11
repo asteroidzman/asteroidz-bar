@@ -152,6 +152,12 @@ Singleton {
         num(notify, "centre-height", em(20))
     readonly property int notifyTimeout: num(notify, "timeout", 5000)
     readonly property int notifyMaxPopups: num(notify, "max-popups", 4)
+    // How many notifications the centre keeps before the oldest are dropped.
+    // A bound, because nothing else is one: every tracked notification lives
+    // until dismissed, its image-data included, so an app that chirps every
+    // few seconds would otherwise grow the shell for the life of the session.
+    // 0 means unbounded, for whoever really wants that.
+    readonly property int notifyHistoryLimit: num(notify, "history", 300)
     readonly property bool notifyDnd: flag(notify, "dnd", false)
 
     // The clipboard.

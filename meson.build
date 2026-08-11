@@ -41,6 +41,7 @@ install_data(
 		'shell/Panel.qml',
 		'shell/Pill.qml',
 		'shell/Popover.qml',
+		'shell/Popovers.qml',
 		'shell/Section.qml',
 		'shell/Icon.qml',
 		'shell/Compositor.qml',
@@ -225,6 +226,7 @@ wayland_client_dep = dependency('wayland-client')
 plugin_moc = qt6.preprocess(
 	moc_headers: [
 		'plugin/wallpaper.hpp',
+		'plugin/dirwatcher.hpp',
 		'plugin/paths.hpp',
 		'plugin/windowicon.hpp',
 		'plugin/clipboard.hpp',
@@ -245,6 +247,7 @@ shared_module(
 	[
 		'plugin/plugin.cpp',
 		'plugin/wallpaper.cpp',
+		'plugin/dirwatcher.cpp',
 		'plugin/paths.cpp',
 		'plugin/windowicon.cpp',
 		'plugin/opticalicon.cpp',

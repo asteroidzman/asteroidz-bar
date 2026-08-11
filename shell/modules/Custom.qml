@@ -188,11 +188,53 @@ Pill {
         poll.running = false;
     }
 
+    // ── restart, with a brake ───────────────────────────────────────────────
+    //
+    // quickshell restarts a Process whose `running` still evaluates true the
+    // moment it exits, with no delay (process.cpp: onFinished ends in
+    // startProcessIfReady). For a healthy continuous plugin that is the right
+    // default -- a crash should not kill the pill for the session -- but a
+    // plugin that dies at startup (a missing python module, a bad exec line)
+    // would be respawned in a tight loop: fork, crash, fork, at whatever rate
+    // the machine can manage, forever. A broken plugin must cost its own pill,
+    // not a core.
+    //
+    // So `running` is gated on `wantRun`, which onExited drops SYNCHRONOUSLY
+    // -- exited is emitted before quickshell's own restart check runs, so the
+    // gate is authoritative -- and a timer re-raises it with a capped
+    // exponential delay. An exit after a healthy stretch resets the count, so
+    // a plugin that crashes once a week restarts in a quarter second, and one
+    // that crashes on arrival backs off to half a minute.
+    property int crashes: 0
+    property double startedAt: 0
+    property bool wantRun: true
+
+    Timer {
+        id: respawn
+        interval: Math.min(30000, 250 * Math.pow(2, Math.min(root.crashes, 7)))
+        onTriggered: root.wantRun = true
+    }
+
     Process {
         id: proc
         command: (root.plugin.exec || "").split(" ").filter(s => s.length > 0)
-        running: root.continuous && command.length > 0
+        running: root.wantRun && root.continuous && command.length > 0
         stdinEnabled: root.continuous
+
+        onStarted: root.startedAt = Date.now()
+
+        onExited: {
+            if (!root.continuous)
+                return;
+            // Ten seconds of life is a plugin that worked; anything shorter
+            // counts toward the backoff.
+            if (Date.now() - root.startedAt < 10000)
+                root.crashes++;
+            else
+                root.crashes = 0;
+            root.wantRun = false;
+            respawn.restart();
+        }
 
         stdout: SplitParser {
             onRead: line => {

@@ -27,7 +27,6 @@ makedepends=('meson' 'ninja' 'wayland-protocols' 'git')
 provides=('notification-daemon')
 optdepends=(
   'asteroidz: the compositor this draws the bar for'
-  'inotify-tools: the wallpaper browser notices files added to the folder while it is open'
   'cava: the media visualiser'
   'pipewire: the volume module'
   'pipewire-audio: audible notifications (pw-play)'

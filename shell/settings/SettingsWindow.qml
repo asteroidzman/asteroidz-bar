@@ -107,6 +107,7 @@ FloatingWindow {
         id: sizeWriter
         path: win.sizeCachePath
         preload: false
+        atomicWrites: true
     }
 
     // Saved on the RESIZE, debounced -- not on close.
