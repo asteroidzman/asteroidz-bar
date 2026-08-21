@@ -12,6 +12,7 @@ Panel 1.0 Panel.qml
 Pill 1.0 Pill.qml
 Icon 1.0 Icon.qml
 Section 1.0 Section.qml
+SectionWindow 1.0 SectionWindow.qml
 singleton Metrics 1.0 Metrics.qml
 singleton BatteryService 1.0 BatteryService.qml
 Popover 1.0 Popover.qml
@@ -34,6 +35,7 @@ singleton NotificationService 1.0 NotificationService.qml
 NotificationCard 1.0 NotificationCard.qml
 NotificationCentre 1.0 NotificationCentre.qml
 NotificationPopups 1.0 NotificationPopups.qml
+ToastWindow 1.0 ToastWindow.qml
 AudioPanel 1.0 AudioPanel.qml
 AudioDeviceRow 1.0 AudioDeviceRow.qml
 ClipboardPanel 1.0 ClipboardPanel.qml

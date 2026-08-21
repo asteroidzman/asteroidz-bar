@@ -7,14 +7,19 @@
 // blurs the region this reports, so an empty section contributes nothing and
 // the wallpaper shows through between the groups.
 //
-// The shadow is drawn HERE rather than by the compositor. asteroidz will
-// happily put a layer shadow behind the whole surface, but the surface is the
-// full width of the output -- one shadow around all three sections, including
-// the transparent gaps between them, which is not the look.
+// The shadow is the COMPOSITOR's, and that is why this panel gets a surface of
+// its own (SectionWindow) rather than a share of one full-width strip.
+//
+// asteroidz shadows a layer surface around the surface's own box
+// (layer_draw_shadow), so three sections inside one full-width surface can only
+// ever have one shadow drawn around all three -- including the transparent gaps
+// between them, which is not the look. One surface per section makes the box
+// the compositor shadows exactly the box that should cast one, and the bar
+// stops carrying a second, Qt-drawn approximation of an effect the compositor
+// already renders for every window on the desktop.
 
 import Quickshell
 import QtQuick
-import Qt5Compat.GraphicalEffects
 import "."
 
 Item {
@@ -65,63 +70,4 @@ Item {
         spacing: root.spacing
     }
 
-    // ── the shadow ──────────────────────────────────────────────────────────
-    //
-    // The native bar's shadow, with its geometry rather than a drop shadow's.
-    // scenefx drew a rounded box GROWN by `shadow_size` on every side, gave
-    // it the panel's radius grown to match, blurred the whole thing at
-    // `shadow_blur`, and shifted it down by a third of the size. It is a soft
-    // blob larger than the panel, not an outline traced around it -- which is
-    // why it reads as blended into the panel instead of ringing it.
-    //
-    // It is deliberately NOT masked out of the panel's own area. The slab is
-    // translucent, so the shadow does tint what shows through it, and a
-    // version with the middle punched out was tried and rejected: with a hard
-    // boundary at the slab's edge the shadow stops being part of the panel
-    // and becomes a halo around it.
-    //
-    // RectangularGlow rather than MultiEffect's shadowEnabled, because
-    // MultiEffect draws its SOURCE as well as the shadow -- a second copy of
-    // the slab behind the real one. (And MultiEffect given a plain Rectangle
-    // as `source` draws nothing whatsoever: a Rectangle is not a texture
-    // provider, which is why this panel had no shadow at all.)
-    RectangularGlow {
-        id: shadow
-
-        readonly property int delta: Cfg.panelShadowSize
-        // How far the shadow reaches: solid out to `delta`, then the blur's
-        // falloff, which for a gaussian is spent by about two sigma.
-        readonly property int reach: delta + Math.ceil(2 * Cfg.panelShadowBlur)
-
-        anchors.centerIn: slab
-        width: slab.width
-        height: slab.height
-        // Down by a third of the size, so it sits under the panel the way it
-        // sits under a window.
-        anchors.verticalCenterOffset: Math.round(delta / 3)
-
-        cornerRadius: Cfg.panelRadius + delta
-        glowRadius: reach
-
-        // Two corrections for the same fact: RectangularGlow is not a
-        // gaussian, and using the configured numbers raw makes it far heavier
-        // than the shadow those numbers described.
-        //
-        // `spread` holds a band at FULL alpha before the fade starts, which a
-        // blurred box has nowhere outside itself -- any spread at all reads
-        // as a hard dark frame around the panel.
-        spread: 0
-
-        // And the alpha is halved. A gaussian-blurred box does not reach its
-        // peak alpha anywhere you can see: the box's own edge sits at HALF,
-        // and the rest of the falloff is spread inside and out. Passing 0.7
-        // straight through therefore renders twice the shadow the compositor
-        // drew from the same config -- which is exactly how this looked, and
-        // why the fix belongs here rather than in a lighter shadow_color that
-        // would then mean something different to every other consumer.
-        color: Qt.rgba(Cfg.panelShadowColor.r, Cfg.panelShadowColor.g,
-                       Cfg.panelShadowColor.b, Cfg.panelShadowColor.a * 0.5)
-        visible: Cfg.panelShadow && Cfg.panelEnable
-        z: -1
-    }
 }

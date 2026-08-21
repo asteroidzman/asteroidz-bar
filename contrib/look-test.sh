@@ -13,9 +13,12 @@
 #      LABEL's width and lost the icon's advance -- about 28px each. Content
 #      overflows a pill rather than being clipped, so this showed up as the
 #      next module having no space in front of it.
-#   3. The panel has a shadow. It had none: MultiEffect was given a plain
-#      Rectangle as its source, and a Rectangle is not a texture provider, so
-#      it drew nothing at all.
+#   3. The panel has a shadow. It had none twice over, for unrelated reasons:
+#      first MultiEffect was given a plain Rectangle as its source, and a
+#      Rectangle is not a texture provider, so it drew nothing at all; then the
+#      shell stopped drawing shadows itself and the compositor's needs a
+#      layerrule naming the panels' namespace before it will draw one. See
+#      bar_conf_effects, which is what this test now turns on.
 set -u
 
 REPO="${ASTEROIDZ_REPO:-$HOME/asteroidz}"
@@ -65,6 +68,7 @@ render() { # render <modules-center> <outfile>
 	cp "$PRISTINE" "$HL_CONFIG"
 	cat >> "$HL_CONFIG" <<EOF
 theme { font "Ubuntu 16"; border-width 0; corner-radius 8; padding { x 16; y 4 } }
+$(bar_conf_effects)
 EOF
 	bar_conf "" "$1" "" <<EOF
 $(bar_conf_panel)
@@ -360,11 +364,44 @@ if biggest >= 8:
 else:
     print("FAIL a pinned pill leaves room for its neighbour")
 
-# 3. the shadow: above the panel's top edge, darker than the open wallpaper.
-far = px[4, 4]
-near = px[(span[0] + span[1]) // 2, 5]
-print(f"above the panel: {near}, open wallpaper: {far}")
-if sum(near) < sum(far) - 30:
+# 3. the shadow: BELOW the panel's bottom edge, darker than open wallpaper.
+#
+# Below, not above, and that is forced rather than chosen. The compositor
+# clips a layer shadow to the monitor (layer_draw_shadow's top/left/right/
+# bottom offsets, added so a shadow near a screen edge does not bleed onto the
+# next monitor), and a top-anchored panel sits margin-y -- nine pixels -- from
+# the top of the screen. There is no room up there for a shadow to develop:
+# measured against a deliberately extreme shadow (size 60, opaque black), the
+# nine rows above the panel darkened by twelve levels while the rows below it
+# went almost black. Reading upwards measures the clip, not the shadow.
+#
+# Downwards is also the honest direction: shadows/position/y defaults to 10, so
+# the shadow a real desktop draws under this bar falls onto the wallpaper below
+# it, which is exactly what is sampled here.
+# Read down a column four pixels inside the panel's left edge: inside the slab
+# but outside its 12px padding, so there is no glyph in it and it is one flat
+# colour from top to bottom. The centre column is not -- a first attempt walked
+# down it looking for dark-then-light and found the first white pixel of the
+# clock, calling a letter the bottom of the bar.
+col = span[0] + 4
+top = next((y for y in range(im.size[1]) if sum(px[col, y]) < 300), None)
+bottom = None
+if top is not None:
+    # The panel's own colour, sampled clear of its rounded corner, then walked
+    # down until the column stops being that colour. Matching on the colour
+    # rather than on darkness because the shadow immediately below is dark too:
+    # "first light pixel" would step over the edge and read the shadow's far
+    # tail instead of its start.
+    ref = px[col, top + 6]
+    y = top + 6
+    while y + 1 < im.size[1] and max(abs(px[col, y + 1][c] - ref[c])
+                                     for c in range(3)) <= 40:
+        y += 1
+    bottom = y
+far = px[4, im.size[1] // 2]
+near = px[col, bottom + 4] if bottom else None
+print(f"panel bottom edge y={bottom}, below it: {near}, open wallpaper: {far}")
+if near and sum(near) < sum(far) - 30:
     print("PASS the panel casts a shadow")
 else:
     print("FAIL the panel casts a shadow")

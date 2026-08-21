@@ -180,11 +180,11 @@ Hovering a toast stops its clock — reading something is the clearest possible
 signal that it should not be taken away mid-sentence — and it resumes when the
 pointer leaves.
 
-The toasts are frosted, one blurred region per card rather than one behind the
-stack: the cards are 8px apart on a surface taller than all of them together,
-and the wallpaper has to show through the gaps. They cast the same shadow the
-bar's panels do — the space for it was always reserved and nothing drew one,
-so they sat flat on the desktop while every other panel had depth.
+Each toast is its own layer surface, so each is frosted and shadowed by the
+compositor exactly like a bar panel — see [Blur and shadows](#blur-and-shadows).
+They shared one tall surface until that changed, which meant the only shadow
+available was one drawn around the whole column, gaps and empty space included.
+A card growing (a long body, an action row) pushes the ones below it down.
 
 **Every toast carries an icon**, resolved most-specific-first: the
 `image-data`/`image-path` hint (artwork chosen for *this* notification — an
@@ -871,14 +871,56 @@ you have already committed to pressing.
 
 ## Blur and shadows
 
-Blur is the compositor's (`ext-background-effect-v1`): the shell reports the
-exact region its panels occupy, corner radii included, and asteroidz blurs
-behind it. A transparent surface with three rounded slabs on it therefore gets
-blur under the slabs and nothing between them.
+Both are the compositor's. The shell draws neither.
 
-Shadows are the shell's own. asteroidz will put a layer shadow behind the whole
-surface, but the surface spans the output — that would be one shadow around all
-three sections including the gaps between them.
+Blur is `ext-background-effect-v1`: the shell reports the exact region its
+panels occupy, corner radii included, and asteroidz blurs behind it. A client
+region is an explicit opt-in that overrides `effects/blur/layer`, so the frost
+works on a desktop with layer blur switched off — and an *empty* region is an
+explicit opt-out, which is how `panel { blur #false }` turns it off rather than
+falling back to the global setting.
+
+Shadows are `effects/shadow`, the same shadow every window on the desktop casts.
+That works because **every slab that casts a shadow is its own layer surface**:
+asteroidz draws a layer shadow around the surface's own box, so three sections
+sharing one full-width surface could only ever have one shadow drawn around the
+whole strip, gaps between the groups included. Hence:
+
+| namespace | what it is |
+| --- | --- |
+| `asteroidz-bar` | the full-width strip: reserves the space, catches clicks that dismiss a popover. Deliberately shadowless |
+| `asteroidz-bar-panel` | one per non-empty module group |
+| `asteroidz-bar-popover` | the menu that hangs off a pill, while one is up |
+| `asteroidz-bar-toast` | one per notification |
+
+The three shadowed kinds sit *inside* the strip the bar reserves rather than
+reserving anything themselves, and asteroidz only shadows a layer surface
+automatically when its exclusive zone is 0. So they have to be named, in the
+compositor's config:
+
+```kdl
+misc {
+    layerrule layer_name:asteroidz-bar-.*,forceshadow:1
+}
+```
+
+The trailing dash matters: it excludes `asteroidz-bar` itself, which spans the
+output and must stay shadowless. Without this rule the shell simply has no
+shadows — there is no fallback, because the shell no longer draws any.
+
+A shadow is clipped to the monitor it is on, so that one falling off a screen
+edge does not bleed onto the next output — which means there is very little room
+for one above a top-anchored bar, sitting `margin-y` from the top of the screen.
+Raising `effects/shadow/size` will not change that; the shadow under the bar
+grows and the sliver above it stays a sliver. The same applies upside-down to
+`bar { position "bottom" }`.
+
+Shadow size, blur, colour and offset are the compositor's settings now
+(`effects/shadow/*`), not the bar's. There is deliberately no `panel { shadow }`,
+`shadow-size`, `shadow-blur` or `shadow-color`: they described a shadow nothing
+draws any more, and four keys that parse and then change nothing take longer to
+disbelieve than four keys that are not there. Old configs still carrying them
+are harmless — unknown keys are ignored.
 
 ## Sound
 
@@ -1400,7 +1442,10 @@ or the portal answers "App info not found" and push-to-talk never binds.
 ```sh
 contrib/look-test.sh       # panel geometry: hidden modules, pinned pills, the
                            #   shadow, the ship, and a section drawn only on the
-                           #   output it names
+                           #   output it names. The shadow is read BELOW the
+                           #   panel: the compositor clips a layer shadow to the
+                           #   monitor, so above a top-anchored bar there is no
+                           #   room for one to develop
 contrib/battery-test.sh    # the battery module, against a fake sysfs: absent on a
                            #   machine with no cell, present and tracking on one
 contrib/wallpaper-test.sh  # the wallpaper, drawn in-process, HDR path included,
@@ -1427,10 +1472,13 @@ contrib/click-test.sh      # what the bar DOES when clicked: popovers open and
                            #   that only reads out
 contrib/panel-layout-test.sh # the settings window's boxes fit the text in them,
                            #   at three font sizes
-contrib/toast-shadow-test.sh # a toast's shadow fades out rather than being cut
-                           #   off square at the layer surface's own edge,
-                           #   measured as the biggest single-pixel step across
-                           #   the shadow (1 when it fits, 4 when it is clipped)
+contrib/toast-shadow-test.sh # a toast casts its own shadow, and it fades out
+                           #   rather than stepping. It measured a Qt-drawn
+                           #   shadow clipped by the surface it was painted
+                           #   inside; the compositor draws it outside the
+                           #   surface now, so the same row instead checks that
+                           #   the shadow is there at all — which is what a
+                           #   missing layerrule takes away
 contrib/picker-test.sh     # an open dropdown is inside the window it belongs
                            #   to. Run at output scale 1.75, which is the shape
                            #   that made the Displays page's Scale list fall off

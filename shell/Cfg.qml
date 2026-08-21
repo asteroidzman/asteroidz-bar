@@ -129,13 +129,20 @@ Singleton {
     readonly property int panelRadius: num(panel, "radius", em(0.42))
     readonly property int panelPadding: num(panel, "padding", em(0.56))
     readonly property bool panelBlur: flag(panel, "blur", true)
-    readonly property bool panelShadow: flag(panel, "shadow", true)
-    readonly property int panelShadowSize: num(panel, "shadow-size", em(0.66))
-    readonly property real panelShadowBlur: num(panel, "shadow-blur", em(0.66))
     readonly property color panelColor: col(panel, "color",
                                             Qt.rgba(0.039, 0.039, 0.047, 0.85))
-    readonly property color panelShadowColor: col(panel, "shadow-color",
-                                                  Qt.rgba(0, 0, 0, 0.70))
+
+    // There is deliberately no `panel { shadow ... }` here any more.
+    //
+    // The bar drew its own shadows until every panel, popover and toast became
+    // a layer surface of its own; the compositor draws them now, from
+    // `effects/shadow` in ITS config, which is the same shadow every window on
+    // the desktop casts. Keeping `shadow`, `shadow-size`, `shadow-blur` and
+    // `shadow-color` as bar settings would mean four keys that parse, validate
+    // and then change nothing -- a worse answer than the keys being gone,
+    // because a setting that silently does nothing takes longer to disbelieve
+    // than one that is not there. Old configs still holding them are harmless:
+    // unknown keys are ignored.
 
     // ── notifications ───────────────────────────────────────────────────────
     //

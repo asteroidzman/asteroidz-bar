@@ -101,7 +101,14 @@ timeout 5 gdbus call --session \
 	"blur-test" 0 "" "Frost" "a toast over stripes" "[]" "{}" 60000 \
 	>/dev/null 2>&1
 sleep 3
-grim -o "$MON" "$WORK/$SHOT.png" 2>/dev/null
+# grim needs the harness's runtime dir put BACK. bar_limits runs this script
+# in a systemd scope whose XDG_RUNTIME_DIR is the real session's, not the
+# headless one -- the bar above survives that because it is wrapped in `env`,
+# and a bare grim is not: it connects to the DESKTOP's compositor, finds no
+# output called HEADLESS-1, writes nothing, and the measurement below opens a
+# file that was never created.
+env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WL" \
+	grim -o "$MON" "$WORK/$SHOT.png" 2>/dev/null
 
 kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
@@ -112,9 +119,12 @@ chmod +x "$WORK/run.sh"
 # left to the defaults, so the arithmetic in the python below is checking the
 # shell rather than agreeing with it by coincidence.
 #
-# BAR_GAP is min(shadowRoom, margin-y), and shadowRoom -- shadow-size plus
-# TWICE shadow-blur, the distance the shadow actually reaches -- is 42 with the
-# panel settings used here, so it comes out as margin-y either way.
+# BAR_GAP is margin-y. A toast is its own layer surface now, reserving nothing
+# (exclusive zone 0) and so placed clear of the strip the bar reserves; its own
+# top margin is margin-y, and that is the whole of the gap. It used to be
+# min(shadowRoom, margin-y), where shadowRoom was the room the shell left
+# inside the surface for a shadow it drew itself -- both the room and the
+# shadow are the compositor's now, outside the surface entirely.
 CARD_W=380
 BAR_H=48
 MARGIN_X=8
@@ -127,7 +137,7 @@ run_with_blur() { # run_with_blur <#true|#false> <shot>
 	# accumulates keys into a group rather than replacing it -- but saying it
 	# once is clearer than relying on that.
 	bar_conf "" "" "notify" <<EOF
-panel { enable #true; radius 9; padding 12; blur $1; shadow #true }
+panel { enable #true; radius 9; padding 12; blur $1 }
 bar { height $BAR_H; margin-x $MARGIN_X; margin-y $MARGIN_Y }
 notify { width $CARD_W }
 EOF

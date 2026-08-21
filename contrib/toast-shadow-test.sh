@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
-# toast-shadow-test.sh — a toast's shadow fades out instead of being cut off.
+# toast-shadow-test.sh — a toast casts its own shadow, and it fades out.
 #
-# A notification popup is a layer-shell surface, and a layer surface can only
-# paint inside itself. So the surface has to be bigger than the cards by however
-# far the shadow reaches, or the outer part of the shadow is simply not drawn
-# and the toast sits in a hard-edged dark rectangle.
+# Each toast is its own layer surface, so the compositor draws a shadow around
+# each CARD. That is the point of the split: the toasts shared one tall surface
+# once, and a shadow drawn around that surface was a shadow around the whole
+# column -- gaps and empty space included -- rather than around any card.
 #
-# `NotificationPopups.shadowRoom` reserved `shadow-size + blur`. The shadow
-# reaches `shadow-size + 2 * blur` -- solid out to the size, then a gaussian
-# falloff spent by about two sigma, which is the arithmetic `Panel.qml`'s own
-# `reach` uses and the room `Bar.qml` and `Popover.qml` reserve. One sigma
-# short means the outer half of the falloff is clipped, and the half that
-# survives is the half still dark enough to see the edge of.
+# The test that used to live here measured the opposite arrangement. The shell
+# drew the shadow itself, inside the surface, and a layer surface can only paint
+# inside itself, so the surface had to be bigger than the cards by however far
+# the shadow reached or its outer part was simply not drawn -- the toast sat in
+# a hard-edged dark rectangle. `NotificationPopups.shadowRoom` reserved that
+# room and reserved a sigma too little of it.
 #
-# Measured as the biggest single-pixel STEP along a row running out of the
-# card's left side across the shadow. A shadow that fades has no step -- it is
-# a gaussian, so the largest change between neighbouring pixels is small. A
-# shadow cut off at the surface edge has exactly one big one, at the cut.
+# Neither the room nor the shadow is the shell's any more, and the clipping bug
+# is not reachable: the compositor's shadow is drawn OUTSIDE the surface, where
+# there is nothing to clip it. What is worth measuring is unchanged, though, and
+# the same row does both jobs -- run out of the card's left side across the
+# shadow and into the wallpaper. It has to get darker, or the card has no shadow
+# at all, which is what a missing `layerrule` looks like. And the darkening has
+# to be a gaussian's: no big single-pixel STEP anywhere along it, which is what
+# an in-surface shadow cut off at a surface edge leaves behind.
 #
 # The wallpaper is flat and dark on purpose: a striped or photographic backdrop
 # has steps of its own everywhere and the measurement means nothing.
@@ -35,13 +39,18 @@ bad() { echo "  FAIL $1"; FAIL=$((FAIL + 1)); }
 	exit 1
 }
 
-# The COMPOSITOR's shadow on layer surfaces is turned off, so what is measured
-# here is the shell's own card shadow and nothing else. With it on there are two
-# shadows -- one around the whole surface, one around each card -- and they meet
-# at the surface edge with a step of their own, which swamps this measurement
-# and is a separate matter. It is off in the live config too.
+# The compositor's shadow, turned on and pointed at the shell's namespaces --
+# it is the only shadow there is now, where this used to turn it OFF to isolate
+# the shell's own. See bar_conf_effects for why a layerrule is needed and why
+# the size is small.
+#
+# barconf.sh is sourced here rather than after hl_start, which is where the
+# other suites source it, because this config has to exist before the
+# compositor does.
+# shellcheck disable=SC1091
+. "$HERE/contrib/lib/barconf.sh"
 export HL_EXTRA_KDL="${HL_EXTRA_KDL:-}
-layer_shadows 0"
+$(bar_conf_effects)"
 
 # shellcheck disable=SC1091
 . "$REPO/contrib/lib/headless.sh"
@@ -50,8 +59,6 @@ trap 'hl_stop' EXIT
 kill "$HL_SWAYBG_PID" 2>/dev/null
 
 WORK="$HL_OUTDIR"
-# shellcheck disable=SC1091
-. "$HERE/contrib/lib/barconf.sh"
 BAR_CONF="$(bar_conf_path)"
 BAR_XDG="$(bar_xdg_home)"
 QMLROOT="$WORK/qml"
@@ -66,7 +73,7 @@ printf 'folder=%s\nwallpaper=%s\nmode=fill\n' "$WORK" "$WORK/wall.png" \
 
 CARD_W=380
 bar_conf "" "" "notify" <<EOF
-panel { enable #true; radius 9; padding 12; blur #false; shadow #true }
+panel { enable #true; radius 9; padding 12; blur #false }
 bar { height 48; margin-x 8; margin-y 9 }
 notify { width $CARD_W }
 EOF
@@ -95,7 +102,14 @@ timeout 5 gdbus call --session \
 	"shadow-test" 0 "" "Shadow" "a toast with a shadow under it" "[]" "{}" 60000 \
 	>/dev/null 2>&1
 sleep 3
-grim -o "$MON" "$WORK/toast.png" 2>/dev/null
+# grim needs the harness's runtime dir put BACK. bar_limits runs this script
+# in a systemd scope whose XDG_RUNTIME_DIR is the real session's, not the
+# headless one -- the bar above survives that because it is wrapped in `env`,
+# and a bare grim is not: it connects to the DESKTOP's compositor, finds no
+# output called HEADLESS-1, writes nothing, and the measurement below opens a
+# file that was never created.
+env XDG_RUNTIME_DIR="$XRD" WAYLAND_DISPLAY="$WD" \
+	grim -o "$MON" "$WORK/toast.png" 2>/dev/null
 kill "$QS" 2>/dev/null
 wait "$QS" 2>/dev/null
 INNER

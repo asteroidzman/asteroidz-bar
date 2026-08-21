@@ -117,8 +117,12 @@ if [ "$COUNT" -gt 400 ]; then
 else
 	bad "top bar: the menu opened ($COUNT px)"
 fi
-# Adjacent below the bar: the panel's top edge is within the shadow's reach of
-# the strip, and the whole panel sits in the top half of the screen.
+# Adjacent below the bar: the panel's top edge is within a shadow's reach of the
+# strip, and the whole panel sits in the top half of the screen. The band is
+# generous on purpose -- the popover is its own layer surface now and no longer
+# carries room for a shadow inside itself, so its edge sits nearer the bar than
+# it used to. Nearer stays inside the band; the failure this catches is a panel
+# that is not adjacent to the bar at all.
 if [ "$YMIN" -ge "$BAR_BAND" ] && [ "$YMIN" -le 220 ] \
 	&& [ "$YMAX" -le $((HL_HEIGHT / 2)) ]; then
 	ok "top bar: the panel hangs just below the bar (y $YMIN..$YMAX)"
@@ -147,8 +151,8 @@ if [ "$COUNT" -gt 400 ]; then
 else
 	bad "bottom bar: the menu opened ($COUNT px)"
 fi
-# Adjacent ABOVE the bar: the panel's bottom edge is within the shadow's reach
-# of the strip, and the whole panel sits in the bottom half of the screen --
+# Adjacent ABOVE the bar: the panel's bottom edge is within a shadow's reach of
+# the strip, and the whole panel sits in the bottom half of the screen --
 # which is exactly what the unconditional top-bar anchor failed: the panel
 # came out pinned to the top of a screen-tall surface, mid-air.
 if [ "$YMAX" -le $((HL_HEIGHT - BAR_BAND)) ] \

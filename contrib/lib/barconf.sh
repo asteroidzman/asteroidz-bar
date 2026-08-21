@@ -248,8 +248,66 @@ bar_conf() {
 
 # The panel every visual suite draws against: on, with the radius and padding
 # the shipped defaults use, so a screenshot here matches a real bar.
+#
+# No `shadow` key: the shell draws no shadows and never reads one. See
+# bar_conf_effects, which turns on the shadow that actually gets drawn.
 bar_conf_panel() {
-	echo 'panel { enable #true; radius 9; padding 12; blur #true; shadow #true }'
+	echo 'panel { enable #true; radius 9; padding 12; blur #true }'
+}
+
+# The COMPOSITOR-side half of the bar's look, for suites that measure blur or
+# shadows. Append to $HL_CONFIG and reload before launching the bar.
+#
+# Two things have to be true for a bar panel to be shadowed at all, and neither
+# is a default:
+#
+#   - effects/shadow/enable, obviously; and
+#   - a layerrule naming the shell's namespaces. Panels, popovers and toasts
+#     sit INSIDE the strip the bar reserves rather than reserving anything
+#     themselves, which is exclusion zone -1, and asteroidz only shadows a
+#     layer surface automatically at zone 0. The trailing dash in the pattern
+#     excludes `asteroidz-bar` itself -- the full-width strip, which must stay
+#     shadowless or it would draw one shadow around the whole output.
+#
+# The size is deliberately small, and that is the interesting part: the shadow
+# is drawn around the SURFACE, so a shadow blurred by more pixels than the
+# panel is tall spreads its alpha over a radius bigger than the thing casting
+# it and becomes invisible without ever being absent. At the desktop's own
+# 72/72 a bar panel has no visible shadow at all while a popover -- ten times
+# the area -- looks right, which is exactly the shape of bug these numbers
+# exist to keep out of the tests.
+#
+# Written one node per line. A block written on ONE line parses as something
+# else -- the same trap the bar's own KDL subset has with `custom "x" { … }` --
+# and a layerrule that silently did not take is indistinguishable here from a
+# shadow that was never drawn.
+bar_conf_effects() {
+	cat <<'EOF'
+effects {
+	blur {
+		enable 1
+		layer 0
+		passes 2
+		radius 6
+		transparency-threshold 0.5
+	}
+	shadow {
+		enable 1
+		layer 0
+		size 24
+		blur 24
+		color "0x000000aa"
+		// position is left at its default, which aims the shadow downwards
+		// (position/y is 10). That is where a suite has to read it anyway: the
+		// compositor clips a layer shadow to the monitor, so above a bar
+		// anchored margin-y from the top of the screen there is no room for
+		// one -- see the note on the shadow assertion in look-test.sh.
+	}
+}
+misc {
+	layerrule layer_name:asteroidz-bar-.*,forceshadow:1
+}
+EOF
 }
 
 # Stop a backgrounded `dbus-run-session -- … &` and take its bus with it.

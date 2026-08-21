@@ -1,10 +1,37 @@
 // The panel that hangs off a pill: a menu, a set of readings, a form.
 //
-// A real popup window rather than an item drawn inside the bar. The bar
-// surface is 66px tall and a menu is not, so anything drawn inside it would be
-// clipped -- the native bar solves that by owning the whole scene graph, which
-// a client does not. A popup is also what makes the click-outside-to-dismiss
-// and the keyboard grab work without inventing either.
+// A window of its own rather than an item drawn inside the bar: a panel
+// surface is one bar's height tall and a menu is not, so anything drawn inside
+// one would be clipped -- the native bar solves that by owning the whole scene
+// graph, which a client does not.
+//
+// A LAYER SURFACE rather than an xdg popup, which is what this used to be. The
+// compositor has no shadow for a popup: layer surfaces and toplevels each get
+// one (layer_draw_shadow, client_draw_one_shadow), and a popup gets blur --
+// popup_update_blur exists precisely for these popovers -- and nothing else.
+// So a popover that wants the compositor's shadow instead of a Qt-drawn
+// imitation of one has to stop being a popup.
+//
+// Three things fall out of that, and all three are simplifications:
+//
+//   - It takes the keyboard ITSELF. Qt refuses to create a grabbing popup here
+//     ("Ensure popup has a transientParent set and that parent window has
+//     received input"), falls back to an ordinary one silently, and left this
+//     panel unable to receive so much as an Escape -- so the bar held focus on
+//     its behalf and forwarded every keystroke across the window boundary. A
+//     layer surface just asks for Exclusive focus and gets it.
+//   - It may RESIZE while mapped. Repositioning a mapped xdg popup deadlocks
+//     the client (Qt's reposition and quickshell's re-anchor coalesce into one
+//     compositor cycle, only the last token is answered, and Qt then commits
+//     without a buffer and never paints again), which is why this was a fixed
+//     tall box with the panel floating inside it. A layer surface is
+//     re-configured normally, so the surface is now exactly the panel -- which
+//     is also what makes the compositor's shadow hug the panel rather than the
+//     box it used to sit in.
+//   - It is placed BY HAND. That is the one cost, and it is small: a popover
+//     only ever hangs off one screen edge, so "constraint solving" is a clamp
+//     in x (see anchorCenterX) rather than the flip-and-slide an arbitrary
+//     popup needs.
 //
 // Row kinds are the ones the native popover has, and for the same reasons: a
 // row is one hit target, so nothing is drawn that cannot be clicked.
@@ -12,10 +39,9 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
-import Qt5Compat.GraphicalEffects
 import "."
 
-PopupWindow {
+PanelWindow {
     id: root
 
     // [{ text, icon, enabled, separator, submenu, checked, input, value }]
@@ -29,10 +55,6 @@ PopupWindow {
     // squeezed into `rows`, which is the shape this exists to avoid.
     property Component panel: null
     property string title: ""
-    // Set while a field is being typed into; see Bar.qml, which raises the
-    // layer-shell keyboard focus only while this is true.
-    readonly property bool wantsKeyboard:
-        wantsKeyboardPanel || rows.some(r => r && r.input)
 
     // THE TEXT FIELD KEYSTROKES HAVE TO BE FORWARDED TO.
     //
@@ -62,34 +84,73 @@ PopupWindow {
 
     color: "transparent"
 
-    // The window is bigger than the panel by the shadow's reach on every
-    // side, and the panel is inset by it. A popup can only paint inside
-    // itself, so a shadow drawn at the panel's own edge would be clipped
-    // away entirely -- the same thing that happened to the bar's.
-    readonly property int shadowRoom:
-        Cfg.panelShadow && Cfg.panelEnable
-            ? Cfg.panelShadowSize + Math.ceil(2 * Cfg.panelShadowBlur)
-            : 0
+    // ── where it goes ───────────────────────────────────────────────────────
+    //
+    // The pill that opened this is an item in a DIFFERENT surface -- a
+    // SectionWindow -- so its position means nothing here. Bar.qml converts it
+    // into the output's own coordinates and hands over the one number that
+    // decides placement: the pill's horizontal centre.
+    property real anchorCenterX: 0
 
-    // THE SURFACE NEVER RESIZES WHILE IT IS UP. This is not a style choice.
+    WlrLayershell.namespace: "asteroidz-bar-popover"
+    // Above the panels, which are Top. A menu drawn under the bar it hangs off
+    // is a menu nobody can read.
+    WlrLayershell.layer: WlrLayer.Overlay
+
+    // Exclusive while it is up, nothing while it is not.
     //
-    // Resizing a mapped popup hangs the client, permanently. Qt resizes the
-    // window (xdg_popup.reposition, its own token) and quickshell re-anchors
-    // straight after (a second reposition, its own token, on its own
-    // xdg_wm_base). When both land in one compositor event-loop cycle wlroots
-    // coalesces them -- xdg-shell says in as many words that "if multiple
-    // reposition requests are sent, the compositor may skip all but the last
-    // one" -- so only the LAST token gets an xdg_popup.repositioned event and
-    // Qt's is never answered. Qt then acks the configure, applies the new size
-    // to its wp_viewport, commits WITHOUT A BUFFER and never paints again: the
-    // old frame stays stretched over the new surface size until the popup is
-    // destroyed. Opening the Scale list did that every time; switching tabs
-    // got away with it only by winning the race.
+    // Exclusive rather than OnDemand: OnDemand leaves it to the compositor to
+    // decide when this surface has the keyboard and it never decided in our
+    // favour -- Escape went to whatever was focused before the menu opened. A
+    // menu is modal for as long as it is up, which is what Exclusive says.
+    WlrLayershell.keyboardFocus: root.visible
+        ? WlrKeyboardFocus.Exclusive
+        : WlrKeyboardFocus.None
+
+    // Reserves nothing, placed where it asks -- the same terms as the panels.
+    exclusionMode: ExclusionMode.Ignore
+
+    anchors {
+        top: !Cfg.bottom
+        bottom: Cfg.bottom
+        left: true
+    }
+
+    // Clear of the strip the bar reserves, on whichever edge the bar is on.
+    margins {
+        top: Cfg.bottom ? 0 : Cfg.height + 2 * Cfg.marginY
+        bottom: Cfg.bottom ? Cfg.height + 2 * Cfg.marginY : 0
+        left: root.placedX
+    }
+
+    readonly property int screenWidth: screen ? screen.width : 1920
+    readonly property int screenHeight: screen ? screen.height : 1080
+
+    // Centred under the pill, then pushed back inside the screen. This is the
+    // whole of what an xdg popup's constraint adjustment used to do here: a
+    // popover is pinned to one edge, so the only correction it can need is in
+    // x, and a menu on the last pill of the right-hand group is the case that
+    // needs it.
+    readonly property int placedX: Math.round(Math.max(
+        Cfg.marginX,
+        Math.min(root.anchorCenterX - root.width / 2,
+                 root.screenWidth - root.width - Cfg.marginX)))
+
+    // The surface IS the panel: these are the window's own size.
     //
-    // So the window is a fixed box and the PANEL moves inside it. Content is
-    // free to grow and shrink -- a dropdown opening, a submenu replacing a
-    // menu -- without a single reposition, because none of it reaches
-    // implicitWidth/implicitHeight while `visible` is true.
+    // It used to be a fixed tall box with the panel floating inside it,
+    // because resizing a mapped xdg popup hangs the client permanently -- Qt
+    // resizes the window (xdg_popup.reposition, its own token) and quickshell
+    // re-anchors straight after (a second reposition, its own token, on its
+    // own xdg_wm_base); when both land in one compositor event-loop cycle
+    // wlroots coalesces them, only the LAST token is answered, and Qt then
+    // acks the configure, commits WITHOUT A BUFFER and never paints again.
+    //
+    // None of that applies to a layer surface, which is re-configured like any
+    // other window. So the box is gone, and the surface tracks the panel --
+    // which is what the compositor needs it to do, since the shadow it draws
+    // goes around the SURFACE. A box with a small panel floating in it would
+    // have its shadow drawn around the box.
     readonly property int panelWidth:
         (panelLoader.item
             ? panelLoader.item.implicitWidth
@@ -101,25 +162,31 @@ PopupWindow {
                                   : content.implicitHeight)
                                  + 2 * Cfg.popoverPadding)
 
-    // As tall as the screen below the bar allows, capped. It has to FIT: a
-    // window taller than the space under the pill gets slid back up by the
-    // compositor (set_constraint_adjustment includes slide_y), which would
-    // move the panel out from under the thing that opened it.
-    readonly property int screenHeight:
-        anchor.window && anchor.window.screen ? anchor.window.screen.height : 1080
+    // As tall as the screen beyond the bar allows, capped. It has to FIT: a
+    // surface taller than the space under the pill would run off the far edge,
+    // and nothing repositions it back -- this places itself.
     readonly property int maxPanelHeight:
-        Math.min(700, screenHeight - Cfg.height - 2 * Cfg.marginY
-                      - 2 * shadowRoom - 8)
+        Math.min(700, root.screenHeight - Cfg.height - 3 * Cfg.marginY)
 
     // Width is latched at open rather than fixed: a menu is as wide as its
     // rows, and every popover being as wide as the widest would look absurd.
     // Latching is enough because nothing MAPS at the wrong width -- the panel
     // loads before `visible` goes true (see panelLoader) -- and a submenu that
     // wants more room than its parent had elides instead of resizing.
+    // Width is latched at open rather than tracked: a menu is as wide as its
+    // rows, and every popover being as wide as the widest would look absurd.
+    // Resizing is no longer forbidden -- see above -- but a submenu that wants
+    // more room than its parent had still elides rather than growing, because
+    // a panel that changes width under the pointer is worse to use than one
+    // that does not.
     property int lockedWidth: 0
     onVisibleChanged: {
         if (visible) {
-            lockedWidth = panelWidth + 2 * shadowRoom;
+            lockedWidth = panelWidth;
+            // Taking the keyboard is not the same as an item holding it:
+            // without this the surface has focus and nothing in it does, so
+            // the key handler below never runs.
+            keys.forceActiveFocus();
         } else {
             panel = null;
             /* The field is inside the panel that just went away. */
@@ -127,110 +194,53 @@ PopupWindow {
         }
     }
 
-    implicitWidth: lockedWidth > 0 ? lockedWidth : panelWidth + 2 * shadowRoom
-    implicitHeight: maxPanelHeight + 2 * shadowRoom
+    implicitWidth: lockedWidth > 0 ? lockedWidth : panelWidth
+    implicitHeight: panelHeight
 
-    // quickshell CENTRES a popup on its anchor horizontally and puts the
-    // popup's top edge at the anchor's bottom, so no correction is needed in
-    // either direction: the panel is inset from the window's top by the shadow
-    // reach (see panelBox) and centred in it, and the window is centred on the
-    // pill. An earlier attempt "compensated" with a negative left margin and
-    // shoved every popover one shadow-reach to the left.
-    anchor.rect: anchor.item
-        ? Qt.rect(0, 0, anchor.item.width, anchor.item.height)
-        : Qt.rect(0, 0, 1, 1)
-
-    // NOT grabbed, because asking does not work here.
+    // The slab: the whole surface.
     //
-    // A grabbing popup is the usual way a menu dismisses itself, and Qt
-    // refuses to create one:
-    //
-    //   qt.qpa.wayland: Failed to create grabbing popup. Ensure popup has a
-    //   transientParent set and that parent window has received input.
-    //
-    // It then falls back to an ordinary popup, silently, so the menu appears
-    // and simply cannot be dismissed -- no click-outside, and no keyboard
-    // focus for Escape to arrive through. Dismissal is therefore the BAR's
-    // job: it covers the screen while a menu is up and closes it on any click
-    // that is not on a pill, and it owns the keyboard focus that Escape
-    // needs. See Bar.qml.
-    grabFocus: false
-
-    // The panel: the part you can see, inset from the window by the shadow.
-    //
-    // Pinned to the EDGE NEAREST THE PILL rather than centred. The window is
-    // a fixed tall box (see above) and only the panel tracks the content, so
-    // centring would float the panel down the middle of that box and away
-    // from the pill it hangs off. Which edge is nearest depends on where the
-    // bar is: a top bar's popup hangs below the pill, so the panel pins to the
-    // box's top; a bottom bar's popup stands above the pill, so it pins to the
-    // bottom -- anything else leaves the panel a whole box-height away from
-    // the thing that opened it.
-    Item {
-        id: panelBox
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: Cfg.bottom ? undefined : parent.top
-        anchors.bottom: Cfg.bottom ? parent.bottom : undefined
-        anchors.topMargin: root.shadowRoom
-        anchors.bottomMargin: root.shadowRoom
-        width: root.panelWidth
-        height: root.panelHeight
-
-        // The bar's shadow, on the same terms -- see Panel.qml, which
-        // explains why RectangularGlow, why spread 0 and why half alpha.
-        RectangularGlow {
-            readonly property int delta: Cfg.panelShadowSize
-            readonly property int reach:
-                delta + Math.ceil(2 * Cfg.panelShadowBlur)
-
-            anchors.centerIn: parent
-            anchors.verticalCenterOffset: Math.round(delta / 3)
-            width: parent.width
-            height: parent.height
-            cornerRadius: Cfg.panelRadius + delta
-            glowRadius: reach
-            spread: 0
-            color: Qt.rgba(Cfg.panelShadowColor.r, Cfg.panelShadowColor.g,
-                           Cfg.panelShadowColor.b, Cfg.panelShadowColor.a * 0.5)
-            visible: Cfg.panelShadow && Cfg.panelEnable
-            z: -1
-        }
-
-        Rectangle {
-            id: slab
-            anchors.fill: parent
-            radius: Cfg.panelRadius
-            color: Cfg.popoverColor
-        }
-    }
-
-    // Input stops at the panel, not at the window.
-    //
-    // The window is a shadow-reach larger than the panel on every side, and
-    // that margin is transparent -- but a popup with no mask takes input
-    // across its whole surface, so the margin above the panel sat ON TOP of
-    // the pill that opened it and swallowed the click. Clicking the same pill
-    // to close the menu did nothing at all, while clicking anywhere else
-    // worked, which made it look like a toggle bug rather than a hit-testing
-    // one.
-    mask: Region {
-        item: panelBox
+    // There is no inset box any more. The compositor's shadow is drawn around
+    // the SURFACE, so the panel and the surface being the same rectangle is
+    // exactly what puts the shadow around the panel -- and it is also why the
+    // mask that used to live here is gone. The mask existed because the window
+    // was a shadow-reach larger than the panel on every side and that
+    // transparent margin sat on top of the pill and swallowed the click that
+    // should have closed the menu. With no margin there is nothing to mask.
+    Rectangle {
+        id: slab
+        anchors.fill: parent
         radius: Cfg.panelRadius
+        color: Cfg.popoverColor
     }
 
-    // The frost, asked for the same way the bar asks: the region carries the
-    // corner radius, so the blur ends where the rounded panel does and the
-    // shadow margin around it stays clear.
+    // The frost, asked for the same way the panels ask: the region carries the
+    // corner radius, so the blur ends where the rounded panel does.
     // A null item leaves a region with no area, which the compositor reads as
-    // an explicit opt-out -- see the note in Bar.qml.
-    BackgroundEffect.blurRegion: Region {
-        item: Cfg.panelBlur ? panelBox : null
+    // an explicit opt-out -- see the note in SectionWindow.qml.
+    WlrLayershell.BackgroundEffect.blurRegion: Region {
+        item: Cfg.panelBlur ? slab : null
         radius: Cfg.panelRadius
+    }
+
+    // Escape, and everything a form in a popover needs typed into it.
+    //
+    // Here rather than in Bar.qml, because this surface holds the keyboard
+    // itself now. While this was an xdg popup it could not take focus at all,
+    // so the BAR held focus on its behalf and forwarded every keystroke across
+    // the window boundary to handleKey below.
+    Item {
+        id: keys
+        anchors.fill: parent
+        focus: true
+        // Forwarded FIRST, so a text field in a panel gets the keystroke
+        // before the menu's own row handling sees it -- see keyTarget.
+        Keys.forwardTo: root.keyTarget ? [root.keyTarget] : []
+        Keys.onPressed: event => root.handleKey(event)
     }
 
     Loader {
         id: panelLoader
-        anchors.fill: panelBox
+        anchors.fill: parent
         anchors.margins: Cfg.popoverPadding
         // Loaded as soon as a panel is SET, not when the window becomes
         // visible: showPanel assigns `panel` and then `visible` in the same
@@ -240,18 +250,12 @@ PopupWindow {
         // and immediately reposition -- the exact move that hangs the client.
         // The popover clears `panel` when it hides, so nothing is kept alive.
         sourceComponent: root.panel
-        // A panel takes keys of its own (text fields), so the bar has to hold
-        // keyboard focus while one is up.
-        onLoaded: root.wantsKeyboardPanel = true
-        onItemChanged: if (!item) root.wantsKeyboardPanel = false
     }
-
-    property bool wantsKeyboardPanel: false
 
     Column {
         id: content
         visible: root.panel === null
-        anchors.fill: panelBox
+        anchors.fill: parent
         anchors.margins: Cfg.popoverPadding
         spacing: Cfg.popoverSpacing
 
@@ -596,9 +600,9 @@ PopupWindow {
         }
     }
 
-    // Keys are handled by whoever HAS the keyboard, which is the bar: this
-    // popup never takes focus (see grabFocus above), so a Keys handler here
-    // would never fire. Bar.qml calls this instead.
+    // Called by the Keys handler above, which this surface's own focus makes
+    // possible. Kept as a named function rather than inlined because it is the
+    // whole of the popover's keyboard contract in one place.
     function handleKey(event) {
         {
             if (event.key === Qt.Key_Escape) {

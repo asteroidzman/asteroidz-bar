@@ -1,9 +1,28 @@
 // One output's bar.
 //
-// A layer-shell surface spanning the output's width, transparent, with three
-// panels floating on it. The surface is full-width rather than three separate
-// windows because the exclusive zone is a property of a surface: three windows
-// would either reserve three overlapping strips or none at all.
+// FOUR layer surfaces per output, not one, and the shadow is why.
+//
+// asteroidz draws a layer surface's shadow around that surface's own box
+// (layer_draw_shadow in animation/layer.h). A bar drawn as ONE full-width
+// surface therefore has exactly one shape it can cast a shadow from -- the
+// whole strip, gaps between the groups included -- which is not the look. So
+// each group is its own surface (SectionWindow) and the compositor shadows
+// each one, with the same code, the same parameters and the same
+// `effects/shadow` config that shadows every window on the desktop. The bar
+// used to draw its own approximation of that shadow in QML; it does not any
+// more.
+//
+// What is left in THIS surface is the part that is a property of the strip
+// rather than of any group: the exclusive zone (one strip is reserved once,
+// not three times) and the click-catcher that dismisses an open popover.
+//
+//   asteroidz-bar          this: reserves the strip, catches stray clicks
+//   asteroidz-bar-panel    one per non-empty group, shadowed and blurred
+//   asteroidz-bar-popover  the menu, when one is up
+//
+// The panels reserve nothing and are placed inside the strip this one
+// reserves, which is exclusion-zone -1 -- so they need a `layerrule` naming
+// their namespace to be shadowed at all. See SectionWindow.qml and the README.
 
 import Quickshell
 import Quickshell.Wayland
@@ -12,12 +31,13 @@ import QtQuick
 import "."
 import "modules"
 
-PanelWindow {
+Scope {
     id: root
 
     required property var modelData
-    screen: modelData
     readonly property string screenName: modelData ? modelData.name : ""
+
+    readonly property bool menuOpen: menu.visible
 
     // ── on sizes, and why there is no scale factor here ─────────────────────
     //
@@ -39,187 +59,153 @@ PanelWindow {
     // The answer to "this bar is too big on that monitor" is that monitor's
     // scale, which the user already sets and every other program obeys.
 
-    WlrLayershell.namespace: "asteroidz-bar"
-    WlrLayershell.layer: WlrLayer.Top
-    // No keyboard until something asks for it. A bar that takes focus while
-    // idle steals keys from whatever you were typing into -- so this is raised
-    // while a popover is OPEN and dropped the moment it closes.
+    // ── the strip: what is reserved, and what catches a stray click ─────────
     //
-    // Any popover, not just one with a text field: a menu has to answer
-    // Escape, and it cannot be sent a key it was never given focus to
-    // receive.
-    // Exclusive, not OnDemand, while a menu is up.
-    //
-    // OnDemand leaves it to the compositor to decide when this surface has
-    // the keyboard, and it never decided in our favour: Escape went to
-    // whatever was focused before the menu opened and the menu ignored it. A
-    // menu is modal for as long as it is up, which is exactly what Exclusive
-    // says.
-    WlrLayershell.keyboardFocus: menu.visible
-        ? WlrKeyboardFocus.Exclusive
-        : WlrKeyboardFocus.None
+    // Declared first so it maps first, which puts it under the panels. That is
+    // belt to the braces of the mask below, not a load-bearing assumption.
+    PanelWindow {
+        id: strip
 
-    anchors {
-        top: !Cfg.bottom
-        bottom: Cfg.bottom
-        left: true
-        right: true
-    }
+        screen: root.modelData
 
-    // Taller than it reserves, by exactly the shadow's reach.
-    //
-    // The compositor's own bar drew into the scene graph, so its shadow could
-    // spill as far past the panel as it liked. A layer surface cannot: it can
-    // only paint inside itself, and at height + 2*margin there are nine pixels
-    // below the panel -- so a shadow grown by 14 and blurred by 14 lost most
-    // of itself to the surface edge, which is the half that shows.
-    //
-    // The extra height is NOT reserved (see exclusiveZone below), so it costs
-    // no screen space: it is transparent, takes no input, and windows are
-    // free to sit under it.
-    readonly property int shadowRoom:
-        Cfg.panelShadow && Cfg.panelEnable
-            ? Cfg.panelShadowSize + Math.ceil(2 * Cfg.panelShadowBlur)
-            : 0
+        WlrLayershell.namespace: "asteroidz-bar"
+        WlrLayershell.layer: WlrLayer.Top
+        // Never takes the keyboard. The popover is a surface of its own now
+        // and asks for focus itself, so this one has no reason to -- and a bar
+        // that takes focus while idle steals keys from whatever you were
+        // typing into.
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
-    // While a menu is open this surface covers the OUTPUT, and that is how a
-    // menu gets dismissed.
-    //
-    // The usual mechanism is a grabbing popup, and Qt will not create one
-    // here ("parent window has received input" is never satisfied), falling
-    // back to a plain popup that cannot be dismissed by anything. So the bar
-    // does it: full-screen while a menu is up, transparent, with a catcher
-    // under the panels that closes on any click which is not on a pill. The
-    // exclusive zone does not change, so nothing on screen moves.
-    readonly property bool menuOpen: menu.visible
-    readonly property int restingHeight: Cfg.height + 2 * Cfg.marginY + shadowRoom
+        anchors {
+            top: !Cfg.bottom
+            bottom: Cfg.bottom
+            left: true
+            right: true
+        }
 
-    implicitHeight: menuOpen && screen ? screen.height : restingHeight
-    // Windows are kept clear of the bar AND of the gap it floats in: the
-    // margin is part of the bar's footprint, not free space a maximised window
-    // may use, or the panel would sit on top of window content. The shadow is
-    // not part of that footprint -- it is something to see through.
-    exclusiveZone: Cfg.height + 2 * Cfg.marginY
+        color: "transparent"
 
-    color: "transparent"
+        // One pixel while idle, the whole output while a popover is open.
+        //
+        // It is NOT as tall as the strip it reserves, and that is deliberate:
+        // this surface would otherwise lie across all three section surfaces,
+        // and a layer surface covering another is the one thing the panels do
+        // that the popover and the toasts -- which are shadowed and frosted
+        // correctly -- do not. Nothing is drawn here in either case, so the
+        // height only decides what this surface overlaps.
+        //
+        // The reserved strip is unaffected: exclusive_zone is a number the
+        // client sends, not the surface's size, so a 1px surface reserves the
+        // full bar height just as a full-height one did.
+        //
+        // Full-output while a menu is up is what dismisses the menu. The usual
+        // mechanism is a grabbing popup, and Qt will not create one here
+        // ("parent window has received input" is never satisfied), falling
+        // back to a plain popup that cannot be dismissed by anything. So the
+        // bar does it: full-screen, transparent, closing on any click that
+        // reaches it. The exclusive zone does not change, so nothing moves.
+        implicitHeight: root.menuOpen && screen ? screen.height : 1
 
-    // The frosted look, preserved across the move out of the compositor.
-    //
-    // scenefx blurs what is behind a layer surface, and asteroidz will mask
-    // that by the surface's own alpha -- but the region below is better than a
-    // mask: it carries the panels' CORNER RADII, so the blur ends exactly
-    // where the rounded slab does instead of leaving square ears at the
-    // corners. Only non-empty sections contribute, so the gaps between groups
-    // stay genuinely transparent.
-    // `panel { blur #false }` turns it off, which until now it did not: the
-    // setting was read into Cfg.panelBlur and then used by nothing at all, so
-    // the bar asked for frost whatever the config said.
-    //
-    // Off is expressed as a region with no area rather than as no region. The
-    // compositor reads those differently on purpose -- "a client region is an
-    // explicit opt-in, an empty one an opt-out" -- and an absent region falls
-    // back to the global `effects { blur { layer } }`, which would leave the
-    // switch still not working on a desktop that has that turned on.
-    WlrLayershell.BackgroundEffect.blurRegion: Region {
-        regions: [
+        // Windows are kept clear of the bar AND of the gap it floats in: the
+        // margin is part of the bar's footprint, not free space a maximised
+        // window may use, or the panels would sit on top of window content.
+        // The shadow is not part of that footprint -- it is something to see
+        // through, and it is drawn outside every one of these surfaces.
+        exclusiveZone: Cfg.height + 2 * Cfg.marginY
+
+        // Input, and only where it is wanted.
+        //
+        // Idle: none at all. This surface draws nothing and every pill lives
+        // in another surface, so there is nothing here to click -- an empty
+        // region is how a layer surface says "pass everything through", and
+        // it is what keeps the strip from swallowing clicks meant for a
+        // window under the gap between two groups.
+        //
+        // Open: everything EXCEPT the panels. Subtracting them is what lets
+        // the pill that opened a menu still be clicked to close it: the click
+        // has to reach the pill's own surface, and this one is in the way of
+        // it. Doing it with a mask rather than by stacking means it does not
+        // depend on which surface the compositor happens to put on top.
+        mask: root.menuOpen ? catcherMask : noInput
+
+        Region { id: noInput }
+
+        Region {
+            id: catcherMask
+            width: strip.width
+            height: strip.height
+
             Region {
-                item: Cfg.panelBlur ? leftPanel : null
-                radius: Cfg.panelRadius
-            },
-            Region {
-                item: Cfg.panelBlur ? centerPanel : null
-                radius: Cfg.panelRadius
-            },
-            Region {
-                item: Cfg.panelBlur ? rightPanel : null
-                radius: Cfg.panelRadius
+                intersection: Intersection.Subtract
+                x: leftWin.originX
+                y: leftWin.originY
+                width: leftWin.visible ? leftWin.width : 0
+                height: leftWin.visible ? leftWin.height : 0
             }
-        ]
-    }
+            Region {
+                intersection: Intersection.Subtract
+                x: centerWin.originX
+                y: centerWin.originY
+                width: centerWin.visible ? centerWin.width : 0
+                height: centerWin.visible ? centerWin.height : 0
+            }
+            Region {
+                intersection: Intersection.Subtract
+                x: rightWin.originX
+                y: rightWin.originY
+                width: rightWin.visible ? rightWin.width : 0
+                height: rightWin.visible ? rightWin.height : 0
+            }
+        }
 
-    // Input lands on the panels, and nowhere else on this surface.
-    //
-    // The surface spans the whole output and is now taller than it reserves,
-    // so without a mask it would swallow every click that landed in the
-    // transparent gaps between the groups -- including the shadow band below
-    // the bar, which is not reserved and therefore has real window content
-    // under it.
-    // Null mask == the whole surface, which is what a catcher needs; the
-    // panels-only mask is what an idle bar needs so the transparent gaps
-    // between the groups do not swallow clicks meant for windows.
-    mask: menuOpen ? null : panelsOnly
-
-    Region {
-        id: panelsOnly
-        regions: [
-            Region { item: leftPanel },
-            Region { item: centerPanel },
-            Region { item: rightPanel }
-        ]
-    }
-
-    // The catcher, which closes the menu on a click that is not on a panel.
-    //
-    // It has to TEST that rather than rely on being underneath, because being
-    // underneath is not enough: the pills use TapHandlers, and a pointer
-    // handler does not consume the event for items below it. Clicking the
-    // open pill therefore ran both -- this closed the menu, and the pill's own
-    // toggle then saw a closed menu and opened it straight back up, so the
-    // one gesture that was supposed to dismiss it was the only one that could
-    // not.
-    MouseArea {
-        anchors.fill: parent
-        z: -10
-        enabled: root.menuOpen
-        visible: root.menuOpen
-        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onPressed: mouse => {
-            if (!root.onAPanel(mouse.x, mouse.y))
-                menu.visible = false;
+        MouseArea {
+            anchors.fill: parent
+            enabled: root.menuOpen
+            visible: root.menuOpen
+            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+            // No "was that on a panel?" test any more: the mask above means a
+            // click that lands on a panel never arrives here in the first
+            // place. It used to have to check, because the panels were items
+            // in this same surface and a TapHandler does not consume the event
+            // for items below it -- so clicking the open pill ran both, this
+            // closed the menu and the pill's own toggle opened it straight
+            // back up.
+            onPressed: menu.visible = false
         }
     }
 
-    // Is this point on one of the three panels? In the window's own
-    // coordinates, which is what a click on this surface arrives in.
-    function onAPanel(x, y) {
-        for (const p of [leftPanel, centerPanel, rightPanel]) {
-            if (!p.visible)
-                continue;
-            const r = p.mapToItem(null, 0, 0, p.width, p.height);
-            if (x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
-                return true;
-        }
-        return false;
+    // ── the three groups, one surface each ──────────────────────────────────
+
+    SectionWindow {
+        id: leftWin
+        screen: root.modelData
+        bar: root
+        place: "left"
     }
 
-    // Escape, and everything a form in a popover needs typed into it.
+    SectionWindow {
+        id: centerWin
+        screen: root.modelData
+        bar: root
+        place: "center"
+    }
+
+    SectionWindow {
+        id: rightWin
+        screen: root.modelData
+        bar: root
+        place: "right"
+    }
+
+    // ── the popover ─────────────────────────────────────────────────────────
     //
-    // Here rather than in the popover because THIS is the window with
-    // keyboard focus -- the popup never takes any -- so a Keys handler over
-    // there would never fire.
-    Item {
-        id: keys
-        anchors.fill: parent
-        focus: true
-        // Forwarded FIRST, so a text field in a panel gets the keystroke before
-        // the menu's own row handling sees it. The compositor delivers keys to
-        // this surface and the popover never holds focus, so without this a
-        // Field inside a panel could not be typed into -- see Popover.keyTarget.
-        Keys.forwardTo: menu.keyTarget ? [menu.keyTarget] : []
-        Keys.onPressed: event => menu.handleKey(event)
-    }
-
-    // Taking the keyboard is not the same as an item holding it: without this
-    // the window had focus and nothing in it did, so the key handler above
-    // never ran.
-    onMenuOpenChanged: if (menuOpen) keys.forceActiveFocus()
-
-    // Exactly one popover, session-wide, anchored to whatever raised it.
-    // Two would need z-order arbitration and a grab each for no benefit: a bar
-    // popover is a menu, and menus are modal by convention.
+    // Exactly one, session-wide, anchored to whatever raised it. Two would
+    // need z-order arbitration and a grab each for no benefit: a bar popover
+    // is a menu, and menus are modal by convention.
     Popover {
         id: menu
-        anchor.window: root
+
+        screen: root.modelData
         visible: false
 
         onActivated: index => {
@@ -340,13 +326,52 @@ PanelWindow {
         showMenu(item, rows);
     }
 
+    // Which pill the open popover belongs to.
+    //
+    // Tracked here rather than read off the popover's anchor, which is what it
+    // used to be: an xdg popup was anchored to the pill ITEM, and a layer
+    // surface is placed at a coordinate and has no idea what asked for it.
+    property var menuItem: null
+
     // Is the popover currently this item's?
     function menuBelongsTo(item) {
-        return menu.visible && menu.anchor.item === item;
+        return menu.visible && menuItem === item;
     }
 
     function closeMenu() {
         menu.visible = false;
+    }
+
+    // Aim the popover at a pill.
+    //
+    // The pill is an item in a SectionWindow, so its position is that
+    // surface's, and the popover is a third surface that knows only the
+    // output. Converting between them is what SectionWindow.originX exists
+    // for: surface origin plus in-surface position is the output coordinate,
+    // and the popover clamps from there.
+    function aimAt(item) {
+        menuItem = item;
+        const win = surfaceOf(item);
+        if (!win)
+            return;
+        const p = item.mapToItem(null, 0, 0);
+        menu.anchorCenterX = win.originX + p.x + item.width / 2;
+    }
+
+    // Which of the three surfaces an item is in. Walked rather than asked,
+    // because an item knows its parent chain and not its window.
+    function surfaceOf(item) {
+        let p = item;
+        while (p) {
+            if (p === leftWin.section)
+                return leftWin;
+            if (p === centerWin.section)
+                return centerWin;
+            if (p === rightWin.section)
+                return rightWin;
+            p = p.parent;
+        }
+        return null;
     }
 
     // Open an arbitrary component under `item` -- a settings panel rather than
@@ -359,23 +384,10 @@ PanelWindow {
             return;
         }
         menu.rows = [];
-        menu.anchor.item = item;
-        setMenuSide();
+        aimAt(item);
         menu.panel = component;
         menu.visible = true;
         Popovers.opened(root);
-    }
-
-    // Which side of the pill the popover hangs off: away from the screen edge
-    // the bar is on. Edges is the anchor point on the PILL's rect, gravity the
-    // direction the popup grows from it -- so a top bar anchors at the pill's
-    // bottom edge and grows down, and a bottom bar anchors at the pill's top
-    // edge and grows up. Unconditionally Bottom/Bottom, a bottom bar's menus
-    // opened downward into the screen edge, where the compositor's constraint
-    // adjustment slid them back over the bar rather than above it.
-    function setMenuSide() {
-        menu.anchor.edges = Cfg.bottom ? Edges.Top : Edges.Bottom;
-        menu.anchor.gravity = Cfg.bottom ? Edges.Top : Edges.Bottom;
     }
 
     // Open a menu under `item`, which must be a pill in this bar. Anchored to
@@ -386,66 +398,11 @@ PanelWindow {
             menu.visible = false;
             return;
         }
-        menu.anchor.item = item;
-        setMenuSide();
+        aimAt(item);
         // Clear any panel: the popover is shared, and a menu opened after a
         // settings panel would otherwise draw the panel with the menu's rows
         // hidden behind it.
         menu.panel = null;
         showRows(rows);
-    }
-
-    // The strip itself: exactly `height` tall, `margin_y` from the screen
-    // edge it is anchored to.
-    //
-    // NOT the whole surface. The surface is height + 2*margin tall because
-    // that is what the compositor reserves (bar_reserve: `height + 2 *
-    // margin_y`) -- the second margin is breathing room below the bar, not
-    // part of it. Filling the surface and centring the panels inside it put
-    // them 4.5px low, which is the sort of error that looks like nothing and
-    // fails a pixel diff.
-    Item {
-        height: Cfg.height
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: Cfg.bottom ? undefined : parent.top
-        anchors.bottom: Cfg.bottom ? parent.bottom : undefined
-        anchors.topMargin: Cfg.bottom ? 0 : Cfg.marginY
-        anchors.bottomMargin: Cfg.bottom ? Cfg.marginY : 0
-        anchors.leftMargin: Cfg.marginX
-        anchors.rightMargin: Cfg.marginX
-
-        Section {
-            id: leftPanel
-            bar: root
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            // The bar's own config, not the compositor's: which modules
-            // it draws is the bar's business and the compositor draws
-            // none of it.
-            list: BarConfig.itemsOf("left").join(",")
-            monitorFilter: BarConfig.monitorOf("left")
-            screenName: root.screenName
-        }
-
-        Section {
-            id: centerPanel
-            bar: root
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            list: BarConfig.itemsOf("center").join(",")
-            monitorFilter: BarConfig.monitorOf("center")
-            screenName: root.screenName
-        }
-
-        Section {
-            id: rightPanel
-            bar: root
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            list: BarConfig.itemsOf("right").join(",")
-            monitorFilter: BarConfig.monitorOf("right")
-            screenName: root.screenName
-        }
     }
 }
