@@ -1,8 +1,20 @@
 name: aur-publish
 
+# A pushed tag, not a published release.
+#
+# It used to be `release: [published]`, which meant pushing a tag published
+# nothing: the AUR sat at 0.1.4 from July through 0.3.2 and 0.4.0, both of
+# which were tagged. Publishing is the point of cutting a release, so the tag
+# is what triggers it.
+#
+# Both spellings of a version tag, because the version-bump step below strips a
+# leading `v` and there is no reason for the trigger to be stricter than the
+# thing it triggers.
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 # pushing the version-bumped PKGBUILD back to this repo needs write access;
 # the default GITHUB_TOKEN is read-only for that on some repo settings.
@@ -18,19 +30,20 @@ jobs:
 
       - name: Bump PKGBUILD to the release version
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           sed -i "s/^pkgver=.*/pkgver=${VERSION}/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
       # The publish comes FIRST, before anything is pushed back here.
       #
-      # It used to come last, and that is why the AUR sat at 0.1.4 through
-      # three releases. `actions/checkout` on a `release` event checks out the
-      # TAG, in detached HEAD; the commit-back step then pushed that commit to
-      # `main`, which is rejected outright whenever main has moved on since the
-      # tag -- and the job stopped there, never reaching the step this workflow
-      # exists for. A convenience commit was blocking the publish.
+      # It used to come last, and that is one of the two reasons the AUR sat at
+      # 0.1.4 for so long. `actions/checkout` on a tag -- whether the tag was
+      # pushed or a release was cut from it -- checks out that tag, in detached
+      # HEAD; the commit-back step then pushed that commit to `main`, which is
+      # rejected outright whenever main has moved on since the tag -- and the
+      # job stopped there, never reaching the step this workflow exists for. A
+      # convenience commit was blocking the publish.
       #
       # The action needs nothing but the bumped PKGBUILD in the workspace, so
       # the ordering costs nothing.
@@ -42,7 +55,7 @@ jobs:
           commit_username: asteroidzman
           commit_email: asteroidzman@users.noreply.github.com
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: Update to ${{ github.event.release.tag_name }}
+          commit_message: Update to ${{ github.ref_name }}
           ssh_keyscan_types: rsa,ecdsa,ed25519
           # Left false, matching asteroidz. Turning it on changes what a
           # RELEASE publish does and has not been exercised; and the action's
@@ -68,7 +81,7 @@ jobs:
         continue-on-error: true
         run: |
           BRANCH="${{ github.event.repository.default_branch }}"
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
 
           git config user.name "asteroidzman"
@@ -85,5 +98,5 @@ jobs:
           # from a tree that was bumped before tagging. Nothing to record.
           git diff --cached --quiet && exit 0
 
-          git commit -m "PKGBUILD: bump to ${{ github.event.release.tag_name }}"
+          git commit -m "PKGBUILD: bump to ${{ github.ref_name }}"
           git push origin "aur-bump:$BRANCH"
