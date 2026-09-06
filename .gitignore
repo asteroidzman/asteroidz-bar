@@ -6,3 +6,4 @@ asteroidz-bar/
 *.log
 __pycache__/
 contrib/snitem/snitem
+CLAUDE.md
