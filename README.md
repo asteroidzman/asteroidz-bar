@@ -1561,6 +1561,41 @@ contrib/barconfig-roundtrip-test.sh # parse(render(parse(x))) == parse(x) for
 
 ### The wallpaper browser
 
+`folder=` takes **several folders separated by colons**, the same shape as
+`PATH` and for the same reason: it stays one `key=value` line, so everything
+else reading `wallpaper.conf` keeps working, and a config naming one folder is
+still exactly that.
+
+```
+folder=/home/you/Pictures:/usr/share/backgrounds/gnome
+```
+
+An entry that does not exist is dropped rather than passed to `find`, which
+answers a missing directory with a non-zero exit for the *whole* run — one
+typo, or a drive not mounted yet, would otherwise take the other folders with
+it. Each folder gets its own inotify watch, and all of them feed one debounce.
+
+Two sources are offered on top of whatever is configured, and they are not
+folders of images:
+
+- `/usr/share/wallpapers` holds KDE wallpaper **packages**,
+  `<Name>/contents/images/<width>x<height>.<ext>`, the same picture at up to a
+  dozen sizes. Pointing `folder` at it finds nothing at all — there is not one
+  file at its top level. It is scanned separately and reduced to one image per
+  package, chosen by **nearest to this screen's shape, then largest**. Not
+  simply the largest: the variants are aspect ratios rather than sizes, and
+  ranking by pixel count picks a 32:9 for seven of the forty packages on a
+  stock install, which filled onto a 16:9 output is a centre crop losing more
+  than half the width — a different picture, not a bigger one.
+- `/usr/share/backgrounds` has the GNOME and sway sets one directory down
+  (`gnome/`, `sway/`), so those are named directly in `folder=` rather than
+  needing a scan of their own.
+
+The system packages join the PICKER only, not the rotation. The cycle timer
+walks `available`, which is the configured folders; adding forty packaged
+wallpapers to a rotation somebody set up over their own photographs would be a
+surprise met an hour later, one wallpaper at a time.
+
 The folder is scanned at startup, whenever it changes, and every time the page
 opens — and **watched** in between, in-process (`DirWatcher`, a
 QFileSystemWatcher in the C++ plugin). A poll would be a `find` over the

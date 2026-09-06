@@ -91,12 +91,27 @@ Item {
         // subtitle now -- and this said the same sentence a second time, one
         // line below it.
         FormRow {
-            label: "Folder"
+            // Plural, and separated the way PATH is: one folder is still just
+            // one folder typed in, so nothing about this field changed for
+            // anybody who wants what they had.
+            label: "Folders"
             width: parent.width
             control: Field {
                 value: Wallpaper.folder
                 onCommitted: v => Wallpaper.setKey("folder", v)
             }
+        }
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Several folders separated by colons, like PATH. "
+                + "The system's own wallpapers are always offered as well."
+            color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.6)
+            font.family: Cfg.fontFamily
+            font.pointSize: Cfg.fontSize
+            font.weight: Cfg.fontWeight
+            font.hintingPreference: Font.PreferFullHinting
         }
 
         FormRow {

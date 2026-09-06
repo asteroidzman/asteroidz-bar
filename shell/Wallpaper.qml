@@ -24,6 +24,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import QtQml
 import Asteroidz.Bar
 // Explicit: without it a singleton in this directory resolves through QML's
 // implicit same-directory import, which builds a SECOND instance rather than
@@ -48,7 +49,32 @@ Singleton {
 
     property string path: ""
     property string mode: "fill"
+    // One folder, or several separated by colons -- the same shape as PATH,
+    // and for the same reason: it stays one `key=value` line, so every other
+    // thing that reads wallpaper.conf (the hotkeys, set-wallpaper.sh) keeps
+    // working, and a config naming a single folder is still exactly that.
+    //
+    // Colons rather than commas because a colon is the separator a path list
+    // already has on this system, and neither is legal in a filename often
+    // enough to matter.
     property string folder: Quickshell.env("HOME") + "/Pictures"
+
+    // The folders that actually exist, which is what everything below uses.
+    //
+    // Filtered rather than passed to `find` verbatim: a list is much easier to
+    // get slightly wrong than a single path -- one typo, or a drive that is
+    // not mounted yet -- and `find` answers a missing directory with an error
+    // on stderr and a non-zero exit for the WHOLE run. Dropping the ones that
+    // are not there keeps a mistyped entry from taking the others with it.
+    readonly property var folders: {
+        const out = [];
+        for (const part of root.folder.split(":")) {
+            const p = part.trim();
+            if (p !== "" && Paths.resolve([p]) !== "" && out.indexOf(p) < 0)
+                out.push(p);
+        }
+        return out;
+    }
     property string order: "random"
     property int interval: 3600
 
@@ -73,7 +99,11 @@ Singleton {
 
     Process {
         id: scan
-        command: ["find", root.folder, "-maxdepth", "1", "-type", "f"]
+        // `find` takes any number of roots and applies -maxdepth to each, so
+        // several folders are still ONE scan and one sorted answer -- not a
+        // process per folder racing to write the same list.
+        command: ["find"].concat(root.folders)
+                         .concat(["-maxdepth", "1", "-type", "f"])
         stdout: StdioCollector {
             onStreamFinished: {
                 const out = [];
@@ -82,7 +112,10 @@ Singleton {
                     if (!f)
                         continue;
                     const ext = f.slice(f.lastIndexOf(".") + 1).toLowerCase();
-                    if (root.extensions.indexOf(ext) >= 0)
+                    // Deduplicated, because two entries can reach one file --
+                    // a folder listed twice, or a symlink into another.
+                    if (root.extensions.indexOf(ext) >= 0
+                        && out.indexOf(f) < 0)
                         out.push(f);
                 }
                 out.sort();
@@ -217,12 +250,19 @@ Singleton {
     // watcher over a quiet folder never writes, so every crash-restart cycle
     // stranded one on ~/Pictures. An fd in this process cannot outlive it,
     // and inotify-tools stops being a dependency of any kind.
-    DirWatcher {
-        path: root.folder
-        // A burst is ONE rescan: copying fifty files in emits fifty events,
-        // and a `find` per event would be fifty scans of a directory that is
-        // still being written to.
-        onChanged: debounce.restart()
+    // One watcher per folder, because inotify watches a directory rather than
+    // a list of them. They all feed the same debounce, so a burst across two
+    // folders is still one rescan.
+    Instantiator {
+        model: root.folders
+        delegate: DirWatcher {
+            required property string modelData
+            path: modelData
+            // A burst is ONE rescan: copying fifty files in emits fifty
+            // events, and a `find` per event would be fifty scans of a
+            // directory that is still being written to.
+            onChanged: debounce.restart()
+        }
     }
 
     Timer {
