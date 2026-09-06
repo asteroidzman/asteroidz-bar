@@ -208,15 +208,59 @@ Singleton {
         }
     }
 
-    // What the PICKER offers: the folder, then the system's own.
+    // Everything there is: the folders, then the system's own.
     //
-    // Deliberately not folded into `available`, which is the list the cycle
-    // timer walks. Adding forty packaged wallpapers to a rotation somebody set
-    // up over their own photographs would be a surprise, and a slow one --
-    // they would notice an hour later, one wallpaper at a time. The ask was to
-    // be able to choose them.
+    // This is what the picker shows AND what the cycle draws from, minus the
+    // exclusions below. It was once the picker only, with the packaged
+    // wallpapers kept out of the rotation by a blanket rule -- which was the
+    // right default while there was no way to say "that one, not that one",
+    // and is the wrong one now that there is. A checkbox on a tile the cycle
+    // would never reach either way is a control that lies.
     readonly property var browsable:
         root.available.concat(root.systemAvailable)
+
+    // ── the ones ruled out ──────────────────────────────────────────────────
+    //
+    // An exclusion list rather than an inclusion one, because the answer for
+    // almost every wallpaper is yes: a list of what to leave out stays short
+    // and, more to the point, a wallpaper added to a folder tomorrow is in the
+    // rotation without anyone having to remember to opt it in.
+    //
+    // Colon-separated, like `folder`, so wallpaper.conf keeps its one shape.
+    property string excludedRaw: ""
+
+    readonly property var excluded: {
+        const out = [];
+        for (const part of root.excludedRaw.split(":")) {
+            const p = part.trim();
+            if (p !== "" && out.indexOf(p) < 0)
+                out.push(p);
+        }
+        return out;
+    }
+
+    function isExcluded(file) {
+        return root.excluded.indexOf(file) >= 0;
+    }
+
+    // Excluding the wallpaper that is UP does not take it down. The exclusion
+    // list governs what gets chosen on its own; a file someone picked by hand
+    // is not something the shell should second-guess a minute later.
+    function setExcluded(file, off) {
+        const next = root.excluded.filter(p => p !== file);
+        if (off)
+            next.push(file);
+        next.sort();
+        root.setKey("excluded", next.join(":"));
+    }
+
+    // What the cycle is allowed to land on.
+    //
+    // Not filtered by whether the file still exists: `browsable` is rescanned
+    // and watched, so a deleted file leaves on its own, and an exclusion for a
+    // path that is gone costs nothing and survives the folder coming back.
+    readonly property var eligible:
+        root.browsable.filter(p => !root.isExcluded(p))
 
     // Rescan, on demand.
     //
@@ -341,6 +385,10 @@ Singleton {
     // land in exactly the same way.
     function applyConfig(cfg) {
         if (cfg.folder) root.folder = cfg.folder;
+        // Assigned unconditionally: an empty `excluded=` is how the last
+        // exclusion is cleared, and `if (cfg.excluded)` would skip exactly
+        // that write and leave the shell holding the list it just dropped.
+        root.excludedRaw = cfg.excluded || "";
         if (cfg.order) root.order = cfg.order;
         if (cfg.interval) root.interval = parseInt(cfg.interval) || 3600;
 
@@ -619,15 +667,16 @@ Singleton {
     // read the folder again, so "every 60 minutes" drifted by however long the
     // scan took, every time.
     //
-    // Here it is a timer over a list the shell already maintains: `available`
-    // is scanned on demand AND kept current by the folder watcher, so cycling
-    // never picks a file that has just been deleted.
+    // Here it is a timer over a list the shell already maintains: `eligible`
+    // is `browsable` minus the exclusions, and `browsable` is scanned on demand
+    // AND kept current by the folder watchers, so cycling never picks a file
+    // that has just been deleted.
     Timer {
         id: cycle
         // `static` means never, whatever the interval says -- and an interval
         // of zero has always meant the same thing.
         running: root.order !== "static" && root.interval > 0
-                 && root.available.length > 1
+                 && root.eligible.length > 1
         interval: Math.max(60, root.interval) * 1000
         repeat: true
         onTriggered: root.advance()
@@ -699,7 +748,7 @@ Singleton {
     // thing however it is asked for -- a monitor advancing by a different rule
     // than the timer would be indistinguishable from a bug.
     function pick(from) {
-        const list = available;
+        const list = eligible;
         if (list.length === 0)
             return "";
         if (list.length === 1)

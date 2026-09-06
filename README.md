@@ -1591,10 +1591,20 @@ folders of images:
   (`gnome/`, `sway/`), so those are named directly in `folder=` rather than
   needing a scan of their own.
 
-The system packages join the PICKER only, not the rotation. The cycle timer
-walks `available`, which is the configured folders; adding forty packaged
-wallpapers to a rotation somebody set up over their own photographs would be a
-surprise met an hour later, one wallpaper at a time.
+Every tile carries a tick, and unticking one rules that wallpaper out of the
+rotation: the cycle draws from `eligible`, which is everything found minus
+`excluded=` — another colon list, written by the tick.
+
+It is an exclusion list rather than an inclusion one because the answer for
+almost every wallpaper is yes. The list stays short, and a photo dropped into a
+folder tomorrow is in the rotation without anyone having to remember to opt it
+in.
+
+An unticked tile is dimmed but stays in the grid. A tile that vanished when you
+unticked it would take its own tick with it, and there would be no way back to
+it. Clicking one still sets it: the list governs what gets chosen *on its own*,
+and excluding the wallpaper that is currently up does not take it down — a file
+somebody picked by hand is not the shell's to second-guess a minute later.
 
 The folder is scanned at startup, whenever it changes, and every time the page
 opens — and **watched** in between, in-process (`DirWatcher`, a

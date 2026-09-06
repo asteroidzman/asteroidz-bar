@@ -338,10 +338,64 @@ Item {
                     border.color: Cfg.focusBg
                 }
 
+                // Ruled out of the rotation: still here, still clickable,
+                // just visibly not in the running. Dimmed rather than removed
+                // -- a tile that vanishes when you untick it takes the tick
+                // with it, and there is then no way back to it.
+                Rectangle {
+                    anchors.fill: parent
+                    visible: Wallpaper.isExcluded(modelData)
+                    color: Qt.rgba(0, 0, 0, 0.55)
+                }
+
+                // The tick. Top-left, away from the selection border's corner
+                // and out of the way of the thumbnail's subject, which tends
+                // to the middle.
+                Rectangle {
+                    id: tick
+                    x: 6
+                    y: 6
+                    width: 22
+                    height: 22
+                    radius: 4
+                    color: Wallpaper.isExcluded(modelData)
+                        ? Qt.rgba(0, 0, 0, 0.55) : Cfg.focusBg
+                    border.width: 1
+                    border.color: Qt.rgba(1, 1, 1, 0.45)
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: !Wallpaper.isExcluded(modelData)
+                        text: "\u2713"
+                        color: Cfg.fg
+                        font.family: Cfg.fontFamily
+                        font.pointSize: Cfg.fontSize
+                        font.weight: Cfg.fontWeight
+                        font.hintingPreference: Font.PreferFullHinting
+                    }
+
+                    TapHandler {
+                        onTapped: Wallpaper.setExcluded(
+                            modelData, !Wallpaper.isExcluded(modelData))
+                    }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                }
+
                 TapHandler {
-                    onTapped: page.target === ""
-                        ? Wallpaper.setKey("wallpaper", modelData)
-                        : Wallpaper.setMonitorWallpaper(page.target, modelData)
+                    // The tick is a handler inside this one's bounds, and both
+                    // would fire: ticking a box would also set the wallpaper.
+                    // Asked by position rather than by fighting the grab, which
+                    // is the same answer with fewer moving parts.
+                    onTapped: eventPoint => {
+                        const p = eventPoint.position;
+                        if (p.x >= tick.x && p.x <= tick.x + tick.width
+                            && p.y >= tick.y && p.y <= tick.y + tick.height)
+                            return;
+                        if (page.target === "")
+                            Wallpaper.setKey("wallpaper", modelData);
+                        else
+                            Wallpaper.setMonitorWallpaper(page.target, modelData);
+                    }
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
             }
