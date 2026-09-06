@@ -277,7 +277,11 @@ Item {
             interactive: false
             cellWidth: Math.floor(width / 4)
             cellHeight: Math.floor(cellWidth * 9 / 16)
-            model: Wallpaper.available
+            // The folder AND the system's packaged wallpapers -- the message
+            // below stays bound to the FOLDER, so "no images in that folder"
+            // still answers a mistyped path instead of being hidden by forty
+            // tiles that came from somewhere else.
+            model: Wallpaper.browsable
 
             delegate: Item {
                 required property string modelData

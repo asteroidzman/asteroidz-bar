@@ -91,6 +91,100 @@ Singleton {
         }
     }
 
+    // ── the system's own wallpapers ─────────────────────────────────────────
+    //
+    // /usr/share/wallpapers is not a folder of images, it is a folder of KDE
+    // wallpaper PACKAGES: `<Name>/contents/images/<width>x<height>.<ext>`, the
+    // same picture at up to a dozen sizes, with a metadata.json beside it.
+    // Pointing `folder` at it finds nothing whatsoever -- the scan above is
+    // `-maxdepth 1 -type f` and there is not one file at the top level.
+    //
+    // Hence a scan of its own, reduced to ONE image per package: twelve tiles
+    // of the same picture is not a selection.
+    readonly property string systemFolder: "/usr/share/wallpapers"
+
+    // Which of a package's variants that one is.
+    //
+    // Not simply the biggest, because the variants are ASPECT RATIOS and not
+    // merely sizes -- Air ships the same picture at 32:9, at 16:9, and as a
+    // phone portrait. Ranking by pixel count picked the 7680x2160 for seven of
+    // the forty packages installed here, and a 32:9 filled onto a 16:9 output
+    // is a centre crop throwing away more than half the width: a different
+    // picture, not a bigger one.
+    //
+    // So: nearest this screen's shape first, largest second. Falling back to
+    // 16:9 rather than to nothing, since that is the shape both the packages
+    // and the screens overwhelmingly are.
+    readonly property real preferredAspect: {
+        const s = Quickshell.screens[0];
+        return s && s.height > 0 ? s.width / s.height : 16 / 9;
+    }
+
+    // Guarded so a machine with no packaged wallpapers gets an empty list
+    // rather than a `find: ... No such file or directory` in the log on every
+    // rescan -- which is every time the settings page opens.
+    readonly property bool hasSystemFolder:
+        Paths.resolve([root.systemFolder]) !== ""
+
+    property var systemAvailable: []
+
+    Process {
+        id: systemScan
+        // `images`, not `images_dark`. The dark variant is the same package,
+        // so taking both would put two of everything in the grid for the third
+        // of packages that ship one, and nothing here knows which the desktop
+        // is asking for.
+        command: ["find", root.systemFolder, "-mindepth", "4", "-maxdepth", "4",
+                  "-type", "f", "-path", "*/contents/images/*"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const best = {};
+                for (const line of text.split("\n")) {
+                    const f = line.trim();
+                    if (!f)
+                        continue;
+                    const ext = f.slice(f.lastIndexOf(".") + 1).toLowerCase();
+                    if (root.extensions.indexOf(ext) < 0)
+                        continue;
+                    const pkg = f.slice(0, f.indexOf("/contents/"));
+                    const m = /\/(\d+)x(\d+)\.[^/]+$/.exec(f);
+                    const w = m ? parseInt(m[1]) : 0;
+                    const h = m ? parseInt(m[2]) : 0;
+                    // A name that is not WxH is ranked worst rather than
+                    // dropped: a package shipping `background.png`, or
+                    // `1920x1080@2x.png`, still has exactly one wallpaper in
+                    // it, and losing the package entirely is the worse answer.
+                    const off = h > 0
+                        ? Math.abs(w / h - root.preferredAspect) : Infinity;
+                    const px = w * h;
+                    const cur = best[pkg];
+                    // The tolerance is what makes this "nearest shape, then
+                    // biggest" rather than "nearest shape" alone: 2560x1600
+                    // and 1920x1200 are the same shape, and without it which
+                    // one won would come down to the order find walked them.
+                    if (!cur || off < cur.off - 0.01
+                        || (Math.abs(off - cur.off) <= 0.01 && px > cur.px))
+                        best[pkg] = { path: f, off: off, px: px };
+                }
+                const out = [];
+                for (const pkg in best)
+                    out.push(best[pkg].path);
+                out.sort();
+                root.systemAvailable = out;
+            }
+        }
+    }
+
+    // What the PICKER offers: the folder, then the system's own.
+    //
+    // Deliberately not folded into `available`, which is the list the cycle
+    // timer walks. Adding forty packaged wallpapers to a rotation somebody set
+    // up over their own photographs would be a surprise, and a slow one --
+    // they would notice an hour later, one wallpaper at a time. The ask was to
+    // be able to choose them.
+    readonly property var browsable:
+        root.available.concat(root.systemAvailable)
+
     // Rescan, on demand.
     //
     // `onFolderChanged` alone was not enough, and the failure was total rather
@@ -101,6 +195,8 @@ Singleton {
     // selector doesn't refresh from the folder"; it had never refreshed once.
     function rescan() {
         scan.running = true;
+        if (root.hasSystemFolder)
+            systemScan.running = true;
     }
 
     onFolderChanged: rescan()
