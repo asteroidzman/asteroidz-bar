@@ -254,38 +254,39 @@ Singleton {
     readonly property int defaultTimeout:
         Cfg.notifyTimeout
 
-    // Whether "until dismissed" is granted.
+    // How long Critical gets.
     //
-    // 0 means exactly that in the spec, and it used to be honoured from
-    // whoever asked. Browsers ask constantly -- every web notification Vivaldi
-    // and Chrome forward arrives with expire_timeout 0 -- so the screen filled
-    // with cards that never left and had to be clicked away one at a time.
-    // Reported as "notifications never disappear", and everything else about
-    // expiry was working: a sender that says 0 is the only way to reach this,
-    // and the tools you would reach for to check (notify-send, gdbus) do not
-    // say it.
+    // Longer than the rest, and still finite. Four times the configured
+    // timeout: twenty seconds at the default five, which is long enough to
+    // look up at and short enough to end.
+    readonly property int criticalTimeout: defaultTimeout * 4
+
+    // No popup is permanent, whoever asks and at whatever urgency.
     //
-    // Granted to Critical alone now, which is the same answer this file
-    // already gives one line down for a sender that specifies nothing: the one
-    // urgency the spec reserves for something that has gone wrong outlives the
-    // others. A password prompt or a failed backup is still covered -- that is
-    // what Critical is for -- and a web page wanting permanence at normal
-    // urgency is not making the same claim.
+    // expire_timeout 0 means "until dismissed" in the spec, and this honoured
+    // it -- first from anybody, then from Critical alone. Both were wrong, and
+    // the second was wrong in a way the first hid: a Chromium page that sets
+    // requireInteraction sends critical AND 0, so restricting permanence to
+    // Critical changed nothing about the notifications actually stuck on the
+    // screen. Three of them, at once, over a terminal.
     //
-    // Nothing is lost by refusing: the popup is a thing with a lifetime and
-    // the centre is a thing with a length. An expired popup is still in the
-    // centre, still counted by the bell, waiting to be dealt with. That is the
-    // same distinction do-not-disturb rests on further down.
+    // The argument for refusing was already written one paragraph down and I
+    // did not follow it far enough. A popup is a thing with a lifetime and the
+    // centre is a thing with a length. An expired popup has not been thrown
+    // away: it is in the centre, counted by the bell, waiting to be dealt with
+    // -- which is the same reasoning do-not-disturb rests on, and it does not
+    // stop being true because the sender said the word critical. What "until
+    // dismissed" really asks for is that the notification survive until it is
+    // read, and the centre is what provides that. The screen is not storage.
+    //
+    // A sender that names a positive timeout is still believed exactly.
     function timeoutFor(n) {
         if (!n)
             return defaultTimeout;
-        const critical = n.urgency === NotificationUrgency.Critical;
-        if (n.expireTimeout === 0)
-            return critical ? 0 : defaultTimeout;
         if (n.expireTimeout > 0)
             return n.expireTimeout;
-        // Critical outlives the others when nobody specified either.
-        return critical ? 0 : defaultTimeout;
+        return n.urgency === NotificationUrgency.Critical
+            ? criticalTimeout : defaultTimeout;
     }
 
     // ── audible notifications ───────────────────────────────────────────────
