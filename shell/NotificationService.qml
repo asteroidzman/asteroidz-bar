@@ -79,7 +79,14 @@ Singleton {
             // the shell segfaulted inside QQmlIncubator. Not a rare race
             // either: any application that withdraws its own notification does
             // exactly this.
-            n.closed.connect(function() { root.hidePopup(n); });
+            root.arrivedAt[n.id] = Date.now();
+
+            n.closed.connect(function() {
+                root.hidePopup(n);
+                // Or the map outlives every notification in it. The history is
+                // capped; this is not, and ids are reused.
+                delete root.arrivedAt[n.id];
+            });
 
             // The history is BOUNDED here, on arrival, because nothing else
             // bounds it: a tracked notification lives until something
@@ -127,6 +134,70 @@ Singleton {
     }
 
     readonly property int count: list.length
+
+    // ── when each one arrived ───────────────────────────────────────────────
+    //
+    // Kept here because there is nowhere else to keep it: a Notification is a
+    // C++ object from Quickshell and carries no time of any kind -- no `time`,
+    // no `timestamp`, nothing derived from when the sender spoke. The
+    // freedesktop spec does not carry one over the wire either, so the moment
+    // the server hands it over is the only timestamp that exists, and this is
+    // the only place that sees it.
+    //
+    // A plain object keyed by id, rather than a property on the notification:
+    // assigning an undeclared property to a QObject from QML is an error, not
+    // an extension.
+    property var arrivedAt: ({})
+
+    // Re-read by `timeText`, so "3m" becomes "4m" without anything else
+    // happening. Half a minute is the coarsest tick that never shows a stale
+    // minute for long, and it runs only while there is something to age --
+    // a shell with an empty centre schedules no wakeups at all.
+    property int tick: 0
+    Timer {
+        running: root.count > 0
+        interval: 30000
+        repeat: true
+        onTriggered: root.tick++
+    }
+
+    // Twelve-hour or twenty-four, taken from the clock the bar is already
+    // showing rather than from a setting of its own. Somebody who reads
+    // "%I:%M %p" up there does not want "14:32" down here, and a second key
+    // for the same question is a second thing to keep in step.
+    readonly property bool twelveHour:
+        /%[Ilp]/.test(Cfg.clockFormat)
+
+    // "now", "12m", "14:32", "Sat 14:32".
+    //
+    // Relative while the number is small enough to mean something -- "12m" is
+    // how long ago, which is the question in the first hour -- and absolute
+    // after that, because "19h" makes a reader do arithmetic to recover a
+    // clock time they could simply have been told.
+    function timeText(n) {
+        void root.tick;
+        if (!n)
+            return "";
+        const at = root.arrivedAt[n.id];
+        // Restored across a shell reload, so this shell never saw it arrive.
+        // Nothing is better than a time that is really the reload's.
+        if (!at)
+            return "";
+
+        const d = new Date(at);
+        const age = Date.now() - at;
+        if (age < 60000)
+            return "now";
+        if (age < 3600000)
+            return Math.floor(age / 60000) + "m";
+
+        const clock = Qt.formatDateTime(d, root.twelveHour ? "h:mm AP" : "HH:mm");
+        const now = new Date();
+        const sameDay = d.getFullYear() === now.getFullYear()
+            && d.getMonth() === now.getMonth()
+            && d.getDate() === now.getDate();
+        return sameDay ? clock : Qt.formatDateTime(d, "ddd ") + clock;
+    }
 
     // Bumped to re-evaluate `list`, which reads through an ObjectModel whose
     // contents change without the property itself being reassigned.

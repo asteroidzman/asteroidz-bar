@@ -92,7 +92,7 @@ Rectangle {
                 font.weight: Cfg.fontWeight
                 id: appLabel
                 anchors.left: parent.left
-                anchors.right: closeBtn.left
+                anchors.right: stamp.left
                 anchors.rightMargin: 6
                 anchors.verticalCenter: parent.verticalCenter
                 elide: Text.ElideRight
@@ -113,6 +113,28 @@ Rectangle {
                 color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
                 font.family: Cfg.fontFamily
                 font.pointSize: Cfg.fontSizeSmall
+                font.hintingPreference: Font.PreferFullHinting
+            }
+
+            // When it arrived, between the sender's name and the way out.
+            //
+            // Its own label rather than appended to the name, because the name
+            // elides and the time must not: a long sender is the case where
+            // "when" is most worth knowing, and the two glued together would
+            // lose the half that does not repeat anywhere else on the card.
+            Text {
+                id: stamp
+                anchors.right: closeBtn.left
+                anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                text: NotificationService.timeText(root.notification)
+                // Nothing at all for a notification this shell did not see
+                // arrive, rather than a gap where a time should be.
+                visible: text !== ""
+                color: Qt.rgba(Cfg.fg.r, Cfg.fg.g, Cfg.fg.b, Cfg.fg.a * 0.55)
+                font.family: Cfg.fontFamily
+                font.pointSize: Cfg.fontSizeSmall
+                font.weight: Cfg.fontWeight
                 font.hintingPreference: Font.PreferFullHinting
             }
 
