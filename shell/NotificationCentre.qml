@@ -32,12 +32,41 @@ Item {
             width: parent.width
             height: Math.max(28, Math.round(Cfg.fontPixelSize * 1.6))
 
+            // The count is its own label, and that is the point of splitting
+            // them: the word is what can be given up when the header is tight,
+            // the number is not. Together in one string, eliding ate the count
+            // first -- "Notifications…" -- which throws away the half a reader
+            // cannot reconstruct by looking.
+            Text {
+                id: countLabel
+                anchors.right: actions.left
+                anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                visible: NotificationService.count > 0
+                text: "(" + NotificationService.count + ")"
+                color: Cfg.fg
+                font.family: Cfg.fontFamily
+                font.pointSize: Cfg.fontSize
+                font.weight: Cfg.fontWeightEmphasis
+                font.hintingPreference: Font.PreferFullHinting
+            }
+
             Text {
                 anchors.left: parent.left
+                // Bounded by whatever is to its right, and elided.
+                //
+                // Anchored to the left edge alone, this drew its full natural
+                // width regardless of what was beside it: two siblings in an
+                // Item, each positioned against a different edge, do not push
+                // one another. At the panel's own default width the title ran
+                // straight under "quiet" and "clear all" -- title and buttons
+                // both drawn, overlapping, legible as neither. The card's
+                // header has always done it this way.
+                anchors.right: countLabel.visible ? countLabel.left : actions.left
+                anchors.rightMargin: countLabel.visible ? 5 : 8
+                elide: Text.ElideRight
                 anchors.verticalCenter: parent.verticalCenter
-                text: NotificationService.count === 0
-                      ? "Notifications"
-                      : "Notifications (" + NotificationService.count + ")"
+                text: "Notifications"
                 color: Cfg.fg
                 font.family: Cfg.fontFamily
                 font.pointSize: Cfg.fontSize
@@ -46,6 +75,7 @@ Item {
             }
 
             Row {
+                id: actions
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 6
