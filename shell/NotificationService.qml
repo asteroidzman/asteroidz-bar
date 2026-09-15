@@ -249,24 +249,43 @@ Singleton {
 
     // How long a popup stays when the sender does not say.
     //
-    // The sender's own expireTimeout wins when it sets one: an application
-    // that says 2 seconds means 2 seconds. 0 means "until dismissed" per the
-    // spec, and that is honoured rather than overridden -- a password prompt
-    // or a failed backup is exactly the kind of thing that sets it.
+    // The sender's own expireTimeout wins when it sets a positive one: an
+    // application that says 2 seconds means 2 seconds.
     readonly property int defaultTimeout:
         Cfg.notifyTimeout
 
+    // Whether "until dismissed" is granted.
+    //
+    // 0 means exactly that in the spec, and it used to be honoured from
+    // whoever asked. Browsers ask constantly -- every web notification Vivaldi
+    // and Chrome forward arrives with expire_timeout 0 -- so the screen filled
+    // with cards that never left and had to be clicked away one at a time.
+    // Reported as "notifications never disappear", and everything else about
+    // expiry was working: a sender that says 0 is the only way to reach this,
+    // and the tools you would reach for to check (notify-send, gdbus) do not
+    // say it.
+    //
+    // Granted to Critical alone now, which is the same answer this file
+    // already gives one line down for a sender that specifies nothing: the one
+    // urgency the spec reserves for something that has gone wrong outlives the
+    // others. A password prompt or a failed backup is still covered -- that is
+    // what Critical is for -- and a web page wanting permanence at normal
+    // urgency is not making the same claim.
+    //
+    // Nothing is lost by refusing: the popup is a thing with a lifetime and
+    // the centre is a thing with a length. An expired popup is still in the
+    // centre, still counted by the bell, waiting to be dealt with. That is the
+    // same distinction do-not-disturb rests on further down.
     function timeoutFor(n) {
         if (!n)
             return defaultTimeout;
+        const critical = n.urgency === NotificationUrgency.Critical;
         if (n.expireTimeout === 0)
-            return 0;                       // until dismissed, deliberately
+            return critical ? 0 : defaultTimeout;
         if (n.expireTimeout > 0)
             return n.expireTimeout;
-        // Critical outlives the others when nobody specified. It is the one
-        // urgency the spec reserves for something that has gone wrong.
-        return n.urgency === NotificationUrgency.Critical
-            ? 0 : defaultTimeout;
+        // Critical outlives the others when nobody specified either.
+        return critical ? 0 : defaultTimeout;
     }
 
     // ── audible notifications ───────────────────────────────────────────────
