@@ -149,18 +149,6 @@ Singleton {
     // an extension.
     property var arrivedAt: ({})
 
-    // Re-read by `timeText`, so "3m" becomes "4m" without anything else
-    // happening. Half a minute is the coarsest tick that never shows a stale
-    // minute for long, and it runs only while there is something to age --
-    // a shell with an empty centre schedules no wakeups at all.
-    property int tick: 0
-    Timer {
-        running: root.count > 0
-        interval: 30000
-        repeat: true
-        onTriggered: root.tick++
-    }
-
     // Twelve-hour or twenty-four, taken from the clock the bar is already
     // showing rather than from a setting of its own. Somebody who reads
     // "%I:%M %p" up there does not want "14:32" down here, and a second key
@@ -168,14 +156,21 @@ Singleton {
     readonly property bool twelveHour:
         /%[Ilp]/.test(Cfg.clockFormat)
 
-    // "now", "12m", "14:32", "Sat 14:32".
+    // The time it arrived: "14:32", or "Sat 14:32" if that was another day.
     //
-    // Relative while the number is small enough to mean something -- "12m" is
-    // how long ago, which is the question in the first hour -- and absolute
-    // after that, because "19h" makes a reader do arithmetic to recover a
-    // clock time they could simply have been told.
+    // A clock time and not an age. This read "now", then "12m", then a clock
+    // time once an hour had passed, which is the shape a chat application uses
+    // -- and it is the wrong one here, because "now" is not a timestamp. It is
+    // a claim about the present that stops being true while you look at it,
+    // and it answers "how long ago" when the question a notification centre is
+    // asked is "when".
+    //
+    // Being fixed is the other half of the argument. An age has to be
+    // recomputed to stay honest, so the old version carried a timer ticking
+    // every thirty seconds for as long as anything sat in the centre, and a
+    // label could still be half a minute stale between ticks. A time that
+    // never changes needs neither the timer nor the excuse.
     function timeText(n) {
-        void root.tick;
         if (!n)
             return "";
         const at = root.arrivedAt[n.id];
@@ -185,12 +180,6 @@ Singleton {
             return "";
 
         const d = new Date(at);
-        const age = Date.now() - at;
-        if (age < 60000)
-            return "now";
-        if (age < 3600000)
-            return Math.floor(age / 60000) + "m";
-
         const clock = Qt.formatDateTime(d, root.twelveHour ? "h:mm AP" : "HH:mm");
         const now = new Date();
         const sameDay = d.getFullYear() === now.getFullYear()
