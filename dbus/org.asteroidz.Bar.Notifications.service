@@ -1,0 +1,25 @@
+# D-Bus activation for org.freedesktop.Notifications.
+#
+# This does not START the shell, and that is the whole design. Activation
+# normally means "run Exec to provide this name", but the thing that provides
+# it here is a session shell the compositor launches once -- so an Exec that
+# ran asteroidz-bar would put a SECOND bar and a second wallpaper on screen
+# every time an application notified while the first one was still coming up.
+#
+# It waits instead, which is what KDE's plasma_waitforname does for exactly
+# this reason. D-Bus holds the caller's Notify until the name is acquired by
+# whoever acquires it, so a notification sent in the seconds between login and
+# the bar claiming the name is delivered rather than answered with
+# ServiceUnknown. Nothing is started that was not already starting.
+#
+# `gdbus wait` rather than a shim of our own: it is one glib2 binary already on
+# every system this runs on, and a program whose entire job is to wait for a
+# bus name is not worth writing twice.
+#
+# The timeout bounds the failure. Without one, an application notifying on a
+# machine where the shell is genuinely not running would block forever instead
+# of being told. Thirty seconds is longer than a login takes and shorter than
+# anybody's patience.
+[D-BUS Service]
+Name=org.freedesktop.Notifications
+Exec=/usr/bin/gdbus wait --session --timeout 30 org.freedesktop.Notifications

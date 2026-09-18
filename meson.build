@@ -90,6 +90,20 @@ install_data(
 # resolves to /usr/share/asteroidz-bar/clipboard.svg through that last root.
 install_data(['assets/clipboard.svg'], install_dir: qmldir)
 
+# D-Bus activation for org.freedesktop.Notifications -- see the file's own
+# header for why its Exec waits rather than starting anything.
+#
+# Deliberately NOT named org.freedesktop.Notifications.service: the file name
+# is free-form and only the Name= inside it binds, so naming it after this
+# package keeps it from colliding on disk with the KDE and GNOME files that
+# claim the same bus name. Those do collide with each other in MEANING -- a
+# system carrying two of them lets D-Bus pick, and on this desktop the KDE one
+# is what answers today.
+install_data(
+	['dbus/org.asteroidz.Bar.Notifications.service'],
+	install_dir: get_option('datadir') / 'dbus-1' / 'services',
+)
+
 install_data(
 	[
 		'shell/modules/qmldir',
