@@ -167,6 +167,16 @@ Singleton {
     readonly property int notifyHistoryLimit: num(notify, "history", 300)
     readonly property bool notifyDnd: flag(notify, "dnd", false)
 
+    // MPD.
+    //
+    // The socket and not host:port, because that is what Quickshell's Socket
+    // can open -- and because a socket under XDG_RUNTIME_DIR belongs to this
+    // user where 6600 is open to anything on the machine. Arch's mpd.service
+    // makes this one without being asked.
+    readonly property var mpd: BarConfig.groups.mpd || ({})
+    readonly property string mpdSocket: str(mpd, "socket",
+        (Quickshell.env("XDG_RUNTIME_DIR") || "/run/user/1000") + "/mpd/socket")
+
     // The clipboard.
     //
     // Wider than the notification centre, because what is being scanned here

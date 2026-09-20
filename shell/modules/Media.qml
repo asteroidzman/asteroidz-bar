@@ -20,6 +20,10 @@ Row {
 
     spacing: Cfg.moduleSpacing
 
+    // The bar, for the MPD panel the track pill opens. Injected by
+    // ModuleLoader the way every other panel-opening module takes it.
+    property var bar: null
+
     // The player to follow: whichever one is actually playing, else the first
     // PAUSED one. Picking "the first" outright means a paused browser tab
     // outranks the music.
@@ -48,14 +52,53 @@ Row {
     }
 
     readonly property bool have: player !== null
-    readonly property bool playing:
-        have && player.playbackState === MprisPlaybackState.Playing
+
+    // MPD without a bridge.
+    //
+    // mpd-mpris is what puts MPD on MPRIS, and while it runs the branch above
+    // finds it like any other player. It is a separate service that can be
+    // absent, disabled or dead, and MPD playing into a module that has hidden
+    // itself is the worst of the three -- the bar says nothing is playing
+    // while the room disagrees, and the MPD panel this pill opens cannot be
+    // reached at all, because the pill is not there to click.
+    //
+    // So MPD is a source in its own right, and only when MPRIS has nobody:
+    // with the bridge running, following BOTH would draw the same track twice
+    // and leave two sets of transport buttons fighting over one daemon.
+    readonly property bool mpdOnly: !have && MpdService.connected
+    readonly property bool anySource: have || mpdOnly
+
+    readonly property bool playing: mpdOnly
+        ? MpdService.playing
+        : (have && player.playbackState === MprisPlaybackState.Playing)
+
+    // What the pill says, from whichever source is in force.
+    readonly property string sourceTitle: mpdOnly
+        ? (MpdService.currentSong.Title || "")
+        : (have ? (player.trackTitle || "") : "")
+    readonly property string sourceArtist: mpdOnly
+        ? (MpdService.currentSong.Artist || "")
+        : (have ? (player.trackArtist || "") : "")
+
+    // One place the transport aims at, so three buttons do not each branch.
+    function goPrevious() {
+        if (mpdOnly) MpdService.previous();
+        else if (have) player.previous();
+    }
+    function goNext() {
+        if (mpdOnly) MpdService.next();
+        else if (have) player.next();
+    }
+    function goToggle() {
+        if (mpdOnly) MpdService.toggle();
+        else if (have) player.togglePlaying();
+    }
 
     // `shown`, not `visible` -- see ModuleLoader. This is the module that made
     // it necessary: idle, it still measures its transport controls, its pinned
     // title and its visualiser, so its slot reserved 390px of nothing and the
     // centre panel drew three times wider than the clock inside it.
-    property bool shown: have
+    property bool shown: anySource
 
     readonly property int leadTrim: 0
     readonly property int trailTrim: Cfg.pillPadding
@@ -72,7 +115,7 @@ Row {
         iconScale: 0.66
         paddingX: 0
         fixedWidth: iconSize + 2 * Cfg.borderWidth + 1
-        onClicked: if (root.have) root.player.previous()
+        onClicked: root.goPrevious()
     }
 
     Pill {
@@ -83,7 +126,7 @@ Row {
         iconScale: 0.66
         paddingX: 0
         fixedWidth: iconSize + 2 * Cfg.borderWidth + 1
-        onClicked: if (root.have) root.player.togglePlaying()
+        onClicked: root.goToggle()
     }
 
     Pill {
@@ -92,7 +135,7 @@ Row {
         iconScale: 0.66
         paddingX: 0
         fixedWidth: iconSize + 2 * Cfg.borderWidth + 1
-        onClicked: if (root.have) root.player.next()
+        onClicked: root.goNext()
     }
 
     // ── the track ───────────────────────────────────────────────────────────
@@ -101,10 +144,10 @@ Row {
         id: track
 
         text: {
-            if (!root.have)
+            if (!root.anySource)
                 return "";
-            const t = root.player.trackTitle || "";
-            const a = root.player.trackArtist || "";
+            const t = root.sourceTitle;
+            const a = root.sourceArtist;
             return a ? t + " • " + a : t;
         }
         // Pinned AND capped at the same width. Pinned so the bar does not
@@ -115,7 +158,24 @@ Row {
         // across the clock and the weather beside it.
         fixedWidth: Cfg.mediaWidth
         maxWidth: Cfg.mediaWidth
-        onClicked: if (root.have) root.player.togglePlaying()
+
+        // Left toggles, right opens MPD.
+        //
+        // The transport pills beside this one already toggle, so a left click
+        // here doing it again is the convenience it always was. The panel goes
+        // on the right button because it is about ONE player: MPD is a library
+        // with a daemon in front of it, and the queue, the database and the
+        // playlists have nowhere else to be reached from. A browser tab has no
+        // such thing and would open an empty panel, so the entry is only there
+        // when MPD is actually answering.
+        onClicked: button => {
+            if (button === Qt.RightButton) {
+                if (MpdService.connected && root.bar)
+                    root.bar.showPanel(track, mpdPanel);
+                return;
+            }
+            root.goToggle();
+        }
 
         // No glyph of its own. It used to fall back to a play/pause icon
         // whenever the spectrum was not showing, which put a SECOND play
@@ -131,6 +191,17 @@ Row {
         // the audio shifts the title sideways every time a track pauses or a
         // passage goes quiet.
         leadingSpace: viz.showing ? viz.implicitWidth : 0
+
+        // `bar` resolves in this Component rather than inside MpdPanel.qml,
+        // the same arrangement AudioPanel and the notification centre use: a
+        // Component captures the scope it is DECLARED in, and the panel is a
+        // separate file that knows nothing about the bar hosting it.
+        Component {
+            id: mpdPanel
+            MpdPanel {
+                onCloseRequested: bar.closeMenu()
+            }
+        }
 
         Spectrum {
             id: viz

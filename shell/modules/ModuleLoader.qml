@@ -177,7 +177,7 @@ Row {
 
     Component {
         id: mediaComponent
-        Media {}
+        Media { bar: root.bar }
     }
 
     Component {

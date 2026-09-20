@@ -31,6 +31,9 @@ Picker 1.0 Picker.qml
 Toggle 1.0 Toggle.qml
 Slider 1.0 Slider.qml
 Field 1.0 Field.qml
+MpdList 1.0 MpdList.qml
+MpdPanel 1.0 MpdPanel.qml
+singleton MpdService 1.0 MpdService.qml
 singleton NotificationService 1.0 NotificationService.qml
 NotificationCard 1.0 NotificationCard.qml
 NotificationCentre 1.0 NotificationCentre.qml
