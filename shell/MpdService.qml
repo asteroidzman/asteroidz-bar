@@ -495,6 +495,27 @@ Singleton {
         });
     }
     function loadPlaylist(name) { send("load " + q(name)); }
+
+    // Play a whole playlist: what clicking one means.
+    //
+    // REPLACES the queue rather than appending to it, and that is the point.
+    // `load` alone adds the tracks behind whatever is already queued, so a
+    // click would leave the playlist waiting its turn and nothing audibly
+    // happening -- which reads as a click that did not work. Somebody choosing
+    // a playlist is choosing what to listen to now.
+    //
+    // Three commands rather than one, in order, because MPD has no "replace
+    // and play" -- and they arrive in order because this connection carries
+    // one command at a time. `play 0` only after the load is known to have
+    // worked: playing position 0 of a queue that failed to fill is either
+    // silence or, worse, whatever happened to be there.
+    function playPlaylist(name) {
+        send("clear");
+        send("load " + q(name), ok => {
+            if (ok)
+                send("play 0");
+        });
+    }
     function savePlaylist(name) { send("save " + q(name)); }
     function removePlaylist(name) { send("rm " + q(name)); }
 

@@ -364,7 +364,13 @@ Item {
             // not two identical rows. A stored one has no second line: its
             // name is unique by construction.
             subOf: p => p.stored ? "" : p.where
-            onActivated: i => root.showPlaylist(MpdService.allPlaylists[i])
+            // A click PLAYS it. Opening it to look inside is the arrow, which
+            // is the less common of the two: somebody who picked a playlist
+            // out of a list has already decided what they want to hear.
+            onActivated: i =>
+                MpdService.playPlaylist(MpdService.allPlaylists[i].path)
+            actionGlyph: "›"
+            onAction: i => root.showPlaylist(MpdService.allPlaylists[i])
         }
 
         MpdList {
