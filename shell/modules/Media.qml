@@ -65,7 +65,19 @@ Row {
     // So MPD is a source in its own right, and only when MPRIS has nobody:
     // with the bridge running, following BOTH would draw the same track twice
     // and leave two sets of transport buttons fighting over one daemon.
+    // Connected is NOT the same as playing, and conflating them put this
+    // module back on the bar permanently: MpdService.connected says the daemon
+    // answered, which it does from boot to shutdown whether or not anything is
+    // loaded. The pill sat there with dead transport buttons, an empty title
+    // and a flat visualiser -- the exact failure the MPRIS branch above spells
+    // out, reintroduced one property lower.
+    //
+    // So the same test MPRIS gets: playing, or paused with a track actually
+    // loaded. Stopped means MPD is running and has nothing to say, and the
+    // module collapses its slot like any other idle module.
     readonly property bool mpdOnly: !have && MpdService.connected
+        && (MpdService.playing || MpdService.paused)
+        && MpdService.currentSong.file !== undefined
     readonly property bool anySource: have || mpdOnly
 
     readonly property bool playing: mpdOnly
