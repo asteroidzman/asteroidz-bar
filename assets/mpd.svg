@@ -1,0 +1,36 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- A stack of records with a note over it: the MPD module's pill.
+
+     Solid white, filled paths, no strokes, for the reason clipboard.svg gives
+     at length: the bar tints icons through a ColorOverlay, which paints the
+     alpha channel and throws the source colour away, so only coverage
+     survives. A stroked outline tints its strokes and the gaps between them
+     alike and reads as a blob at pill size.
+
+     A LIBRARY rather than a play triangle, and that is the whole point of the
+     drawing. The transport already has a play glyph three pills along, and
+     this button does not start anything: it opens a queue, a database and the
+     saved playlists. An icon that promised playback would be the second play
+     button on one bar, which is exactly the mistake the media pill's own
+     comment records making once.
+
+     Discs as rings (evenodd), because a filled circle at 24px is a dot. Two
+     of them, offset, to say "more than one" without a third that would merge
+     into grey at the size this is drawn.
+
+     No double hyphen anywhere in here. It is not legal inside an XML comment
+     and rsvg refuses the whole file. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- the disc behind, a ring -->
+  <path fill="#ffffff" fill-rule="evenodd"
+        d="M8.4 8.2a6.3 6.3 0 1 1 0 12.6 6.3 6.3 0 0 1 0-12.6zm0 1.9a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8z"/>
+
+  <!-- its spindle -->
+  <path fill="#ffffff" d="M8.4 13.2a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z"/>
+
+  <!-- the note: stem and head, over the disc at the top right -->
+  <path fill="#ffffff" d="M15.1 3.1h1.9v9.4h-1.9z"/>
+  <path fill="#ffffff" d="M17 3.1l4.4 1.5v2.2L17 5.3z"/>
+  <path fill="#ffffff"
+        d="M14.2 10.7a2.6 2.2 0 1 1 0 4.4 2.6 2.2 0 0 1 0-4.4z"/>
+</svg>

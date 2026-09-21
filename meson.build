@@ -91,7 +91,7 @@ install_data(
 # Installed into the shell's own datadir, which needs no change to the search
 # path: Cfg.iconDir ends with /usr/share, so `asteroidz-bar/clipboard.svg`
 # resolves to /usr/share/asteroidz-bar/clipboard.svg through that last root.
-install_data(['assets/clipboard.svg'], install_dir: qmldir)
+install_data(['assets/clipboard.svg', 'assets/mpd.svg'], install_dir: qmldir)
 
 # D-Bus activation for org.freedesktop.Notifications -- see the file's own
 # header for why its Exec waits rather than starting anything.
@@ -127,6 +127,7 @@ install_data(
 		'shell/modules/Tray.qml',
 		'shell/modules/Custom.qml',
 		'shell/modules/Power.qml',
+		'shell/modules/Mpd.qml',
 		'shell/modules/Clipboard.qml',
 	],
 	install_dir: qmldir / 'modules',

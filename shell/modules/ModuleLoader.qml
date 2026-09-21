@@ -119,6 +119,8 @@ Row {
                 return powerComponent;
             case "clipboard":
                 return clipboardComponent;
+            case "mpd":
+                return mpdComponent;
             default:
                 return null;
             }
@@ -193,6 +195,11 @@ Row {
     Component {
         id: powerComponent
         Power { bar: root.bar }
+    }
+
+    Component {
+        id: mpdComponent
+        Mpd { bar: root.bar }
     }
 
     Component {
