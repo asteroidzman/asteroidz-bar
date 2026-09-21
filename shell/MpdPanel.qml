@@ -71,11 +71,19 @@ Item {
     }
 
     // ── playlist state ──────────────────────────────────────────────────────
-    property string openPlaylist: ""
+    // Held as the whole entry rather than a name: a stored playlist is
+    // addressed by its name and a library one by its path, and only the stored
+    // kind can be deleted.
+    property var openPlaylist: null
     property var openPlaylistTracks: []
-    function showPlaylist(name) {
-        openPlaylist = name;
-        MpdService.playlistTracks(name, list => root.openPlaylistTracks = list);
+    function showPlaylist(entry) {
+        openPlaylist = entry;
+        MpdService.playlistTracks(entry.path,
+                                  list => root.openPlaylistTracks = list);
+    }
+    function closePlaylist() {
+        openPlaylist = null;
+        openPlaylistTracks = [];
     }
 
     // A song's display title. `Title` is a tag and tags are optional: a file
@@ -321,42 +329,47 @@ Item {
         Row {
             width: parent.width
             spacing: 6
-            visible: root.tab === "Playlists" && root.openPlaylist !== ""
+            visible: root.tab === "Playlists" && root.openPlaylist !== null
 
             SmallButton {
                 label: "← back"
-                onClicked: {
-                    root.openPlaylist = "";
-                    root.openPlaylistTracks = [];
-                }
+                onClicked: root.closePlaylist()
             }
             SmallButton {
                 label: "load"
-                onClicked: MpdService.loadPlaylist(root.openPlaylist)
+                onClicked: MpdService.loadPlaylist(root.openPlaylist.path)
             }
+            // Only for a stored one. `rm` reaches into playlist_directory and
+            // nowhere else, so offering it for a file that lives beside its
+            // album would be a button that fails -- or worse, one a reader
+            // expects to delete their .m3u.
             SmallButton {
                 label: "delete"
+                visible: root.openPlaylist && root.openPlaylist.stored
                 onClicked: {
-                    MpdService.removePlaylist(root.openPlaylist);
-                    root.openPlaylist = "";
-                    root.openPlaylistTracks = [];
+                    MpdService.removePlaylist(root.openPlaylist.path);
+                    root.closePlaylist();
                 }
             }
         }
 
         MpdList {
             width: parent.width
-            visible: root.tab === "Playlists" && root.openPlaylist === ""
+            visible: root.tab === "Playlists" && root.openPlaylist === null
             maxHeight: root.listHeight
-            model: MpdService.playlists
-            emptyText: "No saved playlists."
-            labelOf: p => p.playlist
-            onActivated: i => root.showPlaylist(MpdService.playlists[i].playlist)
+            model: MpdService.allPlaylists
+            emptyText: "No playlists saved, and none in the library."
+            labelOf: p => p.name
+            // Where a library playlist lives, so two albums' "Disc 1.m3u" are
+            // not two identical rows. A stored one has no second line: its
+            // name is unique by construction.
+            subOf: p => p.stored ? "" : p.where
+            onActivated: i => root.showPlaylist(MpdService.allPlaylists[i])
         }
 
         MpdList {
             width: parent.width
-            visible: root.tab === "Playlists" && root.openPlaylist !== ""
+            visible: root.tab === "Playlists" && root.openPlaylist !== null
             maxHeight: root.listHeight
             model: root.openPlaylistTracks
             emptyText: "That playlist is empty."

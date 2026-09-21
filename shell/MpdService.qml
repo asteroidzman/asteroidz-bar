@@ -240,6 +240,9 @@ Singleton {
             }
             if (s === "stored_playlist")
                 wantPlaylists = true;
+            // A playlist file living in the library changes with the
+            // DATABASE, not with stored_playlist -- MPD does not consider it
+            // one of those.
             if (s === "database")
                 wantDatabase = true;
             if (s === "output")
@@ -249,7 +252,10 @@ Singleton {
         if (wantQueue) refreshQueue();
         if (wantPlaylists) refreshPlaylists();
         if (wantOutputs) refreshOutputs();
-        if (wantDatabase) refreshArtists();
+        if (wantDatabase) {
+            refreshArtists();
+            refreshLibraryPlaylists();
+        }
     }
 
     function refreshAll() {
@@ -343,6 +349,58 @@ Singleton {
         send("listplaylists", (ok, l) => {
             if (ok) root.playlists = root.records(l, "playlist");
         });
+        refreshLibraryPlaylists();
+    }
+
+    // ── playlist FILES, in the library ──────────────────────────────────────
+    //
+    // `listplaylists` reports only what is in MPD's playlist_directory, and a
+    // ripped album's .m3u does not live there -- it sits beside the tracks it
+    // names, inside music_directory, where MPD indexes it but the stored-
+    // playlist commands never mention it. A library can therefore be full of
+    // playlists while the Playlists tab says "No saved playlists", which is
+    // what it said here with four of them on disk.
+    //
+    // `listall` walks the whole database and reports them as `playlist:` lines
+    // -- one round trip for every one of them, at the cost of also listing
+    // every file. That is the trade: a recursive lsinfo would transfer far
+    // less and ask far more often, and this runs on connect and on a database
+    // change rather than on a keystroke.
+    property var libraryPlaylists: []
+
+    function refreshLibraryPlaylists() {
+        send("listall", (ok, l) => {
+            if (!ok)
+                return;
+            const out = [];
+            for (const [k, v] of root.pairs(l))
+                if (k === "playlist" && v !== "")
+                    out.push(v);
+            out.sort();
+            root.libraryPlaylists = out;
+        });
+    }
+
+    // Both kinds, in one list for the panel.
+    //
+    // They differ in exactly one way that matters to a reader: a stored
+    // playlist can be deleted, a file in the library is not MPD's to remove --
+    // `rm` only ever touches playlist_directory. Everything else, loading and
+    // listing included, takes the same path either way.
+    readonly property var allPlaylists: {
+        const out = [];
+        for (const p of root.playlists)
+            out.push({ name: p.playlist, path: p.playlist, stored: true });
+        for (const f of root.libraryPlaylists) {
+            const cut = String(f).lastIndexOf("/");
+            out.push({
+                name: String(f).slice(cut + 1).replace(/\.[^.]+$/, ""),
+                where: cut > 0 ? String(f).slice(0, cut) : "",
+                path: f,
+                stored: false
+            });
+        }
+        return out;
     }
 
     function refreshOutputs() {
